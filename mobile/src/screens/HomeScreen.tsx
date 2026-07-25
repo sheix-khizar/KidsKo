@@ -2,12 +2,15 @@ import { useState, useEffect } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
 import { createStudent, getStudents, clearToken } from '../services/api';
 
+type Student = { id: string; student_name: string };
+
 type Props = {
   onLoggedOut: () => void;
+  onSelectStudent: (student: Student) => void;
 };
 
-export default function HomeScreen({ onLoggedOut }: Props) {
-  const [students, setStudents] = useState<{ id: string; student_name: string }[]>([]);
+export default function HomeScreen({ onLoggedOut, onSelectStudent }: Props) {
+  const [students, setStudents] = useState<Student[]>([]);
   const [newName, setNewName] = useState('');
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -51,7 +54,7 @@ export default function HomeScreen({ onLoggedOut }: Props) {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Kidsko.ai 🦉</Text>
-      <Text style={styles.subtitle}>You're logged in!</Text>
+      <Text style={styles.subtitle}>Tap a student to start chatting</Text>
 
       <View style={styles.addRow}>
         <TextInput
@@ -75,10 +78,11 @@ export default function HomeScreen({ onLoggedOut }: Props) {
           keyExtractor={(item) => item.id}
           style={{ marginTop: 16 }}
           renderItem={({ item }) => (
-            <View style={styles.studentRow}>
+            <Pressable style={styles.studentRow} onPress={() => onSelectStudent(item)}>
               <Text style={styles.studentEmoji}>🧒</Text>
               <Text style={styles.studentName}>{item.student_name}</Text>
-            </View>
+              <Text style={styles.chevron}>›</Text>
+            </Pressable>
           )}
           ListEmptyComponent={<Text style={styles.empty}>No students yet — add one above.</Text>}
         />
@@ -105,12 +109,7 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 15,
   },
-  addButton: {
-    backgroundColor: '#1a73e8',
-    borderRadius: 12,
-    paddingHorizontal: 18,
-    justifyContent: 'center',
-  },
+  addButton: { backgroundColor: '#1a73e8', borderRadius: 12, paddingHorizontal: 18, justifyContent: 'center' },
   addButtonText: { color: '#fff', fontWeight: '700' },
   studentRow: {
     flexDirection: 'row',
@@ -122,7 +121,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   studentEmoji: { fontSize: 20 },
-  studentName: { fontSize: 15, fontWeight: '700', color: '#111' },
+  studentName: { fontSize: 15, fontWeight: '700', color: '#111', flex: 1 },
+  chevron: { fontSize: 18, color: '#ccc' },
   empty: { textAlign: 'center', color: '#9ca3af', marginTop: 20 },
   logoutButton: { marginTop: 'auto', padding: 14, alignItems: 'center' },
   logoutText: { color: '#EA4335', fontWeight: '700' },
