@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/auth';
 import { userRateLimit } from '../middleware/userRateLimit';
 import { generateChatReply, ChatMessage } from '../lib/gemini';
+import { checkAndIncrementUsage } from '../lib/usageLimits';
 
 const router = Router();
 
@@ -16,6 +17,11 @@ router.post('/', requireAuth, userRateLimit, async (req: Request, res: Response)
   }
 
   try {
+    const usage = await checkAndIncrementUsage(req.supabase!, studentId, req.user!.id, 'message');
+    if (!usage.allowed) {
+      return res.status(429).json({ error: usage.reason, remaining: 0, isPremium: false });
+    }
+
     let activeThreadId = threadId;
 
     // Create a new thread if none was passed
@@ -67,7 +73,12 @@ router.post('/', requireAuth, userRateLimit, async (req: Request, res: Response)
     });
     if (aiMsgError) throw aiMsgError;
 
-    return res.status(200).json({ threadId: activeThreadId, reply: aiReply });
+    return res.status(200).json({
+      threadId: activeThreadId,
+      reply: aiReply,
+      remaining: usage.remaining,
+      isPremium: usage.isPremium,
+    });
   } catch (error: any) {
     console.error('Chat error:', error.message);
     return res.status(500).json({ error: 'Something went wrong. Please try again.' });

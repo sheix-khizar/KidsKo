@@ -3,6 +3,7 @@ import sharp from 'sharp';
 import { requireAuth } from '../middleware/auth';
 import { imageRateLimit } from '../middleware/userRateLimit';
 import { generateHomeworkExplanation } from '../lib/gemini';
+import { checkAndIncrementUsage } from '../lib/usageLimits';
 
 const router = Router();
 
@@ -15,6 +16,11 @@ router.post('/analyze', requireAuth, imageRateLimit, async (req: Request, res: R
   }
 
   try {
+    const usage = await checkAndIncrementUsage(req.supabase!, studentId, req.user!.id, 'scan');
+    if (!usage.allowed) {
+      return res.status(429).json({ error: usage.reason, remaining: 0, isPremium: false });
+    }
+
     // Compress server-side regardless of what the client sent (defense in depth)
     const rawBuffer = Buffer.from(imageBase64, 'base64');
     const compressedBuffer = await sharp(rawBuffer)
@@ -52,7 +58,12 @@ router.post('/analyze', requireAuth, imageRateLimit, async (req: Request, res: R
       content: explanation,
     });
 
-    return res.status(200).json({ threadId: activeThreadId, explanation });
+    return res.status(200).json({
+      threadId: activeThreadId,
+      explanation,
+      remaining: usage.remaining,
+      isPremium: usage.isPremium,
+    });
   } catch (error: any) {
     console.error('Homework analysis error:', error.message);
     return res.status(500).json({
