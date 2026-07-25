@@ -7,9 +7,10 @@ type Student = { id: string; student_name: string };
 type Props = {
   onLoggedOut: () => void;
   onSelectStudent: (student: Student) => void;
+  onScanStudent: (student: Student) => void;
 };
 
-export default function HomeScreen({ onLoggedOut, onSelectStudent }: Props) {
+export default function HomeScreen({ onLoggedOut, onSelectStudent, onScanStudent }: Props) {
   const [students, setStudents] = useState<Student[]>([]);
   const [newName, setNewName] = useState('');
   const [loading, setLoading] = useState(true);
@@ -54,7 +55,7 @@ export default function HomeScreen({ onLoggedOut, onSelectStudent }: Props) {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Kidsko.ai 🦉</Text>
-      <Text style={styles.subtitle}>Tap a student to start chatting</Text>
+      <Text style={styles.subtitle}>Select a student to chat or scan homework</Text>
 
       <View style={styles.addRow}>
         <TextInput
@@ -78,11 +79,18 @@ export default function HomeScreen({ onLoggedOut, onSelectStudent }: Props) {
           keyExtractor={(item) => item.id}
           style={{ marginTop: 16 }}
           renderItem={({ item }) => (
-            <Pressable style={styles.studentRow} onPress={() => onSelectStudent(item)}>
-              <Text style={styles.studentEmoji}>🧒</Text>
-              <Text style={styles.studentName}>{item.student_name}</Text>
-              <Text style={styles.chevron}>›</Text>
-            </Pressable>
+            <View style={styles.studentCard}>
+              <Pressable style={styles.studentRow} onPress={() => onSelectStudent(item)}>
+                <Text style={styles.studentEmoji}>🧒</Text>
+                <Text style={styles.studentName}>{item.student_name}</Text>
+              </Pressable>
+              <Pressable style={styles.scanBtn} onPress={() => onScanStudent(item)}>
+                <Text style={styles.scanBtnText}>📸 Scan</Text>
+              </Pressable>
+              <Pressable style={styles.chatBtn} onPress={() => onSelectStudent(item)}>
+                <Text style={styles.chatBtnText}>💬 Chat</Text>
+              </Pressable>
+            </View>
           )}
           ListEmptyComponent={<Text style={styles.empty}>No students yet — add one above.</Text>}
         />
@@ -111,18 +119,45 @@ const styles = StyleSheet.create({
   },
   addButton: { backgroundColor: '#1a73e8', borderRadius: 12, paddingHorizontal: 18, justifyContent: 'center' },
   addButtonText: { color: '#fff', fontWeight: '700' },
-  studentRow: {
+  studentCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 12,
-    marginBottom: 8,
+    marginBottom: 10,
+    gap: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  studentRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 10,
   },
-  studentEmoji: { fontSize: 20 },
-  studentName: { fontSize: 15, fontWeight: '700', color: '#111', flex: 1 },
-  chevron: { fontSize: 18, color: '#ccc' },
+  studentEmoji: { fontSize: 22 },
+  studentName: { fontSize: 16, fontWeight: '700', color: '#111' },
+  scanBtn: {
+    backgroundColor: '#FFF8E1',
+    borderWidth: 1,
+    borderColor: '#FFE082',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  scanBtnText: { fontSize: 13, fontWeight: '700', color: '#B78103' },
+  chatBtn: {
+    backgroundColor: '#E6F4FE',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  chatBtnText: { fontSize: 13, fontWeight: '700', color: '#0369A1' },
   empty: { textAlign: 'center', color: '#9ca3af', marginTop: 20 },
   logoutButton: { marginTop: 'auto', padding: 14, alignItems: 'center' },
   logoutText: { color: '#EA4335', fontWeight: '700' },

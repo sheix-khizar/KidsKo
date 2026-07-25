@@ -4,14 +4,17 @@ import RegisterScreen from './src/screens/RegisterScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import ChatScreen from './src/screens/ChatScreen';
+import HomeworkScreen from './src/screens/HomeworkScreen';
 import { getToken } from './src/services/api';
 
 type Student = { id: string; student_name: string };
-type Screen = 'checking' | 'register' | 'login' | 'home' | 'chat';
+type Screen = 'checking' | 'register' | 'login' | 'home' | 'chat' | 'homework';
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('checking');
   const [activeStudent, setActiveStudent] = useState<Student | null>(null);
+  const [scanThreadId, setScanThreadId] = useState<string | undefined>(undefined);
+  const [scanExplanation, setScanExplanation] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     (async () => {
@@ -36,12 +39,33 @@ export default function App() {
     return <LoginScreen onLoggedIn={() => setScreen('home')} onGoToRegister={() => setScreen('register')} />;
   }
 
+  if (screen === 'homework' && activeStudent) {
+    return (
+      <HomeworkScreen
+        studentId={activeStudent.id}
+        studentName={activeStudent.student_name}
+        onBack={() => setScreen('home')}
+        onScanSuccess={(threadId, reply) => {
+          setScanThreadId(threadId);
+          setScanExplanation(reply);
+          setScreen('chat');
+        }}
+      />
+    );
+  }
+
   if (screen === 'chat' && activeStudent) {
     return (
       <ChatScreen
         studentId={activeStudent.id}
         studentName={activeStudent.student_name}
-        onBack={() => setScreen('home')}
+        onBack={() => {
+          setScanThreadId(undefined);
+          setScanExplanation(undefined);
+          setScreen('home');
+        }}
+        initialThreadId={scanThreadId}
+        initialExplanation={scanExplanation}
       />
     );
   }
@@ -51,7 +75,13 @@ export default function App() {
       onLoggedOut={() => setScreen('login')}
       onSelectStudent={(student) => {
         setActiveStudent(student);
+        setScanThreadId(undefined);
+        setScanExplanation(undefined);
         setScreen('chat');
+      }}
+      onScanStudent={(student) => {
+        setActiveStudent(student);
+        setScreen('homework');
       }}
     />
   );

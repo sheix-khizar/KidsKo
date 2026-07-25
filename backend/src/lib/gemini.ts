@@ -40,3 +40,25 @@ export async function generateChatReply(history: ChatMessage[]): Promise<string>
 
   return response.text?.trim() || "Sorry, I didn't quite catch that. Can you ask again?";
 }
+
+export async function generateHomeworkExplanation(imageBase64: string, mimeType: string): Promise<string> {
+  const response = await ai.models.generateContent({
+    model: 'gemini-3.1-flash-lite',
+    contents: [
+      {
+        role: 'user',
+        parts: [
+          { inlineData: { data: imageBase64, mimeType } },
+          { text: 'Look at this homework image. Identify the question and explain the underlying concept step-by-step. Do NOT give the direct final answer — guide the student toward it with a simple example and a follow-up question.' },
+        ],
+      },
+    ],
+    config: {
+      systemInstruction: SYSTEM_PROMPT,
+      maxOutputTokens: 250,
+      temperature: 0.3,
+    },
+  });
+
+  return response.text?.trim() || "I couldn't quite read that. Can you try taking the photo again?";
+}

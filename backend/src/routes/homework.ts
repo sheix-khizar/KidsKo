@@ -1,0 +1,64 @@
+import { Router, Request, Response } from 'express';
+import sharp from 'sharp';
+import { requireAuth } from '../middleware/auth';
+import { imageRateLimit } from '../middleware/userRateLimit';
+import { generateHomeworkExplanation } from '../lib/gemini';
+
+const router = Router();
+
+// POST /api/homework/analyze  { studentId, threadId?, imageBase64 }
+router.post('/analyze', requireAuth, imageRateLimit, async (req: Request, res: Response) => {
+  const { studentId, threadId, imageBase64 } = req.body;
+
+  if (!studentId || !imageBase64) {
+    return res.status(400).json({ error: 'studentId and imageBase64 are required' });
+  }
+
+  try {
+    // Compress server-side regardless of what the client sent (defense in depth)
+    const rawBuffer = Buffer.from(imageBase64, 'base64');
+    const compressedBuffer = await sharp(rawBuffer)
+      .resize({ width: 1024, height: 1024, fit: 'inside' })
+      .jpeg({ quality: 75 })
+      .toBuffer();
+    const compressedBase64 = compressedBuffer.toString('base64');
+
+    let activeThreadId = threadId;
+    if (!activeThreadId) {
+      const { data: thread, error: threadError } = await req.supabase!
+        .from('chat_threads')
+        .insert({ student_id: studentId, title: 'Homework scan' })
+        .select()
+        .single();
+      if (threadError) throw threadError;
+      activeThreadId = thread.id;
+    }
+
+    // Log the scan as a message (image type) — content stores a short placeholder, not the raw image
+    await req.supabase!.from('messages').insert({
+      thread_id: activeThreadId,
+      student_id: studentId,
+      role: 'user',
+      content: '[Homework photo submitted]',
+      message_type: 'image',
+    });
+
+    const explanation = await generateHomeworkExplanation(compressedBase64, 'image/jpeg');
+
+    await req.supabase!.from('messages').insert({
+      thread_id: activeThreadId,
+      student_id: studentId,
+      role: 'assistant',
+      content: explanation,
+    });
+
+    return res.status(200).json({ threadId: activeThreadId, explanation });
+  } catch (error: any) {
+    console.error('Homework analysis error:', error.message);
+    return res.status(500).json({
+      error: "I couldn't quite read that photo. Can you try again with better lighting?",
+    });
+  }
+});
+
+export default router;

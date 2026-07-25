@@ -27,3 +27,8 @@ export function userRateLimit(req: Request, res: Response, next: NextFunction) {
   requestLog.set(userId, recent);
   next();
 }
+
+// Separate, slightly more generous limiter for image analysis (Ticket 5.9 will formalize this further in Phase 5)
+export function imageRateLimit(req: Request, res: Response, next: NextFunction) {
+  return userRateLimit(req, res, next); // same logic, reused — kept as its own export for clarity in routes
+}

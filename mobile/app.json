@@ -22,7 +22,13 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Kidsko needs camera access so your child can scan homework worksheets."
+        }
+      ]
     ]
   }
 }

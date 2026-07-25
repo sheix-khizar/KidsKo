@@ -16,12 +16,21 @@ type Props = {
   studentId: string;
   studentName: string;
   onBack: () => void;
+  initialThreadId?: string;
+  initialExplanation?: string;
 };
 
-export default function ChatScreen({ studentId, studentName, onBack }: Props) {
-  const [messages, setMessages] = useState<Message[]>([]);
+export default function ChatScreen({ studentId, studentName, onBack, initialThreadId, initialExplanation }: Props) {
+  const [messages, setMessages] = useState<Message[]>(
+    initialExplanation
+      ? [
+          { role: 'user', content: '📸 [Homework worksheet photo]' },
+          { role: 'assistant', content: initialExplanation },
+        ]
+      : []
+  );
   const [input, setInput] = useState('');
-  const [threadId, setThreadId] = useState<string | undefined>(undefined);
+  const [threadId, setThreadId] = useState<string | undefined>(initialThreadId);
   const [sending, setSending] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const listRef = useRef<FlatList>(null);
