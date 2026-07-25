@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import authRoutes from './routes/auth';
 import studentRoutes from './routes/students';
+import chatRoutes from './routes/chat';
 
 dotenv.config();
 
@@ -39,6 +40,7 @@ app.get('/health', (req: Request, res: Response) => {
 
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/students', studentRoutes);
+app.use('/api/chat', chatRoutes);
 
 app.listen(PORT, () => {
   console.log(`✅ Kidsko backend running on http://localhost:${PORT}`);
