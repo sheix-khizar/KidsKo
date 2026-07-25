@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,9 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
+import * as Speech from 'expo-speech';
 import { sendMessage, Message } from '../services/chat';
+import { useVoiceInput } from '../hooks/useVoiceInput';
 
 type Props = {
   studentId: string;
@@ -33,11 +35,45 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
   const [threadId, setThreadId] = useState<string | undefined>(initialThreadId);
   const [sending, setSending] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [speakingIdx, setSpeakingIdx] = useState<number | null>(null);
   const listRef = useRef<FlatList>(null);
+
+  const { listening, startListening, stopListening } = useVoiceInput((transcript) => {
+    setInput(transcript);
+  });
+
+  useEffect(() => {
+    return () => {
+      Speech.stop();
+    };
+  }, []);
+
+  const handleSpeak = async (text: string, index: number) => {
+    const isSpeaking = await Speech.isSpeakingAsync();
+    if (isSpeaking && speakingIdx === index) {
+      Speech.stop();
+      setSpeakingIdx(null);
+      return;
+    }
+
+    Speech.stop();
+    setSpeakingIdx(index);
+    Speech.speak(text, {
+      language: 'en-US',
+      rate: 0.9,
+      onDone: () => setSpeakingIdx(null),
+      onStopped: () => setSpeakingIdx(null),
+      onError: () => setSpeakingIdx(null),
+    });
+  };
 
   const handleSend = async () => {
     const text = input.trim();
     if (!text || sending) return;
+
+    if (listening) stopListening();
+    Speech.stop();
+    setSpeakingIdx(null);
 
     setErrorMsg(null);
     setInput('');
@@ -48,6 +84,12 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
       const result = await sendMessage(studentId, text, threadId);
       setThreadId(result.threadId);
       setMessages((prev) => [...prev, { role: 'assistant', content: result.reply }]);
+
+      // Auto-read Kidsko's reply aloud for kids!
+      Speech.speak(result.reply, {
+        language: 'en-US',
+        rate: 0.9,
+      });
     } catch (err: any) {
       setErrorMsg(err.message);
     } finally {
@@ -62,7 +104,7 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View style={styles.header}>
-        <Pressable onPress={onBack}>
+        <Pressable onPress={() => { Speech.stop(); onBack(); }}>
           <Text style={styles.backButton}>← Back</Text>
         </Pressable>
         <Text style={styles.headerTitle}>Kidsko.ai 🦉</Text>
@@ -73,7 +115,7 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
         <View style={styles.welcome}>
           <Text style={styles.welcomeEmoji}>🦉</Text>
           <Text style={styles.welcomeTitle}>Ask me anything!</Text>
-          <Text style={styles.welcomeSubtitle}>I'll explain it simply and clearly.</Text>
+          <Text style={styles.welcomeSubtitle}>Type or tap the mic 🎙️ to talk to me!</Text>
         </View>
       ) : (
         <FlatList
@@ -82,7 +124,7 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
           keyExtractor={(_, i) => i.toString()}
           style={styles.messagesList}
           contentContainerStyle={{ padding: 14, gap: 12 }}
-          renderItem={({ item }) => (
+          renderItem={({ item, index }) => (
             <View style={[styles.msgRow, item.role === 'user' && styles.msgRowUser]}>
               <View style={styles.avatar}>
                 <Text>{item.role === 'user' ? '🧒' : '🦉'}</Text>
@@ -91,6 +133,16 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
                 <Text style={[styles.bubbleText, item.role === 'user' && styles.bubbleTextUser]}>
                   {item.content}
                 </Text>
+                {item.role === 'assistant' && (
+                  <Pressable
+                    style={styles.speakButton}
+                    onPress={() => handleSpeak(item.content, index)}
+                  >
+                    <Text style={styles.speakButtonText}>
+                      {speakingIdx === index ? '⏹️ Stop Reading' : '🔊 Read Aloud'}
+                    </Text>
+                  </Pressable>
+                )}
               </View>
             </View>
           )}
@@ -107,9 +159,16 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
       {errorMsg && <Text style={styles.error}>{errorMsg}</Text>}
 
       <View style={styles.inputBar}>
+        <Pressable
+          style={[styles.micButton, listening && styles.micButtonListening]}
+          onPress={listening ? stopListening : startListening}
+        >
+          <Text style={styles.micButtonText}>{listening ? '🔴' : '🎙️'}</Text>
+        </Pressable>
+
         <TextInput
-          style={styles.input}
-          placeholder="Ask Kidsko anything..."
+          style={[styles.input, listening && styles.inputListening]}
+          placeholder={listening ? 'Listening... Speak now!' : 'Ask Kidsko anything...'}
           value={input}
           onChangeText={setInput}
           multiline
@@ -162,6 +221,19 @@ const styles = StyleSheet.create({
   bubbleUser: { backgroundColor: '#1a73e8' },
   bubbleText: { fontSize: 14, color: '#111', lineHeight: 20 },
   bubbleTextUser: { color: '#fff' },
+  speakButton: {
+    marginTop: 8,
+    alignSelf: 'flex-start',
+    backgroundColor: '#E6F4FE',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  speakButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0369A1',
+  },
   typingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingBottom: 6 },
   typingText: { fontSize: 12, color: '#6b7280' },
   error: { color: '#EA4335', textAlign: 'center', paddingHorizontal: 16, paddingBottom: 6, fontSize: 12 },
@@ -173,6 +245,20 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#f0f0f0',
   },
+  micButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f4f4f4',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  micButtonListening: {
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#EF4444',
+  },
+  micButtonText: { fontSize: 18 },
   input: {
     flex: 1,
     backgroundColor: '#f4f4f4',
@@ -181,6 +267,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 14,
     maxHeight: 100,
+  },
+  inputListening: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#F87171',
+    borderWidth: 1,
   },
   sendButton: {
     width: 40,

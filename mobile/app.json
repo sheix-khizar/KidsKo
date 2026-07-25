@@ -7,7 +7,11 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "Kidsko needs speech recognition to understand your child's questions.",
+        "NSMicrophoneUsageDescription": "Kidsko needs microphone access so your child can ask questions by voice."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -16,7 +20,12 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "kidsko.ai"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -28,7 +37,19 @@
         {
           "cameraPermission": "Kidsko needs camera access so your child can scan homework worksheets."
         }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Kidsko needs microphone access so your child can ask questions by voice.",
+          "speechRecognitionPermission": "Kidsko needs speech recognition to understand your child's questions."
+        }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "c00f1062-0a76-43de-a818-03d22ee7ae37"
+      }
+    }
   }
 }
