@@ -1,78 +1,52 @@
-import { useState } from 'react';
-import { StyleSheet, Text, View, Pressable, ActivityIndicator } from 'react-native';
+import { useState, useEffect } from 'react';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import RegisterScreen from './src/screens/RegisterScreen';
+import LoginScreen from './src/screens/LoginScreen';
+import HomeScreen from './src/screens/HomeScreen';
+import { getToken } from './src/services/api';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+type Screen = 'checking' | 'register' | 'login' | 'home';
 
 export default function App() {
-  const [status, setStatus] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [screen, setScreen] = useState<Screen>('checking');
 
-  const checkBackend = async () => {
-    setLoading(true);
-    setStatus(null);
-    try {
-      const response = await fetch(`${API_URL}/health`);
-      const data = await response.json();
-      setStatus(`✅ Connected! Backend says: ${data.status} (${data.environment})`);
-    } catch (error) {
-      setStatus('❌ Could not reach backend. Check your IP address in mobile/.env');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // On app launch, check if a token already exists (auto-login)
+  useEffect(() => {
+    (async () => {
+      const token = await getToken();
+      setScreen(token ? 'home' : 'login');
+    })();
+  }, []);
 
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Kidsko.ai 🦉</Text>
-      <Text style={styles.subtitle}>Phase 0 — Connectivity Check</Text>
+  if (screen === 'checking') {
+    return (
+      <View style={styles.loading}>
+        <ActivityIndicator size="large" color="#1a73e8" />
+      </View>
+    );
+  }
 
-      <Pressable style={styles.button} onPress={checkBackend} disabled={loading}>
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>Check Backend Connection</Text>
-        )}
-      </Pressable>
+  if (screen === 'register') {
+    return (
+      <RegisterScreen
+        onRegistered={() => setScreen('home')}
+        onGoToLogin={() => setScreen('login')}
+      />
+    );
+  }
 
-      {status && <Text style={styles.status}>{status}</Text>}
-    </View>
-  );
+  if (screen === 'login') {
+    return (
+      <LoginScreen
+        onLoggedIn={() => setScreen('home')}
+        onGoToRegister={() => setScreen('register')}
+      />
+    );
+  }
+
+  return <HomeScreen onLoggedOut={() => setScreen('login')} />;
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f7f9fc',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: '800',
-    color: '#1a73e8',
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginBottom: 32,
-  },
-  button: {
-    backgroundColor: '#1a73e8',
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    borderRadius: 16,
-  },
-  buttonText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  status: {
-    marginTop: 24,
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-    paddingHorizontal: 20,
-  },
+  loading: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f7f9fc' },
 });
