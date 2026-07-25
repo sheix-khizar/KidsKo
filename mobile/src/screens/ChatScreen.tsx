@@ -36,6 +36,8 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
   const [sending, setSending] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [speakingIdx, setSpeakingIdx] = useState<number | null>(null);
+  const [remaining, setRemaining] = useState<number | null>(null);
+  const [isPremium, setIsPremium] = useState(false);
   const listRef = useRef<FlatList>(null);
 
   const { listening, startListening, stopListening } = useVoiceInput((transcript) => {
@@ -84,6 +86,8 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
       const result = await sendMessage(studentId, text, threadId);
       setThreadId(result.threadId);
       setMessages((prev) => [...prev, { role: 'assistant', content: result.reply }]);
+      setRemaining(result.remaining);
+      setIsPremium(result.isPremium);
 
       // Auto-read Kidsko's reply aloud for kids!
       Speech.speak(result.reply, {
@@ -92,6 +96,7 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
       });
     } catch (err: any) {
       setErrorMsg(err.message);
+      setRemaining(0); // ensures the badge shows the limit-reached state
     } finally {
       setSending(false);
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
@@ -109,6 +114,13 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
         </Pressable>
         <Text style={styles.headerTitle}>Kidsko.ai 🦉</Text>
         <Text style={styles.headerSubtitle}>{studentName}</Text>
+        {remaining !== null && (
+          <View style={[styles.usagePill, isPremium && styles.usagePillPremium, remaining <= 2 && !isPremium && styles.usagePillLow]}>
+            <Text style={styles.usagePillText}>
+              {isPremium ? '⭐ Premium' : `💬 ${remaining} left today`}
+            </Text>
+          </View>
+        )}
       </View>
 
       {messages.length === 0 ? (
@@ -197,6 +209,17 @@ const styles = StyleSheet.create({
   backButton: { color: '#1a73e8', fontWeight: '700', marginBottom: 6 },
   headerTitle: { fontSize: 18, fontWeight: '800', color: '#111' },
   headerSubtitle: { fontSize: 12, color: '#6b7280', fontWeight: '600' },
+  usagePill: {
+    alignSelf: 'flex-start',
+    marginTop: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: '#e8f0fe',
+  },
+  usagePillLow: { backgroundColor: '#fff3e0' },
+  usagePillPremium: { backgroundColor: '#FFD54F' },
+  usagePillText: { fontSize: 11, fontWeight: '800', color: '#1a73e8' },
   welcome: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   welcomeEmoji: { fontSize: 56, marginBottom: 10 },
   welcomeTitle: { fontSize: 20, fontWeight: '800', color: '#111' },

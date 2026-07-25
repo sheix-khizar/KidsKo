@@ -7,7 +7,14 @@ export type Message = {
   content: string;
 };
 
-export async function sendMessage(studentId: string, message: string, threadId?: string) {
+export type ChatResponse = {
+  threadId: string;
+  reply: string;
+  remaining: number;
+  isPremium: boolean;
+};
+
+export async function sendMessage(studentId: string, message: string, threadId?: string): Promise<ChatResponse> {
   const token = await getToken();
   const res = await fetch(`${API_URL}/api/chat`, {
     method: 'POST',
@@ -18,6 +25,9 @@ export async function sendMessage(studentId: string, message: string, threadId?:
     body: JSON.stringify({ studentId, message, threadId }),
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Failed to send message');
-  return data as { threadId: string; reply: string };
+  if (!res.ok) {
+    // 429 responses still carry a useful error message — surface it as a normal error
+    throw new Error(data.error || 'Failed to send message');
+  }
+  return data as ChatResponse;
 }

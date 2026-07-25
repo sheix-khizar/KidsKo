@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
 import { createStudent, getStudents, clearToken } from '../services/api';
+import ParentalGate from '../components/ParentalGate';
 
 type Student = { id: string; student_name: string };
 
@@ -16,6 +17,7 @@ export default function HomeScreen({ onLoggedOut, onSelectStudent, onScanStudent
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [gateVisible, setGateVisible] = useState(false);
 
   const loadStudents = async () => {
     try {
@@ -96,9 +98,18 @@ export default function HomeScreen({ onLoggedOut, onSelectStudent, onScanStudent
         />
       )}
 
-      <Pressable style={styles.logoutButton} onPress={handleLogout}>
+      <Pressable style={styles.logoutButton} onPress={() => setGateVisible(true)}>
         <Text style={styles.logoutText}>Log Out</Text>
       </Pressable>
+
+      <ParentalGate
+        visible={gateVisible}
+        onSuccess={() => {
+          setGateVisible(false);
+          handleLogout();
+        }}
+        onCancel={() => setGateVisible(false)}
+      />
     </View>
   );
 }
