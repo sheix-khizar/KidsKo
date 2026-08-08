@@ -4,6 +4,7 @@
   "main": "index.ts",
   "dependencies": {
     "expo": "~57.0.4",
+    "expo-audio": "^57.0.3",
     "expo-av": "^16.0.8",
     "expo-camera": "~57.0.3",
     "expo-dev-client": "~57.0.9",
