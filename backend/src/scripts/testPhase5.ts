@@ -8,12 +8,11 @@ const supabaseUrl = process.env.SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// 1x1 transparent PNG base64 for testing homework scan endpoint
 const DUMMY_IMAGE_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
 async function runPhase5TestSuite() {
   console.log('🧪 ==========================================================');
-  console.log('🚀 STARTING PHASE 5 COMPREHENSIVE END-TO-END TEST SUITE');
+  console.log('🚀 STARTING PHASE 5 UPDATED END-TO-END TEST SUITE (POOLED)');
   console.log('🧪 ==========================================================\n');
 
   const emailArg = process.argv[2];
@@ -39,7 +38,7 @@ async function runPhase5TestSuite() {
     return;
   }
 
-  // Get student
+  // Get or create test student
   let { data: students } = await supabase
     .from('students')
     .select('*')
@@ -51,32 +50,31 @@ async function runPhase5TestSuite() {
     console.log('Creating test student...');
     const { data: newStudent } = await supabase
       .from('students')
-      .insert({
-        parent_id: userId,
-        student_name: 'Phase 5 Tester',
-      })
+      .insert({ parent_id: userId, student_name: 'Phase 5 Tester' })
       .select()
       .single();
 
     studentId = newStudent?.id;
   }
 
-  console.log(`✅ Ready! Using Student ID: ${studentId}\n`);
+  console.log(`✅ Ready! Parent ID: ${userId} | Student ID: ${studentId}\n`);
+
+  const serverPort = process.env.PORT || 3000;
+  const baseUrl = `http://localhost:${serverPort}`;
 
   // -------------------------------------------------------------------------
-  // TEST 1: CHAT DAILY LIMIT BOUNDARY (10 MESSAGES/DAY)
+  // TEST 1: POOLED CHAT LIMIT BOUNDARY (30 MESSAGES/DAY ON FAMILY_USAGE)
   // -------------------------------------------------------------------------
-  console.log('--- [TEST 1] Testing Chat Daily Limit Boundary (10 messages/day) ---');
+  console.log('--- [TEST 1] Testing Pooled Family Chat Limit (30 messages/day) ---');
   await supabase
-    .from('students')
-    .update({ daily_message_count: 9, last_reset_at: new Date().toISOString() })
-    .eq('id', studentId);
+    .from('family_usage')
+    .upsert({ parent_id: userId, daily_message_count: 29, last_daily_reset_at: new Date().toISOString() });
 
-  console.log('👉 Firing Chat Request #1 (Count at 9 -> should increment to 10)...');
-  const resChat1 = await fetch('http://localhost:3003/api/chat', {
+  console.log('👉 Firing Chat Request #1 (Count at 29 -> should increment to 30)...');
+  const resChat1 = await fetch(`${baseUrl}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ studentId, message: 'Test Phase 5 Chat Boundary 9->10' }),
+    body: JSON.stringify({ studentId, message: 'Test Pooled Chat Limit 29->30' }),
   });
   const dataChat1: any = await resChat1.json();
   if (resChat1.status === 200 && dataChat1.remaining === 0) {
@@ -85,11 +83,11 @@ async function runPhase5TestSuite() {
     console.error(`❌ Chat Request #1 FAILED! Status: ${resChat1.status}`, dataChat1);
   }
 
-  console.log('👉 Firing Chat Request #2 (Count at 10 -> should be BLOCKED with 429)...');
-  const resChat2 = await fetch('http://localhost:3003/api/chat', {
+  console.log('👉 Firing Chat Request #2 (Count at 30 -> should be BLOCKED with 429)...');
+  const resChat2 = await fetch(`${baseUrl}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ studentId, message: 'Test Phase 5 Chat Boundary Block' }),
+    body: JSON.stringify({ studentId, message: 'Test Pooled Chat Boundary Block' }),
   });
   const dataChat2: any = await resChat2.json();
   if (resChat2.status === 429 && dataChat2.error?.includes('Daily free limit reached')) {
@@ -100,16 +98,15 @@ async function runPhase5TestSuite() {
   }
 
   // -------------------------------------------------------------------------
-  // TEST 2: HOMEWORK SCAN DAILY LIMIT BOUNDARY (3 SCANS/DAY)
+  // TEST 2: POOLED HOMEWORK SCAN LIMIT BOUNDARY (5 SCANS/DAY ON FAMILY_USAGE)
   // -------------------------------------------------------------------------
-  console.log('--- [TEST 2] Testing Homework Scan Limit Boundary (3 scans/day) ---');
+  console.log('--- [TEST 2] Testing Pooled Family Scan Limit (5 scans/day) ---');
   await supabase
-    .from('students')
-    .update({ daily_scan_count: 2, last_reset_at: new Date().toISOString() })
-    .eq('id', studentId);
+    .from('family_usage')
+    .upsert({ parent_id: userId, daily_scan_count: 4, last_daily_reset_at: new Date().toISOString() });
 
-  console.log('👉 Firing Scan Request #1 (Count at 2 -> should increment to 3)...');
-  const resScan1 = await fetch('http://localhost:3003/api/homework/analyze', {
+  console.log('👉 Firing Scan Request #1 (Count at 4 -> should increment to 5)...');
+  const resScan1 = await fetch(`${baseUrl}/api/homework/analyze`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ studentId, imageBase64: DUMMY_IMAGE_BASE64 }),
@@ -121,8 +118,8 @@ async function runPhase5TestSuite() {
     console.error(`❌ Scan Request #1 FAILED! Status: ${resScan1.status}`, dataScan1);
   }
 
-  console.log('👉 Firing Scan Request #2 (Count at 3 -> should be BLOCKED with 429)...');
-  const resScan2 = await fetch('http://localhost:3003/api/homework/analyze', {
+  console.log('👉 Firing Scan Request #2 (Count at 5 -> should be BLOCKED with 429)...');
+  const resScan2 = await fetch(`${baseUrl}/api/homework/analyze`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ studentId, imageBase64: DUMMY_IMAGE_BASE64 }),
@@ -140,27 +137,54 @@ async function runPhase5TestSuite() {
   // -------------------------------------------------------------------------
   console.log('--- [TEST 3] Testing Lazy Daily Reset (Simulating a new day) ---');
   const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  console.log(`Setting last_reset_at to yesterday (${yesterday}) with MAXED OUT counts (10 messages, 3 scans)...`);
   await supabase
-    .from('students')
-    .update({ daily_message_count: 10, daily_scan_count: 3, last_reset_at: yesterday })
-    .eq('id', studentId);
+    .from('family_usage')
+    .upsert({ parent_id: userId, daily_message_count: 30, daily_scan_count: 5, last_daily_reset_at: yesterday });
 
   console.log('👉 Firing Chat Request on New Day -> should auto-reset counts to 0 and SUCCEED...');
-  const resReset = await fetch('http://localhost:3003/api/chat', {
+  const resReset = await fetch(`${baseUrl}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ studentId, message: 'Test Lazy Day Reset!' }),
   });
   const dataReset: any = await resReset.json();
-  if (resReset.status === 200 && dataReset.remaining === 9) {
-    console.log(`✅ Lazy Reset PASSED! Status: 200 OK — Automatically reset and remaining is now ${dataReset.remaining}!\n`);
+  if (resReset.status === 200 && dataReset.remaining === 29) {
+    console.log(`✅ Lazy Reset PASSED! Status: 200 OK — Remaining reset to ${dataReset.remaining}!\n`);
   } else {
     console.error(`❌ Lazy Reset FAILED! Status: ${resReset.status}`, dataReset);
   }
 
+  // -------------------------------------------------------------------------
+  // TEST 4: WEBHOOK SECURITY CHECK (REJECT UNAUTHORIZED REQUESTS)
+  // -------------------------------------------------------------------------
+  console.log('--- [TEST 4] Testing RevenueCat Webhook Security ---');
+  const resWebhook = await fetch(`${baseUrl}/api/billing/webhook`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ event: { app_user_id: userId, type: 'INITIAL_PURCHASE' } }),
+  });
+  if (resWebhook.status === 401) {
+    console.log(`✅ Webhook Security PASSED! Unauthenticated request blocked with 401 Unauthorized!\n`);
+  } else {
+    console.error(`❌ Webhook Security FAILED! Status: ${resWebhook.status}`);
+  }
+
+  // -------------------------------------------------------------------------
+  // TEST 5: FREE PARENT TRANSCRIPT ACCESS
+  // -------------------------------------------------------------------------
+  console.log('--- [TEST 5] Testing Free Parent Transcript Endpoint ---');
+  const resTranscript = await fetch(`${baseUrl}/api/transcript/${studentId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const dataTranscript: any = await resTranscript.json();
+  if (resTranscript.status === 200 && Array.isArray(dataTranscript.messages)) {
+    console.log(`✅ Transcript Endpoint PASSED! Status: 200 OK — Messages fetched: ${dataTranscript.messages.length}\n`);
+  } else {
+    console.error(`❌ Transcript Endpoint FAILED! Status: ${resTranscript.status}`, dataTranscript);
+  }
+
   console.log('🎉 ==========================================================');
-  console.log('🏆 PHASE 5 BACKEND VERIFICATION COMPLETE! 100% PASS RATE!');
+  console.log('🏆 PHASE 5 POOLED TEST SUITE COMPLETE!');
   console.log('🎉 ==========================================================');
 }
 

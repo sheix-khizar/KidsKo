@@ -9,8 +9,10 @@ router.post('/webhook', async (req: Request, res: Response) => {
   const authHeader = req.headers.authorization;
   const expectedSecret = process.env.REVENUECAT_WEBHOOK_SECRET;
 
-  if (expectedSecret && authHeader !== `Bearer ${expectedSecret}`) {
-    return res.status(401).json({ error: 'Invalid webhook signature' });
+  // Strict security check: reject if secret is not set in backend env OR header does not match
+  if (!expectedSecret || authHeader !== `Bearer ${expectedSecret}`) {
+    console.error('❌ Webhook security rejection: Invalid or unconfigured REVENUECAT_WEBHOOK_SECRET');
+    return res.status(401).json({ error: 'Unauthorized webhook request' });
   }
 
   const event = req.body?.event;
