@@ -6,7 +6,10 @@ dotenv.config({ path: path.join(__dirname, '../../.env') });
 
 const supabaseUrl = process.env.SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_ANON_KEY!;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
 const supabase = createClient(supabaseUrl, supabaseKey);
+const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey || supabaseKey);
 
 const DUMMY_IMAGE_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
@@ -38,8 +41,14 @@ async function runPhase5TestSuite() {
     return;
   }
 
+  // Ensure profiles row exists (using admin service role client to bypass RLS for test setup)
+  const { error: profileErr } = await supabaseAdmin.from('profiles').upsert({ id: userId, email: emailArg });
+  if (profileErr) {
+    console.error('⚠️ Could not upsert profile:', profileErr.message);
+  }
+
   // Get or create test student
-  let { data: students } = await supabase
+  let { data: students } = await supabaseAdmin
     .from('students')
     .select('*')
     .eq('parent_id', userId)
@@ -48,12 +57,16 @@ async function runPhase5TestSuite() {
   let studentId = students?.[0]?.id;
   if (!studentId) {
     console.log('Creating test student...');
-    const { data: newStudent } = await supabase
+    const { data: newStudent, error: createStudentErr } = await supabaseAdmin
       .from('students')
       .insert({ parent_id: userId, student_name: 'Phase 5 Tester' })
       .select()
       .single();
 
+    if (createStudentErr) {
+      console.error('❌ Failed to create student:', createStudentErr.message);
+      return;
+    }
     studentId = newStudent?.id;
   }
 
@@ -66,9 +79,13 @@ async function runPhase5TestSuite() {
   // TEST 1: POOLED CHAT LIMIT BOUNDARY (30 MESSAGES/DAY ON FAMILY_USAGE)
   // -------------------------------------------------------------------------
   console.log('--- [TEST 1] Testing Pooled Family Chat Limit (30 messages/day) ---');
-  await supabase
+  const { error: upsert1Err } = await supabaseAdmin
     .from('family_usage')
     .upsert({ parent_id: userId, daily_message_count: 29, last_daily_reset_at: new Date().toISOString() });
+
+  if (upsert1Err) {
+    console.error('❌ Failed to prepare family_usage row for TEST 1:', upsert1Err.message);
+  }
 
   console.log('👉 Firing Chat Request #1 (Count at 29 -> should increment to 30)...');
   const resChat1 = await fetch(`${baseUrl}/api/chat`, {
@@ -101,9 +118,13 @@ async function runPhase5TestSuite() {
   // TEST 2: POOLED HOMEWORK SCAN LIMIT BOUNDARY (5 SCANS/DAY ON FAMILY_USAGE)
   // -------------------------------------------------------------------------
   console.log('--- [TEST 2] Testing Pooled Family Scan Limit (5 scans/day) ---');
-  await supabase
+  const { error: upsert2Err } = await supabaseAdmin
     .from('family_usage')
     .upsert({ parent_id: userId, daily_scan_count: 4, last_daily_reset_at: new Date().toISOString() });
+
+  if (upsert2Err) {
+    console.error('❌ Failed to prepare family_usage row for TEST 2:', upsert2Err.message);
+  }
 
   console.log('👉 Firing Scan Request #1 (Count at 4 -> should increment to 5)...');
   const resScan1 = await fetch(`${baseUrl}/api/homework/analyze`, {
@@ -137,9 +158,13 @@ async function runPhase5TestSuite() {
   // -------------------------------------------------------------------------
   console.log('--- [TEST 3] Testing Lazy Daily Reset (Simulating a new day) ---');
   const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  await supabase
+  const { error: upsert3Err } = await supabaseAdmin
     .from('family_usage')
     .upsert({ parent_id: userId, daily_message_count: 30, daily_scan_count: 5, last_daily_reset_at: yesterday });
+
+  if (upsert3Err) {
+    console.error('❌ Failed to prepare family_usage row for TEST 3:', upsert3Err.message);
+  }
 
   console.log('👉 Firing Chat Request on New Day -> should auto-reset counts to 0 and SUCCEED...');
   const resReset = await fetch(`${baseUrl}/api/chat`, {

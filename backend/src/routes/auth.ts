@@ -20,6 +20,9 @@ router.post('/register', async (req: Request, res: Response) => {
     return res.status(500).json({ error: 'User creation failed unexpectedly' });
   }
 
+  // Ensure profiles row exists for FK relationships (e.g. family_usage)
+  await supabase.from('profiles').upsert({ id: data.user.id, email: data.user.email });
+
   return res.status(201).json({
     message: 'Account created successfully',
     userId: data.user.id,
@@ -38,6 +41,11 @@ router.post('/login', async (req: Request, res: Response) => {
 
   if (error) {
     return res.status(401).json({ error: error.message });
+  }
+
+  // Ensure profiles row exists on login if missing
+  if (data.user) {
+    await supabase.from('profiles').upsert({ id: data.user.id, email: data.user.email });
   }
 
   return res.status(200).json({
