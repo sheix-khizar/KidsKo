@@ -13,6 +13,10 @@ export async function analyzeHomework(studentId: string, imageBase64: string, th
     body: JSON.stringify({ studentId, imageBase64, threadId }),
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Could not analyze homework image.');
+  if (!res.ok) {
+    const err: any = new Error(data.error || 'Could not analyze homework image.');
+    err.status = res.status;
+    throw err;
+  }
   return data as { threadId: string; explanation: string };
 }

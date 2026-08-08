@@ -3,6 +3,8 @@ import { requireAuth } from '../middleware/auth';
 import { userRateLimit } from '../middleware/userRateLimit';
 import { generateChatReply, ChatMessage } from '../lib/gemini';
 import { checkAndIncrementUsage } from '../lib/usageLimits';
+import { getCachedAnswer, setCachedAnswer } from '../lib/cache';
+import { logUsageEvent } from '../lib/usageEvents';
 
 const router = Router();
 
@@ -17,12 +19,13 @@ router.post('/', requireAuth, userRateLimit, async (req: Request, res: Response)
   }
 
   try {
-    const usage = await checkAndIncrementUsage(req.supabase!, studentId, req.user!.id, 'message');
+    const usage = await checkAndIncrementUsage(req.supabase!, req.user!.id, 'message');
     if (!usage.allowed) {
       return res.status(429).json({ error: usage.reason, remaining: 0, isPremium: false });
     }
 
     let activeThreadId = threadId;
+    const isFreshThread = !threadId;
 
     // Create a new thread if none was passed
     if (!activeThreadId) {
@@ -45,24 +48,37 @@ router.post('/', requireAuth, userRateLimit, async (req: Request, res: Response)
     });
     if (userMsgError) throw userMsgError;
 
-    // Fetch recent history for this thread (trimmed — Ticket 2.9)
-    const { data: recentMessages, error: historyError } = await req.supabase!
-      .from('messages')
-      .select('role, content')
-      .eq('thread_id', activeThreadId)
-      .order('created_at', { ascending: false })
-      .limit(MAX_HISTORY_MESSAGES);
+    let aiReply = '';
+    let servedFromCache = false;
 
-    if (historyError) throw historyError;
+    if (isFreshThread) {
+      const cached = await getCachedAnswer(message);
+      if (cached) {
+        aiReply = cached;
+        servedFromCache = true;
+        await logUsageEvent(req.supabase!, req.user!.id, studentId, 'cache_hit');
+      }
+    }
 
-    // Reverse back into chronological order for Gemini
-    const history: ChatMessage[] = (recentMessages || []).reverse().map((m) => ({
-      role: m.role as 'user' | 'assistant',
-      content: m.content,
-    }));
+    if (!servedFromCache) {
+      const { data: recentMessages, error: historyError } = await req.supabase!
+        .from('messages')
+        .select('role, content')
+        .eq('thread_id', activeThreadId)
+        .order('created_at', { ascending: false })
+        .limit(MAX_HISTORY_MESSAGES);
+      if (historyError) throw historyError;
 
-    // Call Gemini
-    const aiReply = await generateChatReply(history);
+      const history: ChatMessage[] = (recentMessages || []).reverse().map((m) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      }));
+
+      aiReply = await generateChatReply(history);
+      if (isFreshThread) await setCachedAnswer(message, aiReply);
+    }
+
+    await logUsageEvent(req.supabase!, req.user!.id, studentId, 'message');
 
     // Save the AI's reply
     const { error: aiMsgError } = await req.supabase!.from('messages').insert({

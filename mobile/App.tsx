@@ -5,23 +5,35 @@ import LoginScreen from './src/screens/LoginScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import ChatScreen from './src/screens/ChatScreen';
 import HomeworkScreen from './src/screens/HomeworkScreen';
+import PaywallScreen from './src/screens/PaywallScreen';
+import TranscriptScreen from './src/screens/TranscriptScreen';
+import ParentalGate from './src/components/ParentalGate';
 import { getToken } from './src/services/api';
 
 type Student = { id: string; student_name: string };
-type Screen = 'checking' | 'register' | 'login' | 'home' | 'chat' | 'homework';
+type Screen = 'checking' | 'register' | 'login' | 'home' | 'chat' | 'homework' | 'paywall' | 'transcript';
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('checking');
   const [activeStudent, setActiveStudent] = useState<Student | null>(null);
   const [scanThreadId, setScanThreadId] = useState<string | undefined>(undefined);
   const [scanExplanation, setScanExplanation] = useState<string | undefined>(undefined);
+  const [gateVisible, setGateVisible] = useState(false);
 
   useEffect(() => {
     (async () => {
       const token = await getToken();
-      setScreen(token ? 'home' : 'login');
+      if (token) {
+        setScreen('home');
+      } else {
+        setScreen('login');
+      }
     })();
   }, []);
+
+  const handleLimitReached = () => {
+    setGateVisible(true);
+  };
 
   if (screen === 'checking') {
     return (
@@ -39,34 +51,77 @@ export default function App() {
     return <LoginScreen onLoggedIn={() => setScreen('home')} onGoToRegister={() => setScreen('register')} />;
   }
 
-  if (screen === 'homework' && activeStudent) {
+  if (screen === 'paywall') {
     return (
-      <HomeworkScreen
-        studentId={activeStudent.id}
-        studentName={activeStudent.student_name}
+      <PaywallScreen
         onBack={() => setScreen('home')}
-        onScanSuccess={(threadId, reply) => {
-          setScanThreadId(threadId);
-          setScanExplanation(reply);
-          setScreen('chat');
+        onPurchased={() => {
+          setScreen('home');
         }}
       />
     );
   }
 
-  if (screen === 'chat' && activeStudent) {
+  if (screen === 'transcript' && activeStudent) {
     return (
-      <ChatScreen
+      <TranscriptScreen
         studentId={activeStudent.id}
         studentName={activeStudent.student_name}
-        onBack={() => {
-          setScanThreadId(undefined);
-          setScanExplanation(undefined);
-          setScreen('home');
-        }}
-        initialThreadId={scanThreadId}
-        initialExplanation={scanExplanation}
+        onBack={() => setScreen('home')}
       />
+    );
+  }
+
+  if (screen === 'homework' && activeStudent) {
+    return (
+      <>
+        <HomeworkScreen
+          studentId={activeStudent.id}
+          studentName={activeStudent.student_name}
+          onBack={() => setScreen('home')}
+          onScanSuccess={(threadId, reply) => {
+            setScanThreadId(threadId);
+            setScanExplanation(reply);
+            setScreen('chat');
+          }}
+          onLimitReached={handleLimitReached}
+        />
+        <ParentalGate
+          visible={gateVisible}
+          onSuccess={() => {
+            setGateVisible(false);
+            setScreen('paywall');
+          }}
+          onCancel={() => setGateVisible(false)}
+        />
+      </>
+    );
+  }
+
+  if (screen === 'chat' && activeStudent) {
+    return (
+      <>
+        <ChatScreen
+          studentId={activeStudent.id}
+          studentName={activeStudent.student_name}
+          onBack={() => {
+            setScanThreadId(undefined);
+            setScanExplanation(undefined);
+            setScreen('home');
+          }}
+          initialThreadId={scanThreadId}
+          initialExplanation={scanExplanation}
+          onLimitReached={handleLimitReached}
+        />
+        <ParentalGate
+          visible={gateVisible}
+          onSuccess={() => {
+            setGateVisible(false);
+            setScreen('paywall');
+          }}
+          onCancel={() => setGateVisible(false)}
+        />
+      </>
     );
   }
 
@@ -82,6 +137,10 @@ export default function App() {
       onScanStudent={(student) => {
         setActiveStudent(student);
         setScreen('homework');
+      }}
+      onOpenTranscript={(student) => {
+        setActiveStudent(student);
+        setScreen('transcript');
       }}
     />
   );

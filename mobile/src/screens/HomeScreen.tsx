@@ -9,15 +9,18 @@ type Props = {
   onLoggedOut: () => void;
   onSelectStudent: (student: Student) => void;
   onScanStudent: (student: Student) => void;
+  onOpenTranscript: (student: Student) => void;
 };
 
-export default function HomeScreen({ onLoggedOut, onSelectStudent, onScanStudent }: Props) {
+export default function HomeScreen({ onLoggedOut, onSelectStudent, onScanStudent, onOpenTranscript }: Props) {
   const [students, setStudents] = useState<Student[]>([]);
   const [newName, setNewName] = useState('');
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [gateVisible, setGateVisible] = useState(false);
+  const [gateAction, setGateAction] = useState<'logout' | 'transcript' | null>(null);
+  const [targetStudent, setTargetStudent] = useState<Student | null>(null);
 
   const loadStudents = async () => {
     try {
@@ -54,10 +57,21 @@ export default function HomeScreen({ onLoggedOut, onSelectStudent, onScanStudent
     onLoggedOut();
   };
 
+  const triggerTranscriptGate = (student: Student) => {
+    setTargetStudent(student);
+    setGateAction('transcript');
+    setGateVisible(true);
+  };
+
+  const triggerLogoutGate = () => {
+    setGateAction('logout');
+    setGateVisible(true);
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Kidsko.ai 🦉</Text>
-      <Text style={styles.subtitle}>Select a student to chat or scan homework</Text>
+      <Text style={styles.subtitle}>Select a student to chat, scan homework, or view transcript</Text>
 
       <View style={styles.addRow}>
         <TextInput
@@ -92,13 +106,16 @@ export default function HomeScreen({ onLoggedOut, onSelectStudent, onScanStudent
               <Pressable style={styles.chatBtn} onPress={() => onSelectStudent(item)}>
                 <Text style={styles.chatBtnText}>💬 Chat</Text>
               </Pressable>
+              <Pressable style={styles.transcriptBtn} onPress={() => triggerTranscriptGate(item)}>
+                <Text style={styles.transcriptBtnText}>📜 History</Text>
+              </Pressable>
             </View>
           )}
           ListEmptyComponent={<Text style={styles.empty}>No students yet — add one above.</Text>}
         />
       )}
 
-      <Pressable style={styles.logoutButton} onPress={() => setGateVisible(true)}>
+      <Pressable style={styles.logoutButton} onPress={triggerLogoutGate}>
         <Text style={styles.logoutText}>Log Out</Text>
       </Pressable>
 
@@ -106,7 +123,11 @@ export default function HomeScreen({ onLoggedOut, onSelectStudent, onScanStudent
         visible={gateVisible}
         onSuccess={() => {
           setGateVisible(false);
-          handleLogout();
+          if (gateAction === 'logout') {
+            handleLogout();
+          } else if (gateAction === 'transcript' && targetStudent) {
+            onOpenTranscript(targetStudent);
+          }
         }}
         onCancel={() => setGateVisible(false)}
       />
@@ -137,7 +158,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 12,
     marginBottom: 10,
-    gap: 8,
+    gap: 6,
     shadowColor: '#000',
     shadowOpacity: 0.04,
     shadowRadius: 6,
@@ -147,28 +168,37 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 6,
   },
-  studentEmoji: { fontSize: 22 },
-  studentName: { fontSize: 16, fontWeight: '700', color: '#111' },
+  studentEmoji: { fontSize: 20 },
+  studentName: { fontSize: 15, fontWeight: '700', color: '#111' },
   scanBtn: {
     backgroundColor: '#FFF8E1',
     borderWidth: 1,
     borderColor: '#FFE082',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
   },
-  scanBtnText: { fontSize: 13, fontWeight: '700', color: '#B78103' },
+  scanBtnText: { fontSize: 12, fontWeight: '700', color: '#B78103' },
   chatBtn: {
     backgroundColor: '#E6F4FE',
     borderWidth: 1,
     borderColor: '#BAE6FD',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
   },
-  chatBtnText: { fontSize: 13, fontWeight: '700', color: '#0369A1' },
+  chatBtnText: { fontSize: 12, fontWeight: '700', color: '#0369A1' },
+  transcriptBtn: {
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  transcriptBtnText: { fontSize: 12, fontWeight: '700', color: '#374151' },
   empty: { textAlign: 'center', color: '#9ca3af', marginTop: 20 },
   logoutButton: { marginTop: 'auto', padding: 14, alignItems: 'center' },
   logoutText: { color: '#EA4335', fontWeight: '700' },

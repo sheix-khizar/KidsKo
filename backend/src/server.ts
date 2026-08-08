@@ -7,6 +7,8 @@ import authRoutes from './routes/auth';
 import studentRoutes from './routes/students';
 import chatRoutes from './routes/chat';
 import homeworkRoutes from './routes/homework';
+import billingRoutes from './routes/billing';
+import transcriptRoutes from './routes/transcript';
 
 dotenv.config();
 
@@ -43,6 +45,8 @@ app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/homework', homeworkRoutes);
+app.use('/api/billing', billingRoutes);
+app.use('/api/transcript', transcriptRoutes);
 
 app.listen(PORT, () => {
   console.log(`✅ Kidsko backend running on http://localhost:${PORT}`);

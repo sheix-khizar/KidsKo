@@ -26,8 +26,9 @@ export async function sendMessage(studentId: string, message: string, threadId?:
   });
   const data = await res.json();
   if (!res.ok) {
-    // 429 responses still carry a useful error message — surface it as a normal error
-    throw new Error(data.error || 'Failed to send message');
+    const err: any = new Error(data.error || 'Failed to send message');
+    err.status = res.status;
+    throw err;
   }
   return data as ChatResponse;
 }

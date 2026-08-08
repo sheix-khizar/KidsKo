@@ -12,6 +12,10 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+// Service-role client for backend-only writes with no user session (e.g. webhooks)
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseAnonKey;
+export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+
 export function createUserScopedClient(accessToken: string) {
   return createClient(supabaseUrl, supabaseAnonKey, {
     global: {

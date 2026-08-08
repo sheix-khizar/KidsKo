@@ -9,9 +9,10 @@ type Props = {
   studentName: string;
   onBack: () => void;
   onScanSuccess: (threadId: string, initialReply: string) => void;
+  onLimitReached?: () => void;
 };
 
-export default function HomeworkScreen({ studentId, studentName, onBack, onScanSuccess }: Props) {
+export default function HomeworkScreen({ studentId, studentName, onBack, onScanSuccess, onLimitReached }: Props) {
   const [permission, requestPermission] = useCameraPermissions();
   const [facing, setFacing] = useState<CameraType>('back');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
@@ -74,6 +75,9 @@ export default function HomeworkScreen({ studentId, studentName, onBack, onScanS
     } catch (err: any) {
       setErrorMsg(err.message || 'Could not scan photo.');
       setPhotoUri(null);
+      if (err.status === 429 && onLimitReached) {
+        onLimitReached();
+      }
     } finally {
       setAnalyzing(false);
     }
@@ -107,12 +111,11 @@ export default function HomeworkScreen({ studentId, studentName, onBack, onScanS
 
       {!photoUri ? (
         <View style={styles.cameraContainer}>
-          <CameraView style={styles.camera} facing={facing} ref={cameraRef}>
-            <View style={styles.cameraOverlay}>
-              <View style={styles.scanFrame} />
-              <Text style={styles.cameraHint}>Align worksheet inside the box</Text>
-            </View>
-          </CameraView>
+          <CameraView style={styles.camera} facing={facing} ref={cameraRef} />
+          <View style={styles.cameraOverlay}>
+            <View style={styles.scanFrame} />
+            <Text style={styles.cameraHint}>Align worksheet inside the box</Text>
+          </View>
           <View style={styles.controls}>
             <Pressable
               style={styles.flipButton}
@@ -184,7 +187,16 @@ const styles = StyleSheet.create({
   headerSubtitle: { fontSize: 12, color: '#6b7280', fontWeight: '600' },
   cameraContainer: { flex: 1, backgroundColor: '#000' },
   camera: { flex: 1 },
-  cameraOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.2)' },
+  cameraOverlay: {
+    position: 'absolute',
+    top: 80,
+    left: 0,
+    right: 0,
+    bottom: 120,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+  },
   scanFrame: {
     width: '85%',
     height: '60%',

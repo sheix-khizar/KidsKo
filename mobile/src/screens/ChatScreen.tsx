@@ -20,9 +20,10 @@ type Props = {
   onBack: () => void;
   initialThreadId?: string;
   initialExplanation?: string;
+  onLimitReached?: () => void;
 };
 
-export default function ChatScreen({ studentId, studentName, onBack, initialThreadId, initialExplanation }: Props) {
+export default function ChatScreen({ studentId, studentName, onBack, initialThreadId, initialExplanation, onLimitReached }: Props) {
   const [messages, setMessages] = useState<Message[]>(
     initialExplanation
       ? [
@@ -96,7 +97,10 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
       });
     } catch (err: any) {
       setErrorMsg(err.message);
-      setRemaining(0); // ensures the badge shows the limit-reached state
+      setRemaining(0);
+      if (err.status === 429 && onLimitReached) {
+        onLimitReached();
+      }
     } finally {
       setSending(false);
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);

@@ -4,6 +4,7 @@ import { requireAuth } from '../middleware/auth';
 import { imageRateLimit } from '../middleware/userRateLimit';
 import { generateHomeworkExplanation } from '../lib/gemini';
 import { checkAndIncrementUsage } from '../lib/usageLimits';
+import { logUsageEvent } from '../lib/usageEvents';
 
 const router = Router();
 
@@ -16,7 +17,7 @@ router.post('/analyze', requireAuth, imageRateLimit, async (req: Request, res: R
   }
 
   try {
-    const usage = await checkAndIncrementUsage(req.supabase!, studentId, req.user!.id, 'scan');
+    const usage = await checkAndIncrementUsage(req.supabase!, req.user!.id, 'scan');
     if (!usage.allowed) {
       return res.status(429).json({ error: usage.reason, remaining: 0, isPremium: false });
     }
@@ -57,6 +58,8 @@ router.post('/analyze', requireAuth, imageRateLimit, async (req: Request, res: R
       role: 'assistant',
       content: explanation,
     });
+
+    await logUsageEvent(req.supabase!, req.user!.id, studentId, 'scan');
 
     return res.status(200).json({
       threadId: activeThreadId,

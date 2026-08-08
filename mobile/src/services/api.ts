@@ -64,3 +64,16 @@ export async function getStudents() {
   if (!res.ok) throw new Error(data.error || 'Could not load students');
   return data.students as { id: string; student_name: string }[];
 }
+
+export async function getTranscript(studentId: string) {
+  const token = await getToken();
+  const res = await fetch(`${API_URL}/api/transcript/${studentId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Could not load transcript');
+  return data as {
+    studentName: string;
+    messages: { role: string; content: string; message_type: string; created_at: string }[];
+  };
+}
