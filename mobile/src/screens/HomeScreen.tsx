@@ -10,9 +10,10 @@ type Props = {
   onSelectStudent: (student: Student) => void;
   onScanStudent: (student: Student) => void;
   onOpenTranscript: (student: Student) => void;
+  onOpenVoiceCall: (student: Student) => void;
 };
 
-export default function HomeScreen({ onLoggedOut, onSelectStudent, onScanStudent, onOpenTranscript }: Props) {
+export default function HomeScreen({ onLoggedOut, onSelectStudent, onScanStudent, onOpenTranscript, onOpenVoiceCall }: Props) {
   const [students, setStudents] = useState<Student[]>([]);
   const [newName, setNewName] = useState('');
   const [loading, setLoading] = useState(true);
@@ -71,7 +72,7 @@ export default function HomeScreen({ onLoggedOut, onSelectStudent, onScanStudent
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Kidsko.ai 🦉</Text>
-      <Text style={styles.subtitle}>Select a student to chat, scan homework, or view transcript</Text>
+      <Text style={styles.subtitle}>Select a student to chat, call live, or scan homework</Text>
 
       <View style={styles.addRow}>
         <TextInput
@@ -99,6 +100,9 @@ export default function HomeScreen({ onLoggedOut, onSelectStudent, onScanStudent
               <Pressable style={styles.studentRow} onPress={() => onSelectStudent(item)}>
                 <Text style={styles.studentEmoji}>🧒</Text>
                 <Text style={styles.studentName}>{item.student_name}</Text>
+              </Pressable>
+              <Pressable style={styles.voiceBtn} onPress={() => onOpenVoiceCall(item)}>
+                <Text style={styles.voiceBtnText}>🎙️ Call</Text>
               </Pressable>
               <Pressable style={styles.scanBtn} onPress={() => onScanStudent(item)}>
                 <Text style={styles.scanBtnText}>📸 Scan</Text>
@@ -156,9 +160,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#fff',
     borderRadius: 14,
-    padding: 12,
+    padding: 10,
     marginBottom: 10,
-    gap: 6,
+    gap: 4,
     shadowColor: '#000',
     shadowOpacity: 0.04,
     shadowRadius: 6,
@@ -168,37 +172,46 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
   },
-  studentEmoji: { fontSize: 20 },
-  studentName: { fontSize: 15, fontWeight: '700', color: '#111' },
+  studentEmoji: { fontSize: 18 },
+  studentName: { fontSize: 14, fontWeight: '700', color: '#111' },
+  voiceBtn: {
+    backgroundColor: '#E8F5E9',
+    borderWidth: 1,
+    borderColor: '#A5D6A7',
+    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 6,
+  },
+  voiceBtnText: { fontSize: 11, fontWeight: '700', color: '#2E7D32' },
   scanBtn: {
     backgroundColor: '#FFF8E1',
     borderWidth: 1,
     borderColor: '#FFE082',
     borderRadius: 8,
-    paddingHorizontal: 8,
+    paddingHorizontal: 7,
     paddingVertical: 6,
   },
-  scanBtnText: { fontSize: 12, fontWeight: '700', color: '#B78103' },
+  scanBtnText: { fontSize: 11, fontWeight: '700', color: '#B78103' },
   chatBtn: {
     backgroundColor: '#E6F4FE',
     borderWidth: 1,
     borderColor: '#BAE6FD',
     borderRadius: 8,
-    paddingHorizontal: 8,
+    paddingHorizontal: 7,
     paddingVertical: 6,
   },
-  chatBtnText: { fontSize: 12, fontWeight: '700', color: '#0369A1' },
+  chatBtnText: { fontSize: 11, fontWeight: '700', color: '#0369A1' },
   transcriptBtn: {
     backgroundColor: '#F3F4F6',
     borderWidth: 1,
     borderColor: '#E5E7EB',
     borderRadius: 8,
-    paddingHorizontal: 8,
+    paddingHorizontal: 7,
     paddingVertical: 6,
   },
-  transcriptBtnText: { fontSize: 12, fontWeight: '700', color: '#374151' },
+  transcriptBtnText: { fontSize: 11, fontWeight: '700', color: '#374151' },
   empty: { textAlign: 'center', color: '#9ca3af', marginTop: 20 },
   logoutButton: { marginTop: 'auto', padding: 14, alignItems: 'center' },
   logoutText: { color: '#EA4335', fontWeight: '700' },

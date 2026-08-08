@@ -9,6 +9,7 @@ import chatRoutes from './routes/chat';
 import homeworkRoutes from './routes/homework';
 import billingRoutes from './routes/billing';
 import transcriptRoutes from './routes/transcript';
+import { attachVoiceSocketServer } from './lib/voiceSocketServer';
 
 dotenv.config();
 
@@ -48,7 +49,10 @@ app.use('/api/homework', homeworkRoutes);
 app.use('/api/billing', billingRoutes);
 app.use('/api/transcript', transcriptRoutes);
 
-app.listen(PORT, () => {
+const httpServer = app.listen(PORT, () => {
   console.log(`✅ Kidsko backend running on http://localhost:${PORT}`);
   console.log(`   Health check: http://localhost:${PORT}/health`);
+  console.log(`   Voice WebSocket: ws://localhost:${PORT}/ws/voice`);
 });
+
+attachVoiceSocketServer(httpServer);

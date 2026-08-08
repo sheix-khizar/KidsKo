@@ -11,13 +11,15 @@
   "dependencies": {
     "@google/genai": "^2.13.0",
     "@supabase/supabase-js": "^2.110.8",
+    "@types/ws": "^8.18.1",
     "@upstash/redis": "^1.38.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "express-rate-limit": "^8.6.0",
     "helmet": "^8.3.0",
-    "sharp": "^0.35.3"
+    "sharp": "^0.35.3",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

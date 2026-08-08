@@ -1,0 +1,117 @@
+import { WebSocketServer, WebSocket } from 'ws';
+import { Server } from 'http';
+import { supabase } from './supabase';
+import { checkVoiceEligibility, recordVoiceMinutesUsed } from './voiceLimits';
+import { startLiveSession, sendAudioChunk, closeLiveSession } from './geminiLive';
+
+const ACCOUNTING_INTERVAL_MS = 10_000; // record elapsed minutes every 10s
+
+export function attachVoiceSocketServer(httpServer: Server) {
+  const wss = new WebSocketServer({ server: httpServer, path: '/ws/voice' });
+
+  wss.on('connection', async (clientSocket: WebSocket, req) => {
+    const url = new URL(req.url || '', 'http://localhost');
+    const token = url.searchParams.get('token');
+
+    if (!token) {
+      clientSocket.close(4001, 'Missing auth token');
+      return;
+    }
+
+    const { data: userData, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !userData.user) {
+      clientSocket.close(4001, 'Invalid auth token');
+      return;
+    }
+    const parentId = userData.user.id;
+
+    const eligibility = await checkVoiceEligibility(supabase, parentId);
+    if (!eligibility.allowed) {
+      clientSocket.send(JSON.stringify({ type: 'error', reason: eligibility.reason }));
+      clientSocket.close(4002, 'Voice limit reached');
+      return;
+    }
+
+    // Hard cap this specific session to whatever's left of the allowance,
+    // capped further at 5 min for free users even if this is their first session.
+    const capMinutes = eligibility.isPremium
+      ? eligibility.minutesRemaining
+      : Math.min(5, eligibility.minutesRemaining);
+    const capMs = Math.max(1000, capMinutes * 60 * 1000);
+
+    let liveSession: any;
+    let elapsedMs = 0;
+    let accountingTimer: NodeJS.Timeout;
+    let hardCapTimer: NodeJS.Timeout;
+
+    try {
+      liveSession = await startLiveSession({
+        onAudioChunk: (base64Audio) => {
+          if (clientSocket.readyState === WebSocket.OPEN) {
+            clientSocket.send(JSON.stringify({ type: 'audio', data: base64Audio }));
+          }
+        },
+        onClose: () => {
+          if (clientSocket.readyState === WebSocket.OPEN) {
+            clientSocket.close(1000, 'Gemini session ended');
+          }
+        },
+        onError: (err) => {
+          console.error('Gemini Live error:', err);
+          if (clientSocket.readyState === WebSocket.OPEN) {
+            clientSocket.send(JSON.stringify({ type: 'error', reason: 'Voice session error' }));
+          }
+        },
+      });
+    } catch (err: any) {
+      console.error('Failed to start Gemini Live session:', err.message);
+      clientSocket.close(1011, 'Could not start voice session');
+      return;
+    }
+
+    clientSocket.send(JSON.stringify({ type: 'ready', capSeconds: Math.floor(capMs / 1000) }));
+
+    // Server-side accounting
+    accountingTimer = setInterval(async () => {
+      elapsedMs += ACCOUNTING_INTERVAL_MS;
+      await recordVoiceMinutesUsed(supabase, parentId, ACCOUNTING_INTERVAL_MS / 60000);
+    }, ACCOUNTING_INTERVAL_MS);
+
+    hardCapTimer = setTimeout(() => {
+      if (clientSocket.readyState === WebSocket.OPEN) {
+        clientSocket.send(JSON.stringify({ type: 'cap_reached' }));
+      }
+      closeLiveSession(liveSession);
+      if (clientSocket.readyState === WebSocket.OPEN) {
+        clientSocket.close(4003, 'Session time limit reached');
+      }
+    }, capMs);
+
+    clientSocket.on('message', (raw) => {
+      try {
+        const msg = JSON.parse(raw.toString());
+        if (msg.type === 'audio_chunk') {
+          sendAudioChunk(liveSession, msg.data);
+        }
+      } catch (err) {
+        console.error('Bad client message:', err);
+      }
+    });
+
+    clientSocket.on('close', async () => {
+      clearInterval(accountingTimer);
+      clearTimeout(hardCapTimer);
+      const remainderMs = elapsedMs % ACCOUNTING_INTERVAL_MS;
+      if (remainderMs > 0) {
+        await recordVoiceMinutesUsed(supabase, parentId, remainderMs / 60000);
+      }
+      try {
+        closeLiveSession(liveSession);
+      } catch {
+        // session may already be closed
+      }
+    });
+  });
+
+  return wss;
+}
