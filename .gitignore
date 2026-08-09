@@ -21,6 +21,9 @@ mobile/.expo/
 *.log
 npm-debug.log*
 
+# Test media artifacts
+*.wav
+
 # OS files
 .DS_Store
 Thumbs.db

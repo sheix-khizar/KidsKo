@@ -100,7 +100,7 @@ export function attachVoiceSocketServer(httpServer: Server) {
           const msg = JSON.parse(raw.toString());
           if (msg.type === 'audio_chunk') {
             console.log('[Voice Server] Received chunk, bytes:', msg.data.length);
-            sendAudioChunk(liveSession, msg.data, msg.mimeType);
+            sendAudioChunk(liveSession, msg.data);
           } else if (msg.type === 'text_prompt') {
             sendTextPrompt(liveSession, msg.data);
           }
