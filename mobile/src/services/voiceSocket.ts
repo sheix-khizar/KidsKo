@@ -1,5 +1,5 @@
 import { createAudioPlayer, requestRecordingPermissionsAsync, AudioModule } from 'expo-audio';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { getToken } from './api';
 
 const WS_URL = (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000').replace(/^http/, 'ws');
