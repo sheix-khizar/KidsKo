@@ -4,7 +4,7 @@ import { supabase } from './supabase';
 import { checkVoiceEligibility, recordVoiceMinutesUsed } from './voiceLimits';
 import { startLiveSession, sendAudioChunk, closeLiveSession } from './geminiLive';
 
-const ACCOUNTING_INTERVAL_MS = 10_000; // record elapsed minutes every 10s
+const ACCOUNTING_INTERVAL_MS = 10_000;
 
 export function attachVoiceSocketServer(httpServer: Server) {
   const wss = new WebSocketServer({ server: httpServer, path: '/ws/voice' });
@@ -32,8 +32,6 @@ export function attachVoiceSocketServer(httpServer: Server) {
       return;
     }
 
-    // Hard cap this specific session to whatever's left of the allowance,
-    // capped further at 5 min for free users even if this is their first session.
     const capMinutes = eligibility.isPremium
       ? eligibility.minutesRemaining
       : Math.min(5, eligibility.minutesRemaining);
@@ -51,9 +49,9 @@ export function attachVoiceSocketServer(httpServer: Server) {
             clientSocket.send(JSON.stringify({ type: 'audio', data: base64Audio }));
           }
         },
-        onClose: () => {
+        onClose: (reason) => {
           if (clientSocket.readyState === WebSocket.OPEN) {
-            clientSocket.close(1000, 'Gemini session ended');
+            clientSocket.close(1000, reason || 'Gemini session ended');
           }
         },
         onError: (err) => {
@@ -71,7 +69,6 @@ export function attachVoiceSocketServer(httpServer: Server) {
 
     clientSocket.send(JSON.stringify({ type: 'ready', capSeconds: Math.floor(capMs / 1000) }));
 
-    // Server-side accounting
     accountingTimer = setInterval(async () => {
       elapsedMs += ACCOUNTING_INTERVAL_MS;
       await recordVoiceMinutesUsed(supabase, parentId, ACCOUNTING_INTERVAL_MS / 60000);
@@ -108,7 +105,7 @@ export function attachVoiceSocketServer(httpServer: Server) {
       try {
         closeLiveSession(liveSession);
       } catch {
-        // session may already be closed
+        // session already closed
       }
     });
   });
