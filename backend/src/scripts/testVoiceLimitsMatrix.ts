@@ -15,7 +15,7 @@ const baseUrl = `ws://localhost:${serverPort}`;
 
 async function runVoiceLimitsMatrixTest() {
   console.log('🧪 ==========================================================');
-  console.log('🚀 TESTING PHASE 4B VOICE LIMITS & WEBSOCKET ACCOUNTING (4 TESTS)');
+  console.log('🚀 TESTING PHASE 4B VOICE LIMITS & WEBSOCKET ACCOUNTING (5 TESTS)');
   console.log('🧪 ==========================================================\n');
 
   // Authenticate test parent user
@@ -93,13 +93,64 @@ async function runVoiceLimitsMatrixTest() {
 
   const eligibility4 = await checkVoiceEligibility(supabaseAdmin, userId);
   if (eligibility4.allowed && eligibility4.minutesRemaining === FREE_WEEKLY_VOICE_MINUTES) {
-    console.log(`   ✅ TEST 4 PASSED! Weekly reset automatically cleared usage. Minutes Remaining: ${eligibility4.minutesRemaining}\n`);
+    console.log(`   ✅ TEST 4 PASSED! Weekly reset automatically cleared usage. Minutes Remaining: ${eligibility4.minutesRemaining}`);
   } else {
     console.error('   ❌ TEST 4 FAILED!', eligibility4);
   }
 
+  // --- TEST 5: Real Live Connection & Ready Frame Assertion ---
+  console.log('👉 [TEST 5] Testing real WebSocket connection & Gemini Live session initialization...');
+  await supabaseAdmin.from('family_usage').update({ weekly_voice_minutes_used: 0 }).eq('parent_id', userId);
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const ws = new WebSocket(`${baseUrl}/ws/voice?token=${token}`);
+      let receivedReady = false;
+
+      const timer = setTimeout(() => {
+        ws.close();
+        if (receivedReady) resolve();
+        else reject(new Error('Timeout waiting for ready frame from Voice WebSocket server'));
+      }, 8000);
+
+      ws.on('message', (raw) => {
+        try {
+          const msg = JSON.parse(raw.toString());
+          if (msg.type === 'ready') {
+            receivedReady = true;
+            console.log(`   ✅ TEST 5 PASSED! Server initialized Gemini Live session and returned ready frame with capSeconds=${msg.capSeconds}\n`);
+            clearTimeout(timer);
+            ws.close();
+            resolve();
+          } else if (msg.type === 'error') {
+            console.error(`   ❌ TEST 5 FAILED! Server returned error: "${msg.reason}"`);
+            clearTimeout(timer);
+            ws.close();
+            reject(new Error(msg.reason));
+          }
+        } catch {}
+      });
+
+      ws.on('close', (code, reason) => {
+        clearTimeout(timer);
+        if (!receivedReady) {
+          console.error(`   ❌ TEST 5 FAILED! Connection closed before ready frame: code ${code} (${reason || ''})`);
+          reject(new Error(`WebSocket closed: ${code} ${reason}`));
+        }
+      });
+
+      ws.on('error', (err) => {
+        clearTimeout(timer);
+        console.error(`   ❌ TEST 5 FAILED! WebSocket error: ${err.message}`);
+        reject(err);
+      });
+    });
+  } catch (t5Err: any) {
+    console.error(`   ⚠️ TEST 5 EXCEPTION: ${t5Err.message}\n`);
+  }
+
   console.log('🎉 ==========================================================');
-  console.log('🏆 ALL 4 VOICE LIMIT & ACCOUNTING MATRIX TESTS PASSED!');
+  console.log('🏆 VOICE LIMIT & LIVE CONNECTION MATRIX TEST COMPLETE');
   console.log('🎉 ==========================================================');
 }
 

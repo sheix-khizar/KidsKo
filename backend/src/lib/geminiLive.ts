@@ -6,13 +6,12 @@ dotenv.config();
 const apiKey = process.env.GEMINI_API_KEY_DEV || process.env.GEMINI_API_KEY_PROD;
 if (!apiKey) throw new Error('Missing GEMINI_API_KEY_DEV or GEMINI_API_KEY_PROD in .env');
 
-const GEMINI_WS_URL = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+const GEMINI_WS_URL = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
 
 const LIVE_MODELS = [
-  'models/gemini-2.0-flash-realtime-exp',
+  'models/gemini-3.1-flash-live-preview',
+  'models/gemini-live-2.5-flash-preview',
   'models/gemini-2.0-flash-exp',
-  'models/gemini-2.0-flash',
-  'models/gemini-1.5-flash',
 ];
 
 const VOICE_SYSTEM_PROMPT = `You are "Kidsko", a friendly voice tutor for children aged 5-12.
@@ -22,6 +21,7 @@ redirect back to learning if asked.`;
 
 type LiveCallbacks = {
   onAudioChunk: (base64Audio: string) => void;
+  onTextChunk?: (text: string) => void;
   onClose: (reason?: string) => void;
   onError: (err: any) => void;
 };
@@ -37,10 +37,10 @@ async function connectSingleModel(modelName: string, callbacks: LiveCallbacks): 
         console.log(`[Gemini Live WS] Setup accepted for model: ${modelName}`);
         resolve(geminiWs);
       }
-    }, 1200);
+    }, 1500);
 
     geminiWs.on('open', () => {
-      console.log(`[Gemini Live WS] Trying Live API model: ${modelName}`);
+      console.log(`[Gemini Live WS] Trying Live API model: ${modelName} via v1beta...`);
       const setupMsg = {
         setup: {
           model: modelName,
