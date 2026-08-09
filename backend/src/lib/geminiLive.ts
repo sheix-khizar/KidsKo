@@ -8,6 +8,13 @@ if (!apiKey) throw new Error('Missing GEMINI_API_KEY_DEV or GEMINI_API_KEY_PROD 
 
 const ai = new GoogleGenAI({ apiKey });
 
+const STREAM_MODELS = [
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash',
+  'gemini-flash-latest',
+];
+
 const VOICE_SYSTEM_PROMPT = `You are "Kidsko", a friendly voice tutor for children aged 5-12.
 Speak in short, warm, simple sentences. Use the Socratic method — guide toward
 understanding, don't just give final answers. Never discuss unsafe topics; gently
@@ -20,28 +27,53 @@ type LiveCallbacks = {
   onError: (err: any) => void;
 };
 
+async function streamContentWithFallback(prompt: string, onTextChunk: (text: string) => void) {
+  let lastError: any = null;
+
+  for (const modelName of STREAM_MODELS) {
+    try {
+      const stream = await ai.models.generateContentStream({
+        model: modelName,
+        contents: prompt,
+        config: {
+          systemInstruction: VOICE_SYSTEM_PROMPT,
+        },
+      });
+
+      let chunksCount = 0;
+      for await (const chunk of stream) {
+        if (chunk.text) {
+          chunksCount++;
+          onTextChunk(chunk.text);
+        }
+      }
+
+      if (chunksCount > 0) {
+        return; // Successfully streamed response!
+      }
+    } catch (err: any) {
+      console.warn(`[Gemini Voice] Model ${modelName} returned error/quota limit:`, err.message || err);
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error('Google Gemini API quota exceeded across all fallback models.');
+}
+
 export async function startLiveSession(callbacks: LiveCallbacks) {
   let active = true;
 
   // Send initial Socratic welcome greeting
   setTimeout(async () => {
     try {
-      const stream = await ai.models.generateContentStream({
-        model: 'gemini-2.0-flash',
-        contents: 'Say a warm, short Socratic greeting introducing yourself as Kidsko, ready to help learn!',
-        config: {
-          systemInstruction: VOICE_SYSTEM_PROMPT,
-        },
-      });
-
-      for await (const chunk of stream) {
-        if (!active) break;
-        if (chunk.text && callbacks.onTextChunk) {
-          callbacks.onTextChunk(chunk.text);
+      await streamContentWithFallback(
+        'Say a warm, short Socratic greeting introducing yourself as Kidsko, ready to help learn!',
+        (text) => {
+          if (active && callbacks.onTextChunk) callbacks.onTextChunk(text);
         }
-      }
+      );
     } catch (err: any) {
-      console.error('[Gemini Live] Initial greeting error:', err.message);
+      console.error('[Gemini Live] Initial greeting fallback error:', err.message || err);
     }
   }, 300);
 
@@ -49,23 +81,13 @@ export async function startLiveSession(callbacks: LiveCallbacks) {
     sendInput: async (userPrompt: string) => {
       if (!active) return;
       try {
-        const stream = await ai.models.generateContentStream({
-          model: 'gemini-2.0-flash',
-          contents: userPrompt,
-          config: {
-            systemInstruction: VOICE_SYSTEM_PROMPT,
-          },
+        await streamContentWithFallback(userPrompt, (text) => {
+          if (active && callbacks.onTextChunk) callbacks.onTextChunk(text);
         });
-
-        for await (const chunk of stream) {
-          if (!active) break;
-          if (chunk.text && callbacks.onTextChunk) {
-            callbacks.onTextChunk(chunk.text);
-          }
-        }
       } catch (err: any) {
-        console.error('[Gemini Live] Streaming error:', err.message);
-        callbacks.onError(err.message || 'Voice session error');
+        console.error('[Gemini Live] Streaming error:', err.message || err);
+        const errStr = err?.message || err?.toString() || 'Google Gemini API Rate Limit (429). Please retry in a few seconds.';
+        callbacks.onError(errStr);
       }
     },
     close: () => {
