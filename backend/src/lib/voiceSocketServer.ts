@@ -10,104 +10,117 @@ export function attachVoiceSocketServer(httpServer: Server) {
   const wss = new WebSocketServer({ server: httpServer, path: '/ws/voice' });
 
   wss.on('connection', async (clientSocket: WebSocket, req) => {
-    const url = new URL(req.url || '', 'http://localhost');
-    const token = url.searchParams.get('token');
-
-    if (!token) {
-      clientSocket.close(4001, 'Missing auth token');
-      return;
-    }
-
-    const { data: userData, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !userData.user) {
-      clientSocket.close(4001, 'Invalid auth token');
-      return;
-    }
-    const parentId = userData.user.id;
-
-    const eligibility = await checkVoiceEligibility(supabase, parentId);
-    if (!eligibility.allowed) {
-      clientSocket.send(JSON.stringify({ type: 'error', reason: eligibility.reason }));
-      clientSocket.close(4002, 'Voice limit reached');
-      return;
-    }
-
-    const capMinutes = eligibility.isPremium
-      ? eligibility.minutesRemaining
-      : Math.min(5, eligibility.minutesRemaining);
-    const capMs = Math.max(1000, capMinutes * 60 * 1000);
-
-    let liveSession: any;
-    let elapsedMs = 0;
-    let accountingTimer: NodeJS.Timeout;
-    let hardCapTimer: NodeJS.Timeout;
-
     try {
-      liveSession = await startLiveSession({
-        onAudioChunk: (base64Audio) => {
-          if (clientSocket.readyState === WebSocket.OPEN) {
-            clientSocket.send(JSON.stringify({ type: 'audio', data: base64Audio }));
-          }
-        },
-        onClose: (reason) => {
-          if (clientSocket.readyState === WebSocket.OPEN) {
-            clientSocket.close(1000, reason || 'Gemini session ended');
-          }
-        },
-        onError: (err) => {
-          console.error('Gemini Live error:', err);
-          if (clientSocket.readyState === WebSocket.OPEN) {
-            clientSocket.send(JSON.stringify({ type: 'error', reason: 'Voice session error' }));
-          }
-        },
-      });
-    } catch (err: any) {
-      console.error('Failed to start Gemini Live session:', err.message);
-      clientSocket.close(1011, 'Could not start voice session');
-      return;
-    }
+      const url = new URL(req.url || '', 'http://localhost');
+      const token = url.searchParams.get('token');
 
-    clientSocket.send(JSON.stringify({ type: 'ready', capSeconds: Math.floor(capMs / 1000) }));
-
-    accountingTimer = setInterval(async () => {
-      elapsedMs += ACCOUNTING_INTERVAL_MS;
-      await recordVoiceMinutesUsed(supabase, parentId, ACCOUNTING_INTERVAL_MS / 60000);
-    }, ACCOUNTING_INTERVAL_MS);
-
-    hardCapTimer = setTimeout(() => {
-      if (clientSocket.readyState === WebSocket.OPEN) {
-        clientSocket.send(JSON.stringify({ type: 'cap_reached' }));
+      if (!token) {
+        clientSocket.close(4001, 'Missing auth token');
+        return;
       }
-      closeLiveSession(liveSession);
-      if (clientSocket.readyState === WebSocket.OPEN) {
-        clientSocket.close(4003, 'Session time limit reached');
-      }
-    }, capMs);
 
-    clientSocket.on('message', (raw) => {
+      const { data: userData, error: authError } = await supabase.auth.getUser(token);
+      if (authError || !userData.user) {
+        clientSocket.close(4001, 'Invalid auth token');
+        return;
+      }
+      const parentId = userData.user.id;
+
+      const eligibility = await checkVoiceEligibility(supabase, parentId);
+      if (!eligibility.allowed) {
+        clientSocket.send(JSON.stringify({ type: 'error', reason: eligibility.reason }));
+        clientSocket.close(4002, 'Voice limit reached');
+        return;
+      }
+
+      const capMinutes = eligibility.isPremium
+        ? eligibility.minutesRemaining
+        : Math.min(5, eligibility.minutesRemaining);
+      const capMs = Math.max(1000, capMinutes * 60 * 1000);
+
+      let liveSession: any;
+      let elapsedMs = 0;
+      let accountingTimer: NodeJS.Timeout;
+      let hardCapTimer: NodeJS.Timeout;
+
       try {
-        const msg = JSON.parse(raw.toString());
-        if (msg.type === 'audio_chunk') {
-          sendAudioChunk(liveSession, msg.data);
+        liveSession = await startLiveSession({
+          onAudioChunk: (base64Audio) => {
+            if (clientSocket.readyState === WebSocket.OPEN) {
+              clientSocket.send(JSON.stringify({ type: 'audio', data: base64Audio }));
+            }
+          },
+          onClose: (reason) => {
+            if (clientSocket.readyState === WebSocket.OPEN) {
+              clientSocket.close(1000, reason || 'Gemini session ended');
+            }
+          },
+          onError: (err) => {
+            console.error('[Voice Socket] Gemini Live error:', err);
+            if (clientSocket.readyState === WebSocket.OPEN) {
+              clientSocket.send(JSON.stringify({ type: 'error', reason: 'Voice session error' }));
+            }
+          },
+        });
+      } catch (err: any) {
+        console.error('[Voice Socket] Failed to start Gemini Live session:', err.message);
+        clientSocket.close(1011, 'Could not start voice session');
+        return;
+      }
+
+      clientSocket.send(JSON.stringify({ type: 'ready', capSeconds: Math.floor(capMs / 1000) }));
+
+      accountingTimer = setInterval(async () => {
+        try {
+          elapsedMs += ACCOUNTING_INTERVAL_MS;
+          await recordVoiceMinutesUsed(supabase, parentId, ACCOUNTING_INTERVAL_MS / 60000);
+        } catch (err) {
+          console.error('[Voice Socket] Error recording voice minutes:', err);
         }
-      } catch (err) {
-        console.error('Bad client message:', err);
-      }
-    });
+      }, ACCOUNTING_INTERVAL_MS);
 
-    clientSocket.on('close', async () => {
-      clearInterval(accountingTimer);
-      clearTimeout(hardCapTimer);
-      const remainderMs = elapsedMs % ACCOUNTING_INTERVAL_MS;
-      if (remainderMs > 0) {
-        await recordVoiceMinutesUsed(supabase, parentId, remainderMs / 60000);
-      }
-      try {
+      hardCapTimer = setTimeout(() => {
+        if (clientSocket.readyState === WebSocket.OPEN) {
+          clientSocket.send(JSON.stringify({ type: 'cap_reached' }));
+        }
         closeLiveSession(liveSession);
-      } catch {
-        // session already closed
+        if (clientSocket.readyState === WebSocket.OPEN) {
+          clientSocket.close(4003, 'Session time limit reached');
+        }
+      }, capMs);
+
+      clientSocket.on('message', (raw) => {
+        try {
+          const msg = JSON.parse(raw.toString());
+          if (msg.type === 'audio_chunk') {
+            sendAudioChunk(liveSession, msg.data);
+          }
+        } catch (err) {
+          console.error('[Voice Socket] Bad client message:', err);
+        }
+      });
+
+      clientSocket.on('close', async () => {
+        clearInterval(accountingTimer);
+        clearTimeout(hardCapTimer);
+        const remainderMs = elapsedMs % ACCOUNTING_INTERVAL_MS;
+        if (remainderMs > 0) {
+          try {
+            await recordVoiceMinutesUsed(supabase, parentId, remainderMs / 60000);
+          } catch {}
+        }
+        try {
+          closeLiveSession(liveSession);
+        } catch {
+          // session already closed
+        }
+      });
+    } catch (globalErr: any) {
+      console.error('[Voice Socket] Connection handler exception:', globalErr.message);
+      if (clientSocket.readyState === WebSocket.OPEN) {
+        clientSocket.close(1011, 'Server internal error');
       }
-    });
+    }
   });
 
   return wss;

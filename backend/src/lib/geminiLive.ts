@@ -1,4 +1,4 @@
-import { GoogleGenAI, Modality } from '@google/genai';
+import WebSocket from 'ws';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -6,9 +6,9 @@ dotenv.config();
 const apiKey = process.env.GEMINI_API_KEY_DEV || process.env.GEMINI_API_KEY_PROD;
 if (!apiKey) throw new Error('Missing GEMINI_API_KEY_DEV or GEMINI_API_KEY_PROD in .env');
 
-const ai = new GoogleGenAI({ apiKey });
+const GEMINI_WS_URL = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${apiKey}`;
 
-const LIVE_MODELS = ['gemini-2.0-flash-exp', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+const LIVE_MODELS = ['models/gemini-2.0-flash-exp', 'models/gemini-2.0-flash', 'models/gemini-1.5-flash'];
 
 const VOICE_SYSTEM_PROMPT = `You are "Kidsko", a friendly voice tutor for children aged 5-12.
 Speak in short, warm, simple sentences. Use the Socratic method — guide toward
@@ -21,72 +21,88 @@ type LiveCallbacks = {
   onError: (err: any) => void;
 };
 
-export async function startLiveSession(callbacks: LiveCallbacks) {
-  let lastError: any = null;
+export async function startLiveSession(callbacks: LiveCallbacks): Promise<WebSocket> {
+  return new Promise((resolve, reject) => {
+    let connected = false;
+    let selectedModel = LIVE_MODELS[0];
 
-  for (const modelName of LIVE_MODELS) {
-    try {
-      console.log(`[Gemini Live] Attempting to connect with model: ${modelName}`);
-      const session = await ai.live.connect({
-        model: modelName,
-        config: {
-          responseModalities: [Modality.AUDIO],
-          systemInstruction: VOICE_SYSTEM_PROMPT,
+    const geminiWs = new WebSocket(GEMINI_WS_URL);
+
+    geminiWs.on('open', () => {
+      console.log(`[Gemini Live WS] Connected to Gemini Live API. Sending setup for ${selectedModel}...`);
+      const setupMsg = {
+        setup: {
+          model: selectedModel,
+          generationConfig: {
+            responseModalities: ['AUDIO'],
+          },
+          systemInstruction: {
+            parts: [{ text: VOICE_SYSTEM_PROMPT }],
+          },
         },
-        callbacks: {
-          onopen: () => console.log(`[Gemini Live] Connected successfully with model: ${modelName}`),
-          onmessage: (e: any) => {
-            try {
-              const data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
-              const parts = data?.serverContent?.modelTurn?.parts;
-              const audioPart = parts?.find((p: any) => p.inlineData?.mimeType?.startsWith('audio/'));
-              if (audioPart) callbacks.onAudioChunk(audioPart.inlineData.data);
-            } catch (err) {
-              console.error('[Gemini Live] Error parsing audio message:', err);
-              callbacks.onError(err);
+      };
+      geminiWs.send(JSON.stringify(setupMsg));
+      connected = true;
+      resolve(geminiWs);
+    });
+
+    geminiWs.on('message', (raw: WebSocket.RawData) => {
+      try {
+        const data = JSON.parse(raw.toString());
+        const parts = data?.serverContent?.modelTurn?.parts;
+        if (parts && Array.isArray(parts)) {
+          for (const part of parts) {
+            if (part?.inlineData?.data) {
+              callbacks.onAudioChunk(part.inlineData.data);
             }
-          },
-          onerror: (e: any) => {
-            console.error('[Gemini Live] Session error:', e?.error || e);
-            callbacks.onError(e?.error || e);
-          },
-          onclose: (e: any) => {
-            console.log('[Gemini Live] Session closed by Gemini server:', e?.reason || e);
-            callbacks.onClose(e?.reason || 'Gemini session closed');
-          },
-        },
-      });
+          }
+        }
+      } catch (err) {
+        console.error('[Gemini Live WS] Error parsing message:', err);
+      }
+    });
 
-      return session;
-    } catch (err: any) {
-      console.warn(`[Gemini Live] Model ${modelName} failed to connect:`, err.message);
-      lastError = err;
-    }
-  }
+    geminiWs.on('error', (err) => {
+      console.error('[Gemini Live WS] Error:', err.message);
+      if (!connected) {
+        reject(err);
+      } else {
+        callbacks.onError(err);
+      }
+    });
 
-  throw lastError || new Error('All Gemini Live models failed to connect');
+    geminiWs.on('close', (code, reason) => {
+      const reasonStr = reason ? reason.toString() : `Close code ${code}`;
+      console.log(`[Gemini Live WS] Closed: ${reasonStr}`);
+      if (!connected) {
+        reject(new Error(`Gemini Live WS closed before connection: ${reasonStr}`));
+      } else {
+        callbacks.onClose(reasonStr);
+      }
+    });
+  });
 }
 
-export function sendAudioChunk(session: any, base64Audio: string) {
-  try {
-    if (session && typeof session.sendRealtimeInput === 'function') {
-      session.sendRealtimeInput({
-        audio: { data: base64Audio, mimeType: 'audio/pcm;rate=16000' },
-      });
-    } else if (session && typeof session.send === 'function') {
-      session.send(JSON.stringify({ realtimeInput: { mediaChunks: [{ mimeType: 'audio/pcm;rate=16000', data: base64Audio }] } }));
-    }
-  } catch (err) {
-    console.error('[Gemini Live] Error sending audio chunk:', err);
+export function sendAudioChunk(geminiWs: WebSocket, base64Audio: string) {
+  if (geminiWs && geminiWs.readyState === WebSocket.OPEN) {
+    const inputMsg = {
+      realtimeInput: {
+        mediaChunks: [
+          {
+            mimeType: 'audio/pcm;rate=16000',
+            data: base64Audio,
+          },
+        ],
+      },
+    };
+    geminiWs.send(JSON.stringify(inputMsg));
   }
 }
 
-export function closeLiveSession(session: any) {
-  try {
-    if (session && typeof session.close === 'function') {
-      session.close();
-    }
-  } catch (err) {
-    // Session already closed
+export function closeLiveSession(geminiWs: WebSocket) {
+  if (geminiWs && (geminiWs.readyState === WebSocket.OPEN || geminiWs.readyState === WebSocket.CONNECTING)) {
+    try {
+      geminiWs.close();
+    } catch {}
   }
 }
