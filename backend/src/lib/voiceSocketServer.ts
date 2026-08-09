@@ -64,7 +64,7 @@ export function attachVoiceSocketServer(httpServer: Server) {
           onError: (err) => {
             console.error('[Voice Socket] Gemini Live error:', err);
             if (clientSocket.readyState === WebSocket.OPEN) {
-              clientSocket.send(JSON.stringify({ type: 'error', reason: 'Voice session error' }));
+              clientSocket.send(JSON.stringify({ type: 'error', reason: typeof err === 'string' ? err : 'Voice session error' }));
             }
           },
         });

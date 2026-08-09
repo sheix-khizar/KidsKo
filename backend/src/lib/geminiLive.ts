@@ -27,7 +27,7 @@ export async function startLiveSession(callbacks: LiveCallbacks) {
   setTimeout(async () => {
     try {
       const stream = await ai.models.generateContentStream({
-        model: 'models/gemini-2.0-flash',
+        model: 'gemini-2.0-flash',
         contents: 'Say a warm, short Socratic greeting introducing yourself as Kidsko, ready to help learn!',
         config: {
           systemInstruction: VOICE_SYSTEM_PROMPT,
@@ -50,7 +50,7 @@ export async function startLiveSession(callbacks: LiveCallbacks) {
       if (!active) return;
       try {
         const stream = await ai.models.generateContentStream({
-          model: 'models/gemini-2.0-flash',
+          model: 'gemini-2.0-flash',
           contents: userPrompt,
           config: {
             systemInstruction: VOICE_SYSTEM_PROMPT,
@@ -65,7 +65,7 @@ export async function startLiveSession(callbacks: LiveCallbacks) {
         }
       } catch (err: any) {
         console.error('[Gemini Live] Streaming error:', err.message);
-        callbacks.onError(err);
+        callbacks.onError(err.message || 'Voice session error');
       }
     },
     close: () => {
