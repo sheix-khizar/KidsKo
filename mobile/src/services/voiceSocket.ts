@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import { createAudioPlayer, requestRecordingPermissionsAsync, AudioModule } from 'expo-audio';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as Speech from 'expo-speech';
 import { getToken } from './api';
 
 const defaultHost = Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
@@ -22,6 +23,7 @@ export class VoiceSession {
   private activePlayer: any = null;
   private playbackQueue: string[] = [];
   private playing = false;
+  private speechBuffer = '';
 
   async start(callbacks: VoiceCallbacks) {
     const token = await getToken();
@@ -41,6 +43,7 @@ export class VoiceSession {
         else if (msg.type === 'cap_reached') callbacks.onCapReached();
         else if (msg.type === 'error') callbacks.onError(msg.reason);
         else if (msg.type === 'audio') this.enqueuePlayback(msg.data);
+        else if (msg.type === 'text') this.enqueueSpeechText(msg.data);
       } catch (err) {
         console.error('Error parsing WebSocket message:', err);
       }
@@ -56,6 +59,15 @@ export class VoiceSession {
     };
 
     await this.startRecordingLoop();
+  }
+
+  private enqueueSpeechText(textChunk: string) {
+    this.speechBuffer += textChunk;
+    if (this.speechBuffer.includes('.') || this.speechBuffer.includes('!') || this.speechBuffer.includes('?')) {
+      const textToSpeak = this.speechBuffer;
+      this.speechBuffer = '';
+      Speech.speak(textToSpeak, { language: 'en-US', pitch: 1.1, rate: 0.95 });
+    }
   }
 
   private async startRecordingLoop() {
@@ -164,6 +176,7 @@ export class VoiceSession {
 
   async end() {
     this.recordLoopActive = false;
+    Speech.stop();
     if (this.recorder) {
       try {
         await this.recorder.stop();

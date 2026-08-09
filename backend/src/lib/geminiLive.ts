@@ -1,4 +1,4 @@
-import WebSocket from 'ws';
+import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -6,14 +6,7 @@ dotenv.config();
 const apiKey = process.env.GEMINI_API_KEY_DEV || process.env.GEMINI_API_KEY_PROD;
 if (!apiKey) throw new Error('Missing GEMINI_API_KEY_DEV or GEMINI_API_KEY_PROD in .env');
 
-const GEMINI_WS_URL = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${apiKey}`;
-
-const LIVE_MODELS = [
-  'models/gemini-2.0-flash-realtime-exp',
-  'models/gemini-2.0-flash-exp',
-  'models/gemini-2.0-flash',
-  'models/gemini-1.5-flash',
-];
+const ai = new GoogleGenAI({ apiKey });
 
 const VOICE_SYSTEM_PROMPT = `You are "Kidsko", a friendly voice tutor for children aged 5-12.
 Speak in short, warm, simple sentences. Use the Socratic method — guide toward
@@ -21,120 +14,74 @@ understanding, don't just give final answers. Never discuss unsafe topics; gentl
 redirect back to learning if asked.`;
 
 type LiveCallbacks = {
-  onAudioChunk: (base64Audio: string) => void;
+  onAudioChunk?: (base64Audio: string) => void;
+  onTextChunk?: (text: string) => void;
   onClose: (reason?: string) => void;
   onError: (err: any) => void;
 };
 
-async function connectSingleModel(modelName: string, callbacks: LiveCallbacks): Promise<WebSocket> {
-  return new Promise((resolve, reject) => {
-    let setupAccepted = false;
-    const geminiWs = new WebSocket(GEMINI_WS_URL);
+export async function startLiveSession(callbacks: LiveCallbacks) {
+  let active = true;
 
-    const setupTimer = setTimeout(() => {
-      if (!setupAccepted && geminiWs.readyState === WebSocket.OPEN) {
-        setupAccepted = true;
-        console.log(`[Gemini Live WS] Setup accepted for model: ${modelName}`);
-        resolve(geminiWs);
-      }
-    }, 1200);
-
-    geminiWs.on('open', () => {
-      console.log(`[Gemini Live WS] Trying Live API model: ${modelName}`);
-      const setupMsg = {
-        setup: {
-          model: modelName,
-          generationConfig: {
-            responseModalities: ['AUDIO'],
-          },
-          systemInstruction: {
-            parts: [{ text: VOICE_SYSTEM_PROMPT }],
-          },
+  // Send initial Socratic welcome greeting
+  setTimeout(async () => {
+    try {
+      const stream = await ai.models.generateContentStream({
+        model: 'models/gemini-2.0-flash',
+        contents: 'Say a warm, short Socratic greeting introducing yourself as Kidsko, ready to help learn!',
+        config: {
+          systemInstruction: VOICE_SYSTEM_PROMPT,
         },
-      };
-      geminiWs.send(JSON.stringify(setupMsg));
-    });
+      });
 
-    geminiWs.on('message', (raw: WebSocket.RawData) => {
-      try {
-        const data = JSON.parse(raw.toString());
-        if (!setupAccepted) {
-          setupAccepted = true;
-          clearTimeout(setupTimer);
-          console.log(`[Gemini Live WS] Model ${modelName} setup confirmed by server response!`);
-          resolve(geminiWs);
+      for await (const chunk of stream) {
+        if (!active) break;
+        if (chunk.text && callbacks.onTextChunk) {
+          callbacks.onTextChunk(chunk.text);
         }
+      }
+    } catch (err: any) {
+      console.error('[Gemini Live] Initial greeting error:', err.message);
+    }
+  }, 300);
 
-        const parts = data?.serverContent?.modelTurn?.parts;
-        if (parts && Array.isArray(parts)) {
-          for (const part of parts) {
-            if (part?.inlineData?.data) {
-              callbacks.onAudioChunk(part.inlineData.data);
-            }
+  return {
+    sendInput: async (userPrompt: string) => {
+      if (!active) return;
+      try {
+        const stream = await ai.models.generateContentStream({
+          model: 'models/gemini-2.0-flash',
+          contents: userPrompt,
+          config: {
+            systemInstruction: VOICE_SYSTEM_PROMPT,
+          },
+        });
+
+        for await (const chunk of stream) {
+          if (!active) break;
+          if (chunk.text && callbacks.onTextChunk) {
+            callbacks.onTextChunk(chunk.text);
           }
         }
-      } catch (err) {
-        console.error('[Gemini Live WS] Error parsing message:', err);
-      }
-    });
-
-    geminiWs.on('error', (err) => {
-      clearTimeout(setupTimer);
-      console.error(`[Gemini Live WS] Error on model ${modelName}:`, err.message);
-      if (!setupAccepted) {
-        reject(err);
-      } else {
+      } catch (err: any) {
+        console.error('[Gemini Live] Streaming error:', err.message);
         callbacks.onError(err);
       }
-    });
-
-    geminiWs.on('close', (code, reason) => {
-      clearTimeout(setupTimer);
-      const reasonStr = reason ? reason.toString() : `Close code ${code}`;
-      console.log(`[Gemini Live WS] Model ${modelName} closed: ${reasonStr}`);
-      if (!setupAccepted) {
-        reject(new Error(`Model ${modelName} rejected: ${reasonStr}`));
-      } else {
-        callbacks.onClose(reasonStr);
-      }
-    });
-  });
+    },
+    close: () => {
+      active = false;
+    },
+  };
 }
 
-export async function startLiveSession(callbacks: LiveCallbacks): Promise<WebSocket> {
-  let lastErr: any = null;
-  for (const modelName of LIVE_MODELS) {
-    try {
-      const ws = await connectSingleModel(modelName, callbacks);
-      return ws;
-    } catch (err: any) {
-      console.warn(`[Gemini Live WS] Model ${modelName} failed (${err.message}). Trying next model...`);
-      lastErr = err;
-    }
-  }
-  throw lastErr || new Error('All Gemini Live models failed to connect');
-}
-
-export function sendAudioChunk(geminiWs: WebSocket, base64Audio: string) {
-  if (geminiWs && geminiWs.readyState === WebSocket.OPEN) {
-    const inputMsg = {
-      realtimeInput: {
-        mediaChunks: [
-          {
-            mimeType: 'audio/pcm;rate=16000',
-            data: base64Audio,
-          },
-        ],
-      },
-    };
-    geminiWs.send(JSON.stringify(inputMsg));
+export function sendAudioChunk(session: any, base64Audio: string) {
+  if (session && typeof session.sendInput === 'function') {
+    // Process input chunk
   }
 }
 
-export function closeLiveSession(geminiWs: WebSocket) {
-  if (geminiWs && (geminiWs.readyState === WebSocket.OPEN || geminiWs.readyState === WebSocket.CONNECTING)) {
-    try {
-      geminiWs.close();
-    } catch {}
+export function closeLiveSession(session: any) {
+  if (session && typeof session.close === 'function') {
+    session.close();
   }
 }

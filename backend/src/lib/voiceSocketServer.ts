@@ -26,7 +26,6 @@ export function attachVoiceSocketServer(httpServer: Server) {
       }
       const parentId = userData.user.id;
 
-      // Use supabaseAdmin (service role) to bypass RLS on family_usage
       const dbClient = supabaseAdmin || supabase;
       const eligibility = await checkVoiceEligibility(dbClient, parentId);
       if (!eligibility.allowed) {
@@ -47,6 +46,11 @@ export function attachVoiceSocketServer(httpServer: Server) {
 
       try {
         liveSession = await startLiveSession({
+          onTextChunk: (text) => {
+            if (clientSocket.readyState === WebSocket.OPEN) {
+              clientSocket.send(JSON.stringify({ type: 'text', data: text }));
+            }
+          },
           onAudioChunk: (base64Audio) => {
             if (clientSocket.readyState === WebSocket.OPEN) {
               clientSocket.send(JSON.stringify({ type: 'audio', data: base64Audio }));
@@ -96,6 +100,10 @@ export function attachVoiceSocketServer(httpServer: Server) {
           const msg = JSON.parse(raw.toString());
           if (msg.type === 'audio_chunk') {
             sendAudioChunk(liveSession, msg.data);
+          } else if (msg.type === 'text_prompt') {
+            if (liveSession && typeof liveSession.sendInput === 'function') {
+              liveSession.sendInput(msg.data);
+            }
           }
         } catch (err) {
           console.error('[Voice Socket] Bad client message:', err);
