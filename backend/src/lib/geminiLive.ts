@@ -71,6 +71,9 @@ async function connectSingleModel(modelName: string, callbacks: LiveCallbacks): 
             if (part?.inlineData?.data) {
               callbacks.onAudioChunk(part.inlineData.data);
             }
+            if (part?.text && callbacks.onTextChunk) {
+              callbacks.onTextChunk(part.text);
+            }
           }
         }
       } catch (err) {
@@ -125,6 +128,23 @@ export function sendAudioChunk(geminiWs: WebSocket, base64Audio: string) {
             data: base64Audio,
           },
         ],
+      },
+    };
+    geminiWs.send(JSON.stringify(inputMsg));
+  }
+}
+
+export function sendTextPrompt(geminiWs: WebSocket, textPrompt: string) {
+  if (geminiWs && geminiWs.readyState === WebSocket.OPEN) {
+    const inputMsg = {
+      clientContent: {
+        turns: [
+          {
+            role: 'user',
+            parts: [{ text: textPrompt }],
+          },
+        ],
+        turnComplete: true,
       },
     };
     geminiWs.send(JSON.stringify(inputMsg));

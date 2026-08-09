@@ -2,7 +2,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { Server } from 'http';
 import { supabase, supabaseAdmin } from './supabase';
 import { checkVoiceEligibility, recordVoiceMinutesUsed } from './voiceLimits';
-import { startLiveSession, sendAudioChunk, closeLiveSession } from './geminiLive';
+import { startLiveSession, sendAudioChunk, sendTextPrompt, closeLiveSession } from './geminiLive';
 
 const ACCOUNTING_INTERVAL_MS = 10_000;
 
@@ -101,9 +101,7 @@ export function attachVoiceSocketServer(httpServer: Server) {
           if (msg.type === 'audio_chunk') {
             sendAudioChunk(liveSession, msg.data);
           } else if (msg.type === 'text_prompt') {
-            if (liveSession && typeof liveSession.sendInput === 'function') {
-              liveSession.sendInput(msg.data);
-            }
+            sendTextPrompt(liveSession, msg.data);
           }
         } catch (err) {
           console.error('[Voice Socket] Bad client message:', err);
