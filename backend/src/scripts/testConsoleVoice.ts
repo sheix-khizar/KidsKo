@@ -2,6 +2,7 @@ import WebSocket from 'ws';
 import readline from 'readline';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { createClient } from '@supabase/supabase-js';
 
 dotenv.config({ path: path.join(__dirname, '../../.env') });
@@ -22,7 +23,7 @@ async function runConsoleVoiceTest() {
   const email = 'test@kidsko.ai';
   const password = 'test1234';
 
-  const { data: signInData, error: signInErr } = await supabaseAdmin.auth.signInWithPassword({ email, password });
+  const { data: signInData } = await supabaseAdmin.auth.signInWithPassword({ email, password });
 
   let token = signInData?.session?.access_token;
   let parentId = signInData?.session?.user?.id;
@@ -45,6 +46,39 @@ async function runConsoleVoiceTest() {
 
   const ws = new WebSocket(socketUrl);
 
+  let pcmBuffers: Buffer[] = [];
+  let silenceTimer: NodeJS.Timeout | null = null;
+
+  function saveWavFile() {
+    if (pcmBuffers.length === 0) return;
+    const pcmData = Buffer.concat(pcmBuffers);
+    const sampleRate = 24000; // Gemini Live API 24kHz output
+    const header = Buffer.alloc(44);
+
+    header.write('RIFF', 0);
+    header.writeUInt32LE(36 + pcmData.length, 4);
+    header.write('WAVE', 8);
+    header.write('fmt ', 12);
+    header.writeUInt32LE(16, 16);
+    header.writeUInt16LE(1, 20);
+    header.writeUInt16LE(1, 22);
+    header.writeUInt32LE(sampleRate, 24);
+    header.writeUInt32LE(sampleRate * 2, 28);
+    header.writeUInt16LE(2, 32);
+    header.writeUInt16LE(16, 34);
+    header.write('data', 36);
+    header.writeUInt32LE(pcmData.length, 40);
+
+    const wavBuffer = Buffer.concat([header, pcmData]);
+    const outputPath = path.join(__dirname, 'output_kidsko_response.wav');
+    fs.writeFileSync(outputPath, wavBuffer);
+
+    console.log(`\n\n💾 [AUDIO SAVED] Successfully generated ${wavBuffer.length} bytes WAV file:`);
+    console.log(`   📂 file:///${outputPath.replace(/\\/g, '/')}`);
+    console.log(`   🎧 Open or play output_kidsko_response.wav to listen to Kidsko's voice!\n`);
+    pcmBuffers = [];
+  }
+
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
@@ -63,9 +97,16 @@ async function runConsoleVoiceTest() {
       } else if (msg.type === 'text') {
         process.stdout.write(msg.data);
       } else if (msg.type === 'audio') {
-        console.log(`\n🎵 [AUDIO CHUNK] Received ${msg.data.length} bytes base64 PCM audio`);
+        const chunkBuf = Buffer.from(msg.data, 'base64');
+        pcmBuffers.push(chunkBuf);
+        process.stdout.write('🎵');
+        if (silenceTimer) clearTimeout(silenceTimer);
+        silenceTimer = setTimeout(() => {
+          saveWavFile();
+        }, 1800);
       } else if (msg.type === 'cap_reached') {
         console.log('\n🛑 [CAP REACHED] Weekly voice limit reached for this account!');
+        saveWavFile();
       } else if (msg.type === 'error') {
         console.error(`\n❌ [ERROR] ${msg.reason}`);
       }
@@ -73,6 +114,7 @@ async function runConsoleVoiceTest() {
   });
 
   ws.on('close', (code, reason) => {
+    saveWavFile();
     console.log(`\n🔴 Connection Closed: ${code} - ${reason || 'Session ended'}`);
     rl.close();
     process.exit(0);
@@ -84,6 +126,7 @@ async function runConsoleVoiceTest() {
 
   rl.on('line', (line) => {
     if (line.trim().toLowerCase() === 'exit') {
+      saveWavFile();
       ws.close();
       rl.close();
       process.exit(0);
