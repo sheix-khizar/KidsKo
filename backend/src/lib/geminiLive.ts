@@ -122,12 +122,10 @@ export function sendAudioChunk(geminiWs: WebSocket, base64Audio: string) {
   if (geminiWs && geminiWs.readyState === WebSocket.OPEN) {
     const inputMsg = {
       realtimeInput: {
-        mediaChunks: [
-          {
-            mimeType: 'audio/pcm;rate=16000',
-            data: base64Audio,
-          },
-        ],
+        audio: {
+          mimeType: 'audio/pcm;rate=16000',
+          data: base64Audio,
+        },
       },
     };
     geminiWs.send(JSON.stringify(inputMsg));
