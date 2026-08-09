@@ -1,6 +1,6 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { Server } from 'http';
-import { supabase } from './supabase';
+import { supabase, supabaseAdmin } from './supabase';
 import { checkVoiceEligibility, recordVoiceMinutesUsed } from './voiceLimits';
 import { startLiveSession, sendAudioChunk, closeLiveSession } from './geminiLive';
 
@@ -26,7 +26,9 @@ export function attachVoiceSocketServer(httpServer: Server) {
       }
       const parentId = userData.user.id;
 
-      const eligibility = await checkVoiceEligibility(supabase, parentId);
+      // Use supabaseAdmin (service role) to bypass RLS on family_usage
+      const dbClient = supabaseAdmin || supabase;
+      const eligibility = await checkVoiceEligibility(dbClient, parentId);
       if (!eligibility.allowed) {
         clientSocket.send(JSON.stringify({ type: 'error', reason: eligibility.reason }));
         clientSocket.close(4002, 'Voice limit reached');
@@ -73,7 +75,7 @@ export function attachVoiceSocketServer(httpServer: Server) {
       accountingTimer = setInterval(async () => {
         try {
           elapsedMs += ACCOUNTING_INTERVAL_MS;
-          await recordVoiceMinutesUsed(supabase, parentId, ACCOUNTING_INTERVAL_MS / 60000);
+          await recordVoiceMinutesUsed(dbClient, parentId, ACCOUNTING_INTERVAL_MS / 60000);
         } catch (err) {
           console.error('[Voice Socket] Error recording voice minutes:', err);
         }
@@ -106,7 +108,7 @@ export function attachVoiceSocketServer(httpServer: Server) {
         const remainderMs = elapsedMs % ACCOUNTING_INTERVAL_MS;
         if (remainderMs > 0) {
           try {
-            await recordVoiceMinutesUsed(supabase, parentId, remainderMs / 60000);
+            await recordVoiceMinutesUsed(dbClient, parentId, remainderMs / 60000);
           } catch {}
         }
         try {
