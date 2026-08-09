@@ -91,7 +91,8 @@ export class VoiceSession {
           const uri = recorder.uri;
           if (uri && this.ws?.readyState === WebSocket.OPEN) {
             const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-            this.ws.send(JSON.stringify({ type: 'audio_chunk', data: base64 }));
+            const mimeType = uri.endsWith('.wav') ? 'audio/wav' : 'audio/m4a';
+            this.ws.send(JSON.stringify({ type: 'audio_chunk', data: base64, mimeType }));
           }
         } catch (err) {
           console.error('Chunk record stop error:', err);

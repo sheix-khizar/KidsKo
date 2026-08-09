@@ -118,12 +118,12 @@ export async function startLiveSession(callbacks: LiveCallbacks): Promise<WebSoc
   throw lastErr || new Error('All Gemini Live models failed to connect');
 }
 
-export function sendAudioChunk(geminiWs: WebSocket, base64Audio: string) {
+export function sendAudioChunk(geminiWs: WebSocket, base64Audio: string, mimeType?: string) {
   if (geminiWs && geminiWs.readyState === WebSocket.OPEN) {
     const inputMsg = {
       realtimeInput: {
         audio: {
-          mimeType: 'audio/pcm;rate=16000',
+          mimeType: mimeType || 'audio/m4a',
           data: base64Audio,
         },
       },
