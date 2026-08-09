@@ -8,7 +8,12 @@ if (!apiKey) throw new Error('Missing GEMINI_API_KEY_DEV or GEMINI_API_KEY_PROD 
 
 const GEMINI_WS_URL = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${apiKey}`;
 
-const LIVE_MODELS = ['models/gemini-2.0-flash-exp', 'models/gemini-2.0-flash', 'models/gemini-1.5-flash'];
+const LIVE_MODELS = [
+  'models/gemini-2.0-flash-realtime-exp',
+  'models/gemini-2.0-flash-exp',
+  'models/gemini-2.0-flash',
+  'models/gemini-1.5-flash',
+];
 
 const VOICE_SYSTEM_PROMPT = `You are "Kidsko", a friendly voice tutor for children aged 5-12.
 Speak in short, warm, simple sentences. Use the Socratic method — guide toward
@@ -21,18 +26,24 @@ type LiveCallbacks = {
   onError: (err: any) => void;
 };
 
-export async function startLiveSession(callbacks: LiveCallbacks): Promise<WebSocket> {
+async function connectSingleModel(modelName: string, callbacks: LiveCallbacks): Promise<WebSocket> {
   return new Promise((resolve, reject) => {
-    let connected = false;
-    let selectedModel = LIVE_MODELS[0];
-
+    let setupAccepted = false;
     const geminiWs = new WebSocket(GEMINI_WS_URL);
 
+    const setupTimer = setTimeout(() => {
+      if (!setupAccepted && geminiWs.readyState === WebSocket.OPEN) {
+        setupAccepted = true;
+        console.log(`[Gemini Live WS] Setup accepted for model: ${modelName}`);
+        resolve(geminiWs);
+      }
+    }, 1200);
+
     geminiWs.on('open', () => {
-      console.log(`[Gemini Live WS] Connected to Gemini Live API. Sending setup for ${selectedModel}...`);
+      console.log(`[Gemini Live WS] Trying Live API model: ${modelName}`);
       const setupMsg = {
         setup: {
-          model: selectedModel,
+          model: modelName,
           generationConfig: {
             responseModalities: ['AUDIO'],
           },
@@ -42,13 +53,18 @@ export async function startLiveSession(callbacks: LiveCallbacks): Promise<WebSoc
         },
       };
       geminiWs.send(JSON.stringify(setupMsg));
-      connected = true;
-      resolve(geminiWs);
     });
 
     geminiWs.on('message', (raw: WebSocket.RawData) => {
       try {
         const data = JSON.parse(raw.toString());
+        if (!setupAccepted) {
+          setupAccepted = true;
+          clearTimeout(setupTimer);
+          console.log(`[Gemini Live WS] Model ${modelName} setup confirmed by server response!`);
+          resolve(geminiWs);
+        }
+
         const parts = data?.serverContent?.modelTurn?.parts;
         if (parts && Array.isArray(parts)) {
           for (const part of parts) {
@@ -63,8 +79,9 @@ export async function startLiveSession(callbacks: LiveCallbacks): Promise<WebSoc
     });
 
     geminiWs.on('error', (err) => {
-      console.error('[Gemini Live WS] Error:', err.message);
-      if (!connected) {
+      clearTimeout(setupTimer);
+      console.error(`[Gemini Live WS] Error on model ${modelName}:`, err.message);
+      if (!setupAccepted) {
         reject(err);
       } else {
         callbacks.onError(err);
@@ -72,15 +89,30 @@ export async function startLiveSession(callbacks: LiveCallbacks): Promise<WebSoc
     });
 
     geminiWs.on('close', (code, reason) => {
+      clearTimeout(setupTimer);
       const reasonStr = reason ? reason.toString() : `Close code ${code}`;
-      console.log(`[Gemini Live WS] Closed: ${reasonStr}`);
-      if (!connected) {
-        reject(new Error(`Gemini Live WS closed before connection: ${reasonStr}`));
+      console.log(`[Gemini Live WS] Model ${modelName} closed: ${reasonStr}`);
+      if (!setupAccepted) {
+        reject(new Error(`Model ${modelName} rejected: ${reasonStr}`));
       } else {
         callbacks.onClose(reasonStr);
       }
     });
   });
+}
+
+export async function startLiveSession(callbacks: LiveCallbacks): Promise<WebSocket> {
+  let lastErr: any = null;
+  for (const modelName of LIVE_MODELS) {
+    try {
+      const ws = await connectSingleModel(modelName, callbacks);
+      return ws;
+    } catch (err: any) {
+      console.warn(`[Gemini Live WS] Model ${modelName} failed (${err.message}). Trying next model...`);
+      lastErr = err;
+    }
+  }
+  throw lastErr || new Error('All Gemini Live models failed to connect');
 }
 
 export function sendAudioChunk(geminiWs: WebSocket, base64Audio: string) {
