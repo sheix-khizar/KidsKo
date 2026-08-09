@@ -1,15 +1,18 @@
+import { Platform } from 'react-native';
 import { createAudioPlayer, requestRecordingPermissionsAsync, AudioModule } from 'expo-audio';
 import * as FileSystem from 'expo-file-system/legacy';
 import { getToken } from './api';
 
-const WS_URL = (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000').replace(/^http/, 'ws');
+const defaultHost = Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
+const rawApiUrl = process.env.EXPO_PUBLIC_API_URL || defaultHost;
+const WS_URL = rawApiUrl.replace(/^http/, 'ws');
 const CHUNK_DURATION_MS = 500;
 
 type VoiceCallbacks = {
   onReady: (capSeconds: number) => void;
   onCapReached: () => void;
   onError: (reason: string) => void;
-  onClose: () => void;
+  onClose: (reason?: string | number) => void;
 };
 
 export class VoiceSession {
@@ -27,7 +30,9 @@ export class VoiceSession {
       return;
     }
 
-    this.ws = new WebSocket(`${WS_URL}/ws/voice?token=${token}`);
+    const socketUrl = `${WS_URL}/ws/voice?token=${token}`;
+    console.log('Connecting Voice WebSocket to:', socketUrl);
+    this.ws = new WebSocket(socketUrl);
 
     this.ws.onmessage = (event) => {
       try {
@@ -41,8 +46,14 @@ export class VoiceSession {
       }
     };
 
-    this.ws.onclose = () => callbacks.onClose();
-    this.ws.onerror = () => callbacks.onError('Connection error');
+    this.ws.onclose = (e) => {
+      console.log('Voice WebSocket closed:', e.code, e.reason);
+      callbacks.onClose(e.reason || e.code);
+    };
+    this.ws.onerror = (e: any) => {
+      console.error('Voice WebSocket error:', e?.message || e);
+      callbacks.onError(e?.message || 'Connection error');
+    };
 
     await this.startRecordingLoop();
   }
