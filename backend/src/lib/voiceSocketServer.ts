@@ -10,17 +10,20 @@ export function attachVoiceSocketServer(httpServer: Server) {
   const wss = new WebSocketServer({ server: httpServer, path: '/ws/voice' });
 
   wss.on('connection', async (clientSocket: WebSocket, req) => {
+    const sessionStartTime = Date.now();
     try {
       const url = new URL(req.url || '', 'http://localhost');
       const token = url.searchParams.get('token');
 
       if (!token) {
+        console.log('[Voice Socket Close]: Code 4001 - Missing auth token');
         clientSocket.close(4001, 'Missing auth token');
         return;
       }
 
       const { data: userData, error: authError } = await supabase.auth.getUser(token);
       if (authError || !userData.user) {
+        console.log('[Voice Socket Close]: Code 4001 - Invalid auth token');
         clientSocket.close(4001, 'Invalid auth token');
         return;
       }
@@ -29,6 +32,7 @@ export function attachVoiceSocketServer(httpServer: Server) {
       const dbClient = supabaseAdmin || supabase;
       const eligibility = await checkVoiceEligibility(dbClient, parentId);
       if (!eligibility.allowed) {
+        console.log(`[Voice Socket Close]: Code 4002 - Voice limit reached (${eligibility.reason})`);
         clientSocket.send(JSON.stringify({ type: 'error', reason: eligibility.reason }));
         clientSocket.close(4002, 'Voice limit reached');
         return;
@@ -38,6 +42,9 @@ export function attachVoiceSocketServer(httpServer: Server) {
         ? eligibility.minutesRemaining
         : Math.min(5, eligibility.minutesRemaining);
       const capMs = Math.max(1000, capMinutes * 60 * 1000);
+      const capSeconds = Math.floor(capMs / 1000);
+
+      console.log(`[Voice Session Started]: ParentId=${parentId}, CapMinutes=${capMinutes.toFixed(2)}, CapSeconds=${capSeconds}s, StartTime=${new Date(sessionStartTime).toISOString()}`);
 
       let liveSession: any;
       let elapsedMs = 0;
@@ -53,11 +60,21 @@ export function attachVoiceSocketServer(httpServer: Server) {
           },
           onAudioChunk: (base64Audio) => {
             if (clientSocket.readyState === WebSocket.OPEN) {
+              console.log(`[Backend Outbound Audio Chunk to Mobile]: bytes=${base64Audio.length}`);
               clientSocket.send(JSON.stringify({ type: 'audio', data: base64Audio }));
             }
           },
-          onClose: (reason) => {
+          onTurnComplete: () => {
             if (clientSocket.readyState === WebSocket.OPEN) {
+              const elapsedSec = Math.floor((Date.now() - sessionStartTime) / 1000);
+              console.log(`[Backend Outbound turn_complete Frame]: Gemini turn complete. Session active for ${elapsedSec}s / ${capSeconds}s max. Client WS state=${clientSocket.readyState}, Gemini WS state=${liveSession?.readyState}`);
+              clientSocket.send(JSON.stringify({ type: 'turn_complete' }));
+            }
+          },
+          onClose: (reason) => {
+            console.log(`[Gemini Live WS Session Closed]: Reason=${reason || 'Normal close'}`);
+            if (clientSocket.readyState === WebSocket.OPEN) {
+              console.log('[Voice Socket Close]: Forwarding Gemini session close to client with Code 1000');
               clientSocket.close(1000, reason || 'Gemini session ended');
             }
           },
@@ -74,11 +91,14 @@ export function attachVoiceSocketServer(httpServer: Server) {
         return;
       }
 
-      clientSocket.send(JSON.stringify({ type: 'ready', capSeconds: Math.floor(capMs / 1000) }));
+      clientSocket.send(JSON.stringify({ type: 'ready', capSeconds }));
 
       accountingTimer = setInterval(async () => {
         try {
           elapsedMs += ACCOUNTING_INTERVAL_MS;
+          const elapsedSec = Math.floor(elapsedMs / 1000);
+          const remainingSec = Math.max(0, capSeconds - elapsedSec);
+          console.log(`[Voice Accounting Check]: Elapsed=${elapsedSec}s, Remaining=${remainingSec}s, DB update (+${ACCOUNTING_INTERVAL_MS / 60000} min)`);
           await recordVoiceMinutesUsed(dbClient, parentId, ACCOUNTING_INTERVAL_MS / 60000);
         } catch (err) {
           console.error('[Voice Socket] Error recording voice minutes:', err);
@@ -86,6 +106,8 @@ export function attachVoiceSocketServer(httpServer: Server) {
       }, ACCOUNTING_INTERVAL_MS);
 
       hardCapTimer = setTimeout(() => {
+        const totalDurationSec = Math.floor((Date.now() - sessionStartTime) / 1000);
+        console.log(`[HARD CAP TIMER FIRED]: Reached maximum allowed cap (${totalDurationSec}s). Closing session with Code 4003.`);
         if (clientSocket.readyState === WebSocket.OPEN) {
           clientSocket.send(JSON.stringify({ type: 'cap_reached' }));
         }
@@ -100,8 +122,12 @@ export function attachVoiceSocketServer(httpServer: Server) {
           const msg = JSON.parse(raw.toString());
           if (msg.type === 'audio_chunk') {
             console.log('[Voice Server] Received chunk, bytes:', msg.data.length);
-            sendAudioChunk(liveSession, msg.data);
+            if (msg.isRawPcm) {
+              sendAudioChunk(liveSession, msg.data);
+            }
           } else if (msg.type === 'text_prompt') {
+            const currentElapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
+            console.log(`[Voice Server User Turn Received]: Prompt="${msg.data}", Elapsed=${currentElapsed}s / ${capSeconds}s, Gemini WS state=${liveSession?.readyState}`);
             sendTextPrompt(liveSession, msg.data);
           }
         } catch (err) {
@@ -109,7 +135,9 @@ export function attachVoiceSocketServer(httpServer: Server) {
         }
       });
 
-      clientSocket.on('close', async () => {
+      clientSocket.on('close', async (code, reason) => {
+        const totalSessionDurationSec = Math.floor((Date.now() - sessionStartTime) / 1000);
+        console.log(`[Client WebSocket Closed]: Code=${code}, Reason="${reason || 'Client disconnected'}", Total Session Duration=${totalSessionDurationSec}s`);
         clearInterval(accountingTimer);
         clearTimeout(hardCapTimer);
         const remainderMs = elapsedMs % ACCOUNTING_INTERVAL_MS;

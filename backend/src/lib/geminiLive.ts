@@ -22,6 +22,7 @@ redirect back to learning if asked.`;
 type LiveCallbacks = {
   onAudioChunk: (base64Audio: string) => void;
   onTextChunk?: (text: string) => void;
+  onTurnComplete?: () => void;
   onClose: (reason?: string) => void;
   onError: (err: any) => void;
 };
@@ -57,7 +58,19 @@ async function connectSingleModel(modelName: string, callbacks: LiveCallbacks): 
 
     geminiWs.on('message', (raw: WebSocket.RawData) => {
       try {
-        const data = JSON.parse(raw.toString());
+        const str = raw.toString();
+        const data = JSON.parse(str);
+
+        const isTurnComplete = !!data?.serverContent?.turnComplete;
+
+        console.log('[Gemini Server Message Received]:', {
+          setupComplete: !!data.setupComplete,
+          hasServerContent: !!data.serverContent,
+          turnComplete: isTurnComplete,
+          partsCount: data.serverContent?.modelTurn?.parts?.length || 0,
+          error: data.error || null,
+        });
+
         if (!setupAccepted) {
           setupAccepted = true;
           clearTimeout(setupTimer);
@@ -65,16 +78,27 @@ async function connectSingleModel(modelName: string, callbacks: LiveCallbacks): 
           resolve(geminiWs);
         }
 
+        if (data.error) {
+          console.error('[Gemini Live Server Error]:', data.error);
+        }
+
         const parts = data?.serverContent?.modelTurn?.parts;
         if (parts && Array.isArray(parts)) {
           for (const part of parts) {
-            if (part?.inlineData?.data) {
+            if (part?.inlineData) {
+              console.log(`[Gemini Audio Chunk]: mimeType=${part.inlineData.mimeType}, bytes=${part.inlineData.data?.length || 0}`);
               callbacks.onAudioChunk(part.inlineData.data);
             }
-            if (part?.text && callbacks.onTextChunk) {
-              callbacks.onTextChunk(part.text);
+            if (part?.text) {
+              console.log(`[Gemini Text Chunk]: "${part.text}"`);
+              if (callbacks.onTextChunk) callbacks.onTextChunk(part.text);
             }
           }
+        }
+
+        if (isTurnComplete && callbacks.onTurnComplete) {
+          console.log('[Gemini Live WS] turnComplete signal received from Gemini Live server!');
+          callbacks.onTurnComplete();
         }
       } catch (err) {
         console.error('[Gemini Live WS] Error parsing message:', err);
@@ -94,7 +118,7 @@ async function connectSingleModel(modelName: string, callbacks: LiveCallbacks): 
     geminiWs.on('close', (code, reason) => {
       clearTimeout(setupTimer);
       const reasonStr = reason ? reason.toString() : `Close code ${code}`;
-      console.log(`[Gemini Live WS] Model ${modelName} closed: ${reasonStr}`);
+      console.log(`[Gemini Live WS] Model ${modelName} closed: Code ${code} - ${reasonStr}`);
       if (!setupAccepted) {
         reject(new Error(`Model ${modelName} rejected: ${reasonStr}`));
       } else {
@@ -134,6 +158,7 @@ export function sendAudioChunk(geminiWs: WebSocket, base64Audio: string) {
 
 export function sendTextPrompt(geminiWs: WebSocket, textPrompt: string) {
   if (geminiWs && geminiWs.readyState === WebSocket.OPEN) {
+    console.log('[Gemini Client Outbound Prompt]:', textPrompt);
     const inputMsg = {
       clientContent: {
         turns: [
@@ -146,6 +171,8 @@ export function sendTextPrompt(geminiWs: WebSocket, textPrompt: string) {
       },
     };
     geminiWs.send(JSON.stringify(inputMsg));
+  } else {
+    console.warn('[Gemini Client Outbound Warning]: Cannot send text prompt, WebSocket state is', geminiWs?.readyState);
   }
 }
 
