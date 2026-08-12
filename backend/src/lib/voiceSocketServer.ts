@@ -1,8 +1,10 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { Server } from 'http';
+import sharp from 'sharp';
 import { supabase, supabaseAdmin } from './supabase';
-import { checkVoiceEligibility, recordVoiceMinutesUsed } from './voiceLimits';
-import { startLiveSession, sendAudioChunk, sendTextPrompt, closeLiveSession } from './geminiLive';
+import { checkVoiceEligibility, recordVoiceMinutesUsed, checkSnapshotEligibility, recordSnapshotUsed } from './voiceLimits';
+import { startLiveSession, sendAudioChunk, sendTextPrompt, sendImagePrompt, closeLiveSession } from './geminiLive';
+import { logUsageEvent } from './usageEvents';
 
 const ACCOUNTING_INTERVAL_MS = 10_000;
 
@@ -14,6 +16,7 @@ export function attachVoiceSocketServer(httpServer: Server) {
     try {
       const url = new URL(req.url || '', 'http://localhost');
       const token = url.searchParams.get('token');
+      const studentId = url.searchParams.get('studentId');
 
       if (!token) {
         console.log('[Voice Socket Close]: Code 4001 - Missing auth token');
@@ -44,7 +47,7 @@ export function attachVoiceSocketServer(httpServer: Server) {
       const capMs = Math.max(1000, capMinutes * 60 * 1000);
       const capSeconds = Math.floor(capMs / 1000);
 
-      console.log(`[Voice Session Started]: ParentId=${parentId}, CapMinutes=${capMinutes.toFixed(2)}, CapSeconds=${capSeconds}s, StartTime=${new Date(sessionStartTime).toISOString()}`);
+      console.log(`[Voice Session Started]: ParentId=${parentId}, StudentId=${studentId || '(none)'}, CapMinutes=${capMinutes.toFixed(2)}, CapSeconds=${capSeconds}s, StartTime=${new Date(sessionStartTime).toISOString()}`);
 
       let liveSession: any;
       let elapsedMs = 0;
@@ -118,21 +121,45 @@ export function attachVoiceSocketServer(httpServer: Server) {
       }, capMs);
 
       clientSocket.on('message', (raw) => {
-        try {
-          const msg = JSON.parse(raw.toString());
-          if (msg.type === 'audio_chunk') {
-            console.log('[Voice Server] Received chunk, bytes:', msg.data.length);
-            if (msg.isRawPcm) {
-              sendAudioChunk(liveSession, msg.data);
+        (async () => {
+          try {
+            const msg = JSON.parse(raw.toString());
+            if (msg.type === 'audio_chunk') {
+              console.log('[Voice Server] Received chunk, bytes:', msg.data.length);
+              if (msg.isRawPcm) {
+                sendAudioChunk(liveSession, msg.data);
+              }
+            } else if (msg.type === 'text_prompt') {
+              const currentElapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
+              console.log(`[Voice Server User Turn Received]: Prompt="${msg.data}", Elapsed=${currentElapsed}s / ${capSeconds}s, Gemini WS state=${liveSession?.readyState}`);
+              sendTextPrompt(liveSession, msg.data);
+            } else if (msg.type === 'image_capture') {
+              const snapshotEligibility = await checkSnapshotEligibility(dbClient, parentId, eligibility.isPremium);
+              if (!snapshotEligibility.allowed) {
+                console.log(`[Voice Server Snapshot Blocked]: ${snapshotEligibility.reason}`);
+                clientSocket.send(JSON.stringify({ type: 'snapshot_error', reason: snapshotEligibility.reason }));
+                return;
+              }
+
+              const rawBuffer = Buffer.from(msg.data, 'base64');
+              const compressedBuffer = await sharp(rawBuffer)
+                .resize({ width: 1024, height: 1024, fit: 'inside' })
+                .jpeg({ quality: 75 })
+                .toBuffer();
+              const compressedBase64 = compressedBuffer.toString('base64');
+
+              console.log('[Voice Server] Injecting captured photo into live session, caption:', msg.caption || '(none)');
+              sendImagePrompt(liveSession, compressedBase64, msg.caption);
+              await recordSnapshotUsed(dbClient, parentId);
+              if (studentId) await logUsageEvent(dbClient, parentId, studentId, 'live_snapshot');
+
+              clientSocket.send(JSON.stringify({ type: 'snapshot_ack', remaining: snapshotEligibility.remaining - 1 }));
             }
-          } else if (msg.type === 'text_prompt') {
-            const currentElapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
-            console.log(`[Voice Server User Turn Received]: Prompt="${msg.data}", Elapsed=${currentElapsed}s / ${capSeconds}s, Gemini WS state=${liveSession?.readyState}`);
-            sendTextPrompt(liveSession, msg.data);
+          } catch (err: any) {
+            console.error('[Voice Socket] Bad client message or snapshot processing error:', err.message);
+            clientSocket.send(JSON.stringify({ type: 'snapshot_error', reason: 'Could not process that photo.' }));
           }
-        } catch (err) {
-          console.error('[Voice Socket] Bad client message:', err);
-        }
+        })();
       });
 
       clientSocket.on('close', async (code, reason) => {

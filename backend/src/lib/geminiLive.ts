@@ -176,6 +176,23 @@ export function sendTextPrompt(geminiWs: WebSocket, textPrompt: string) {
   }
 }
 
+export function sendImagePrompt(geminiWs: WebSocket, base64Jpeg: string, caption?: string) {
+  if (geminiWs && geminiWs.readyState === WebSocket.OPEN) {
+    const parts: any[] = [{ inlineData: { mimeType: 'image/jpeg', data: base64Jpeg } }];
+    if (caption) parts.push({ text: caption });
+    console.log('[Gemini Client Outbound Image Prompt]: caption =', caption || '(none)');
+    const inputMsg = {
+      clientContent: {
+        turns: [{ role: 'user', parts }],
+        turnComplete: true,
+      },
+    };
+    geminiWs.send(JSON.stringify(inputMsg));
+  } else {
+    console.warn('[Gemini Client Outbound Warning]: Cannot send image prompt, WebSocket state is', geminiWs?.readyState);
+  }
+}
+
 export function closeLiveSession(geminiWs: WebSocket) {
   if (geminiWs && (geminiWs.readyState === WebSocket.OPEN || geminiWs.readyState === WebSocket.CONNECTING)) {
     try {

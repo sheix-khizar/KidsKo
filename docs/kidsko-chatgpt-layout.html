@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kidsko.ai — ChatGPT Style</title>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=Nunito:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --blue:#1a73e8;--blue2:#1557b0;--bl:#e8f0fe;
+  --orange:#FF6D3B;--yellow:#FFD54F;
+  --green:#34A853;--red:#EA4335;
+  --white:#fff;--bg:#f7f9fc;
+  --text:#0d0d0d;--sub:#6b7280;--border:#e5e7eb;
+  --sidebar:#1e1e2e;--sidebar2:#2a2a3e;--sidebar3:#3a3a50;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{
+  font-family:'Nunito',sans-serif;
+  background:linear-gradient(135deg,#0f0c29,#302b63,#24243e);
+  min-height:100vh;display:flex;flex-direction:column;align-items:center;
+  padding:28px 12px 56px;
+}
+.ph{text-align:center;margin-bottom:28px}
+.ph h1{font-family:'Baloo 2',cursive;font-size:24px;font-weight:800;color:#fff}
+.ph h1 span{color:#FFD54F}
+.ph p{color:rgba(255,255,255,.45);font-size:12px;font-weight:600;margin-top:3px}
+
+.row{display:flex;gap:24px;flex-wrap:wrap;justify-content:center;margin-bottom:24px}
+.pw{display:flex;flex-direction:column;align-items:center;gap:10px}
+.lbl{font-family:'Baloo 2',cursive;font-size:11px;font-weight:700;color:rgba(255,255,255,.4);letter-spacing:1.5px;text-transform:uppercase}
+
+/* Phone */
+.phone{
+  width:340px;height:720px;
+  background:var(--bg);border-radius:48px;
+  box-shadow:0 0 0 2px rgba(255,255,255,.06),0 0 0 9px #111,0 0 0 11px #2a2a2a,0 28px 60px rgba(0,0,0,.4);
+  overflow:hidden;display:flex;flex-direction:column;position:relative;flex-shrink:0;
+}
+.notch{position:absolute;top:0;left:50%;transform:translateX(-50%);width:110px;height:30px;background:#111;border-radius:0 0 18px 18px;z-index:200}
+.sbar{height:46px;padding:18px 22px 0;display:flex;justify-content:space-between;align-items:center;font-size:11px;font-weight:800;flex-shrink:0;position:relative;z-index:5}
+
+/* ══════════════════════════
+   SCREEN SYSTEM
+══════════════════════════ */
+.screen{position:absolute;inset:0;display:flex;flex-direction:column;opacity:0;pointer-events:none;transform:translateX(20px);transition:opacity .2s,transform .2s}
+.screen.active{opacity:1;pointer-events:all;transform:translateX(0)}
+
+/* ══════════════════════════
+   SPLASH
+══════════════════════════ */
+#s-splash{background:linear-gradient(160deg,#e8f0fe,#f4f0ff,#fff3e8)}
+.splash-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 28px 40px;position:relative;z-index:2}
+.blob{position:absolute;border-radius:50%;filter:blur(55px);opacity:.25;pointer-events:none}
+.b1{width:180px;height:180px;background:#4285F4;top:-40px;right:-40px}
+.b2{width:140px;height:140px;background:#FF6D3B;bottom:80px;left:-30px}
+.owl-anim{font-size:80px;animation:ob 3s ease-in-out infinite;filter:drop-shadow(0 10px 20px rgba(26,115,232,.25));margin-bottom:14px}
+@keyframes ob{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-10px) rotate(2deg)}}
+.s-logo{font-family:'Baloo 2',cursive;font-size:40px;font-weight:800;color:var(--blue);line-height:1}
+.s-logo span{color:var(--orange)}
+.s-tag{font-size:14px;font-weight:700;color:var(--sub);text-align:center;line-height:1.6;margin:8px 0 36px}
+.btn-main{width:100%;background:linear-gradient(135deg,var(--blue),var(--blue2));border:none;border-radius:16px;padding:15px;font-family:'Baloo 2',cursive;font-size:17px;font-weight:700;color:#fff;cursor:pointer;box-shadow:0 6px 20px rgba(26,115,232,.3);transition:transform .13s;margin-bottom:12px}
+.btn-main:active{transform:scale(.97)}
+.btn-out{width:100%;background:transparent;border:2px solid var(--border);border-radius:16px;padding:13px;font-family:'Nunito',sans-serif;font-size:14px;font-weight:800;color:var(--text);cursor:pointer;transition:transform .13s}
+.btn-out:active{transform:scale(.97)}
+
+/* ══════════════════════════
+   AUTH SCREENS
+══════════════════════════ */
+.auth-head{background:linear-gradient(135deg,var(--blue),var(--blue2));padding:50px 20px 22px;flex-shrink:0}
+.auth-head .ow{font-size:36px}
+.auth-head h2{font-family:'Baloo 2',cursive;font-size:22px;font-weight:800;color:#fff;margin-top:4px}
+.auth-head p{font-size:12px;color:rgba(255,255,255,.6);font-weight:600;margin-top:2px}
+.auth-scroll{flex:1;overflow-y:auto;padding:20px 20px 32px}
+.auth-scroll::-webkit-scrollbar{width:0}
+.gbtn{width:100%;background:var(--white);border:2px solid var(--border);border-radius:14px;padding:13px 18px;display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer;font-family:'Nunito',sans-serif;font-size:14px;font-weight:800;color:var(--text);box-shadow:0 2px 8px rgba(0,0,0,.07);transition:transform .13s;margin-bottom:16px}
+.gbtn:active{transform:scale(.97)}
+.gico{width:20px;height:20px;flex-shrink:0;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cpath fill='%23EA4335' d='M24 9.5c3.5 0 6.6 1.2 9.1 3.2l6.8-6.8C35.8 2.5 30.3 0 24 0 14.8 0 7 5.4 3.2 13.3l7.9 6.1C13 13.7 18 9.5 24 9.5z'/%3E%3Cpath fill='%234285F4' d='M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.6 5.9c4.4-4.1 7-10.1 7-17.1z'/%3E%3Cpath fill='%23FBBC05' d='M11.1 28.6A14.6 14.6 0 0 1 9.5 24c0-1.6.3-3.2.8-4.6l-7.9-6.1A23.9 23.9 0 0 0 0 24c0 3.9.9 7.5 2.5 10.7l8.6-6.1z'/%3E%3Cpath fill='%2334A853' d='M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.2 1.5-5 2.3-8.3 2.3-6 0-11.1-4.1-12.9-9.5l-8.6 6.1C7 42.6 14.8 48 24 48z'/%3E%3C/svg%3E") center/contain no-repeat}
+.or{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.or::before,.or::after{content:'';flex:1;height:1px;background:var(--border)}
+.or span{font-size:11px;font-weight:700;color:#ccc}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:10px;font-weight:900;letter-spacing:.8px;color:var(--sub);text-transform:uppercase;margin-bottom:5px}
+.fi{position:relative}
+.fi .ic{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:15px;pointer-events:none}
+.fi input{width:100%;background:var(--bg);border:2px solid var(--border);border-radius:13px;padding:11px 38px 11px 38px;font-family:'Nunito',sans-serif;font-size:13px;font-weight:600;color:var(--text);outline:none;transition:all .2s}
+.fi input:focus{border-color:var(--blue);background:#f0f4ff}
+.fi .ey{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:15px;cursor:pointer}
+.sw{text-align:center;font-size:13px;font-weight:700;color:var(--sub);margin-top:12px}
+.sw a{color:var(--blue);font-weight:800;cursor:pointer}
+.safe{text-align:center;font-size:11px;font-weight:600;color:#bbb;margin-top:14px;line-height:1.7}
+.safe a{color:var(--blue)}
+.fgt{text-align:right;margin-bottom:14px;margin-top:-4px}
+.fgt a{font-size:12px;font-weight:800;color:var(--blue);text-decoration:none;cursor:pointer}
+
+/* ══════════════════════════
+   CHAT SCREEN — ChatGPT style
+══════════════════════════ */
+#s-chat{background:var(--white)}
+
+/* Top bar — exactly like ChatGPT */
+.chat-top{
+  height:56px;padding:0 14px;padding-top:10px;
+  display:flex;align-items:center;justify-content:space-between;
+  background:var(--white);border-bottom:1px solid #f0f0f0;
+  flex-shrink:0;position:relative;z-index:10;
+}
+/* hamburger left */
+.ham{width:36px;height:36px;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;justify-content:center;gap:5px;flex-shrink:0}
+.ham span{display:block;height:2px;background:var(--text);border-radius:2px;transition:all .2s}
+.ham span:nth-child(1){width:22px}
+.ham span:nth-child(2){width:17px}
+.ham span:nth-child(3){width:22px}
+/* model name center */
+.model-name{font-family:'Baloo 2',cursive;font-size:17px;font-weight:800;color:var(--text);display:flex;align-items:center;gap:5px}
+.model-name span{color:var(--orange)}
+.model-name .chevron{font-size:11px;color:var(--sub)}
+/* new chat right */
+.new-chat-btn{width:36px;height:36px;background:none;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;transition:transform .15s}
+.new-chat-btn:active{transform:scale(.88)}
+
+/* Messages */
+.msgs{flex:1;overflow-y:auto;padding:16px 14px 10px;display:flex;flex-direction:column;gap:20px}
+.msgs::-webkit-scrollbar{width:0}
+
+/* Welcome — like ChatGPT center logo */
+.welcome-center{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;padding:20px;text-align:center}
+.wc-owl{font-size:56px;margin-bottom:10px;animation:ob 3s ease-in-out infinite}
+.wc-title{font-family:'Baloo 2',cursive;font-size:22px;font-weight:800;color:var(--text);margin-bottom:4px}
+.wc-title span{color:var(--orange)}
+.wc-sub{font-size:13px;font-weight:700;color:var(--sub);line-height:1.5;margin-bottom:24px}
+.wc-chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+.wc-chip{background:var(--bg);border:1.5px solid var(--border);border-radius:20px;padding:8px 14px;font-size:12px;font-weight:700;color:var(--text);cursor:pointer;transition:all .15s}
+.wc-chip:active{background:var(--bl);border-color:var(--blue);color:var(--blue)}
+
+/* Message bubbles — ChatGPT style */
+.msg-row{display:flex;gap:10px;align-items:flex-start}
+.msg-row.me{flex-direction:row-reverse}
+.msg-av{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;margin-top:2px}
+.msg-row.ai .msg-av{background:linear-gradient(135deg,var(--yellow),var(--orange))}
+.msg-row.me .msg-av{background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;font-size:11px;font-weight:900}
+.msg-bbl{padding:12px 16px;border-radius:20px;font-size:13px;font-weight:600;line-height:1.65;max-width:82%}
+.msg-row.ai .msg-bbl{background:#f4f4f4;color:var(--text);border-top-left-radius:4px}
+.msg-row.me .msg-bbl{background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;border-top-right-radius:4px}
+
+/* typing */
+.typing-row{display:flex;gap:10px;align-items:flex-start}
+.tbbl{background:#f4f4f4;border-radius:20px;border-top-left-radius:4px;padding:14px 18px;display:flex;gap:5px}
+.td{width:6px;height:6px;background:#bbb;border-radius:50%;animation:ta 1.2s infinite}
+.td:nth-child(2){animation-delay:.2s}.td:nth-child(3){animation-delay:.4s}
+@keyframes ta{0%,100%{transform:translateY(0);background:#bbb}50%{transform:translateY(-5px);background:var(--blue)}}
+
+/* image preview */
+.img-strip{background:var(--white);border-top:1px solid #f0f0f0;padding:8px 13px;display:none;align-items:center;gap:9px;flex-shrink:0}
+.img-strip.show{display:flex}
+.ithumb{width:46px;height:46px;border-radius:10px;object-fit:cover;border:2px solid var(--bl);flex-shrink:0}
+.iinfo p{font-size:12px;font-weight:800;color:var(--text)}.iinfo span{font-size:11px;color:var(--sub);font-weight:600}
+.iclose{width:24px;height:24px;background:#fce8e6;border:none;border-radius:50%;color:var(--red);font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:900;margin-left:auto;flex-shrink:0}
+
+/* Input bar — exactly ChatGPT style */
+.input-wrap{
+  padding:10px 12px 28px;background:var(--white);border-top:1px solid #f0f0f0;flex-shrink:0;
+}
+.input-box{
+  background:#f4f4f4;border-radius:28px;
+  display:flex;align-items:center;gap:6px;padding:8px 8px 8px 16px;
+}
+.tinput{
+  flex:1;background:transparent;border:none;outline:none;
+  font-family:'Nunito',sans-serif;font-size:14px;font-weight:600;color:var(--text);
+  padding:4px 0;
+}
+.tinput::placeholder{color:#aaa}
+.icon-row{display:flex;align-items:center;gap:4px;flex-shrink:0}
+.ibtn{
+  width:34px;height:34px;border-radius:50%;border:none;
+  background:transparent;display:flex;align-items:center;justify-content:center;
+  font-size:17px;cursor:pointer;transition:all .15s;position:relative;
+}
+.ibtn:active{background:rgba(0,0,0,.08);transform:scale(.9)}
+.ibtn input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;border-radius:50%}
+.ibtn.von{background:#fce8e6;animation:vp 1s ease-in-out infinite}
+@keyframes vp{0%,100%{box-shadow:0 0 0 0 rgba(234,67,53,.3)}50%{box-shadow:0 0 0 8px rgba(234,67,53,0)}}
+.send-btn{
+  width:34px;height:34px;background:var(--text);border:none;border-radius:50%;
+  color:#fff;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:transform .12s;flex-shrink:0;
+}
+.send-btn:active{transform:scale(.88)}
+.send-btn.inactive{background:#ccc;cursor:default}
+
+/* ══════════════════════════
+   SIDEBAR — ChatGPT Dark Style
+══════════════════════════ */
+.sidebar-overlay{position:absolute;inset:0;background:rgba(0,0,0,.45);z-index:50;display:none}
+.sidebar-overlay.open{display:block}
+.sidebar{
+  position:absolute;top:0;left:-280px;bottom:0;width:280px;
+  background:var(--sidebar);z-index:60;
+  transition:left .26s cubic-bezier(.4,0,.2,1);
+  display:flex;flex-direction:column;
+}
+.sidebar.open{left:0}
+
+/* Sidebar top — new chat + close */
+.sb-top{
+  padding:52px 14px 12px;
+  display:flex;align-items:center;justify-content:space-between;
+  flex-shrink:0;
+}
+.sb-logo{font-family:'Baloo 2',cursive;font-size:18px;font-weight:800;color:#fff}
+.sb-logo span{color:var(--orange)}
+.sb-new{
+  display:flex;align-items:center;gap:7px;
+  background:rgba(255,255,255,.1);border:none;border-radius:10px;
+  padding:8px 12px;cursor:pointer;transition:background .15s;
+}
+.sb-new:active{background:rgba(255,255,255,.18)}
+.sb-new span{font-size:14px;font-weight:700;color:#fff}
+.sb-new .ico{font-size:16px}
+
+/* Recent chats section — like ChatGPT */
+.sb-scroll{flex:1;overflow-y:auto;padding:0 10px}
+.sb-scroll::-webkit-scrollbar{width:0}
+.sb-section{font-size:10px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:rgba(255,255,255,.35);padding:14px 6px 6px}
+.chat-item{
+  display:flex;align-items:center;gap:9px;
+  padding:10px 10px;border-radius:10px;cursor:pointer;
+  transition:background .15s;margin-bottom:2px;
+  border:none;background:transparent;width:100%;text-align:left;
+}
+.chat-item:hover,.chat-item:active{background:rgba(255,255,255,.1)}
+.chat-item.active-chat{background:rgba(255,255,255,.13)}
+.chat-item .ci{font-size:16px;flex-shrink:0}
+.chat-item .ct{flex:1;min-width:0}
+.chat-item .ct h4{font-size:13px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-item .ct p{font-size:11px;font-weight:600;color:rgba(255,255,255,.4);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-item .cm{font-size:10px;font-weight:700;color:rgba(255,255,255,.3);flex-shrink:0}
+
+/* Sidebar bottom — settings + profile (like ChatGPT) */
+.sb-bottom{
+  border-top:1px solid rgba(255,255,255,.1);
+  padding:10px 10px 24px;flex-shrink:0;
+  display:flex;flex-direction:column;gap:2px;
+}
+.sb-btn{
+  display:flex;align-items:center;gap:10px;
+  padding:11px 10px;border-radius:10px;cursor:pointer;
+  transition:background .15s;border:none;background:transparent;
+  width:100%;text-align:left;
+}
+.sb-btn:active{background:rgba(255,255,255,.1)}
+.sb-btn .sbi{font-size:18px;flex-shrink:0}
+.sb-btn .sbt{font-size:14px;font-weight:700;color:#fff}
+.sb-btn .sbs{font-size:11px;font-weight:600;color:rgba(255,255,255,.45);margin-top:1px}
+/* Profile row at very bottom */
+.sb-profile{
+  display:flex;align-items:center;gap:10px;
+  padding:11px 10px;border-radius:10px;cursor:pointer;
+  transition:background .15s;margin-top:4px;
+  border-top:1px solid rgba(255,255,255,.08);padding-top:13px;
+}
+.sb-profile:active{background:rgba(255,255,255,.1)}
+.sb-pav{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--yellow),var(--orange));display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.sb-pname{font-size:13px;font-weight:800;color:#fff}
+.sb-pemail{font-size:11px;font-weight:600;color:rgba(255,255,255,.4);margin-top:1px}
+.sb-pmore{margin-left:auto;font-size:16px;color:rgba(255,255,255,.4)}
+
+/* ══════════════════════════
+   SETTINGS SCREENS
+══════════════════════════ */
+.settings-screen{background:var(--white)}
+.stop{
+  display:flex;align-items:center;gap:10px;
+  padding:50px 14px 13px;border-bottom:1px solid #f0f0f0;
+  background:var(--white);flex-shrink:0;
+}
+.bk{width:34px;height:34px;border-radius:50%;border:none;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:17px;cursor:pointer;flex-shrink:0}
+.stitle{font-family:'Baloo 2',cursive;font-size:18px;font-weight:800;color:var(--text)}
+.sact{margin-left:auto;font-size:13px;font-weight:800;color:var(--blue);border:none;background:none;cursor:pointer}
+
+.ssb{flex:1;overflow-y:auto}
+.ssb::-webkit-scrollbar{width:0}
+
+/* Settings list items — ChatGPT clean style */
+.set-section{padding:18px 16px 6px;font-size:10px;font-weight:900;letter-spacing:.8px;text-transform:uppercase;color:#bbb}
+.set-item{
+  display:flex;align-items:center;gap:13px;padding:14px 16px;
+  border-bottom:1px solid #f8f8f8;cursor:pointer;transition:background .13s;
+  border:none;background:transparent;width:100%;text-align:left;
+}
+.set-item:active{background:#f8f8f8}
+.set-ico{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0}
+.set-txt{flex:1}.set-tx h4{font-size:14px;font-weight:700;color:var(--text)}.set-tx p{font-size:11px;font-weight:600;color:var(--sub);margin-top:1px}
+.set-arrow{font-size:14px;color:#ccc;flex-shrink:0}
+.set-val{font-size:12px;font-weight:700;color:var(--sub);margin-right:6px}
+.tog{width:42px;height:23px;border-radius:12px;position:relative;cursor:pointer;transition:background .22s;flex-shrink:0;border:none;background:#ddd}
+.tog.on{background:var(--green)}
+.tog::after{content:'';position:absolute;top:2.5px;left:2.5px;width:18px;height:18px;border-radius:50%;background:#fff;transition:left .22s;box-shadow:0 2px 5px rgba(0,0,0,.2)}
+.tog.on::after{left:21.5px}
+
+/* Profile hero */
+.phero{background:linear-gradient(135deg,var(--blue),var(--blue2));padding:24px 18px 28px;display:flex;flex-direction:column;align-items:center;flex-shrink:0}
+.avc{width:76px;height:76px;border-radius:50%;background:linear-gradient(135deg,var(--yellow),var(--orange));display:flex;align-items:center;justify-content:center;font-size:38px;border:4px solid rgba(255,255,255,.35);position:relative;margin-bottom:10px}
+.cam{position:absolute;bottom:0;right:0;width:24px;height:24px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;font-size:12px}
+.phero h3{font-family:'Baloo 2',cursive;font-size:18px;color:#fff}
+.phero p{font-size:11px;color:rgba(255,255,255,.6);font-weight:600;margin-top:2px}
+.pform{padding:16px 16px 0}
+.pfl{font-size:10px;font-weight:900;letter-spacing:.8px;text-transform:uppercase;color:#bbb;margin-bottom:9px}
+.pfield{margin-bottom:12px}
+.pfield label{display:block;font-size:10px;font-weight:900;letter-spacing:.8px;text-transform:uppercase;color:var(--sub);margin-bottom:5px}
+.pfi{position:relative}
+.pfi .ic{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:15px}
+.pfi input,.pfi select{width:100%;background:var(--bg);border:2px solid var(--border);border-radius:12px;padding:11px 14px 11px 38px;font-family:'Nunito',sans-serif;font-size:13px;font-weight:600;color:var(--text);outline:none;appearance:none;transition:all .2s}
+.pfi input:focus,.pfi select:focus{border-color:var(--blue);background:#f0f4ff}
+.psave{margin:16px 16px 24px;display:block;width:calc(100% - 32px);background:linear-gradient(135deg,var(--blue),var(--blue2));border:none;border-radius:14px;padding:13px;font-family:'Baloo 2',cursive;font-size:16px;color:#fff;cursor:pointer;box-shadow:0 5px 16px rgba(26,115,232,.28)}
+
+/* Change password */
+.pwdhero{background:linear-gradient(135deg,#e53935,#c62828);padding:24px 18px 22px;text-align:center;flex-shrink:0}
+.pwdhero .lk{font-size:46px;margin-bottom:6px}
+.pwdhero h3{font-family:'Baloo 2',cursive;font-size:18px;color:#fff}
+.pwdhero p{font-size:11px;color:rgba(255,255,255,.6);font-weight:600;margin-top:2px}
+.pwdbody{padding:16px 16px}
+.stbar{margin-top:6px}.stlbl{font-size:11px;font-weight:700;color:var(--sub);margin-bottom:3px}.sttrack{background:var(--border);border-radius:4px;height:5px;overflow:hidden}.stfill{height:100%;border-radius:4px;width:65%;background:linear-gradient(90deg,#FFD54F,#FF6D3B)}
+.tips{background:#fff5f5;border-radius:12px;padding:11px;margin-bottom:16px;border-left:3px solid var(--red)}
+.tips p{font-size:12px;font-weight:700;color:#555;line-height:1.8}
+.upbtn{width:100%;background:linear-gradient(135deg,#e53935,#c62828);border:none;border-radius:14px;padding:13px;font-family:'Baloo 2',cursive;font-size:16px;color:#fff;cursor:pointer;box-shadow:0 5px 16px rgba(229,57,53,.25)}
+
+/* Chat history */
+.hsrch{padding:10px 13px;background:var(--white);border-bottom:1px solid #f0f0f0;flex-shrink:0}
+.swrap{position:relative}.swrap .si{position:absolute;left:11px;top:50%;transform:translateY(-50%);font-size:14px}
+.sbox{background:var(--bg);border:1.5px solid var(--border);border-radius:12px;padding:10px 13px 10px 36px;width:100%;font-family:'Nunito',sans-serif;font-size:13px;font-weight:600;color:var(--text);outline:none}
+.hlist{padding:8px 13px;display:flex;flex-direction:column;gap:8px}
+.hitem{background:var(--white);border-radius:14px;padding:12px 13px;display:flex;align-items:center;gap:10px;box-shadow:0 2px 8px rgba(0,0,0,.07);cursor:pointer;transition:transform .13s;border:1px solid #f0f0f0}
+.hitem:active{transform:scale(.98)}
+.hico{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0}
+.hinf{flex:1;min-width:0}.hinf h4{font-size:13px;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hinf p{font-size:11px;font-weight:600;color:var(--sub);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hmeta{text-align:right;flex-shrink:0}.hdate{font-size:10px;font-weight:700;color:#bbb}.hcnt{font-size:11px;font-weight:800;color:var(--blue);margin-top:3px;background:var(--bl);padding:1px 7px;border-radius:8px}
+
+/* Notifications */
+.nhero{background:linear-gradient(135deg,#FF8F00,#F57C00);padding:24px 18px 20px;text-align:center;flex-shrink:0}
+.nhero .ni{font-size:44px;margin-bottom:5px}
+.nhero h3{font-family:'Baloo 2',cursive;font-size:18px;color:#fff}
+.nhero p{font-size:11px;color:rgba(255,255,255,.6);font-weight:600;margin-top:2px}
+
+/* Dark mode */
+.dprev{margin:13px;border-radius:16px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.1)}
+.dpl{background:var(--white);padding:13px}.dpd{background:#1a1a2e;padding:13px}
+.drow{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+.dbar{height:8px;border-radius:4px;flex:1}.dbar.l{background:#e8f0fe}.dbar.dk{background:#2a2a4a}
+.dml{background:#f4f4f4;border-radius:12px;padding:8px 12px;font-size:11px;font-weight:700;color:#333;margin-bottom:5px;width:76%}
+.dmd{background:#2a2a4a;border-radius:12px;padding:8px 12px;font-size:11px;font-weight:700;color:#aaa;margin-bottom:5px;width:76%}
+.dmml{background:var(--blue);border-radius:12px;padding:8px 12px;font-size:11px;font-weight:700;color:#fff;margin-left:auto;width:55%}
+.mcards{padding:0 13px;display:flex;flex-direction:column;gap:8px}
+.mcard{background:var(--white);border-radius:14px;padding:12px 13px;display:flex;align-items:center;gap:10px;cursor:pointer;border:2px solid var(--border);transition:all .18s;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.mcard.sel{border-color:var(--blue);background:#f0f4ff}
+.mico{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.mtx h4{font-size:13px;font-weight:800;color:var(--text)}.mtx p{font-size:11px;font-weight:600;color:var(--sub);margin-top:1px}
+.mchk{margin-left:auto;font-size:18px}
+
+/* Language */
+.lsec{font-size:10px;font-weight:900;letter-spacing:.8px;text-transform:uppercase;color:#bbb;padding:12px 16px 5px}
+.llist{padding:0 13px 6px;display:flex;flex-direction:column;gap:6px}
+.litem{background:var(--white);border-radius:13px;padding:12px 13px;display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);cursor:pointer;transition:all .18s;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.litem.sel{border-color:var(--blue);background:#f0f4ff}
+.lflag{font-size:24px;flex-shrink:0}
+.linf{flex:1}.linf h4{font-size:13px;font-weight:800;color:var(--text)}.linf p{font-size:11px;font-weight:600;color:var(--sub);margin-top:1px}
+.lchk{margin-left:auto;font-size:17px}
+.lbadge{background:#e6f4ea;color:var(--green);font-size:10px;font-weight:800;padding:2px 7px;border-radius:6px;margin-left:auto}
+</style>
+</head>
+<body>
+
+<div class="ph">
+  <h1>Kidsko<span>.ai</span> — ChatGPT Style Layout</h1>
+  <p>Same layout as ChatGPT mobile · All screens connected · Tap to navigate</p>
+</div>
+
+<div style="display:flex;gap:24px;flex-wrap:wrap;justify-content:center">
+
+<!-- ══════════ PHONE 1: SPLASH + AUTH ══════════ -->
+<div class="pw">
+  <div class="phone">
+    <div class="notch"></div>
+
+    <!-- SPLASH -->
+    <div class="screen active" id="s-splash">
+      <div class="sbar"><span>9:41</span><span>⚡ 100%</span></div>
+      <div class="blob b1"></div><div class="blob b2"></div>
+      <div class="splash-body">
+        <div class="owl-anim">🦉</div>
+        <div class="s-logo">Kidsko<span>.ai</span></div>
+        <p class="s-tag">Your smart AI study buddy 🎓<br>Ask anything, learn everything!</p>
+        <button class="btn-main" onclick="go('s-register')">🚀 Get Started — It's Free!</button>
+        <button class="btn-out" onclick="go('s-login')">Sign In</button>
+      </div>
+    </div>
+
+    <!-- REGISTER -->
+    <div class="screen" id="s-register">
+      <div class="sbar" style="background:var(--blue);color:#fff"><span>9:41</span><span>⚡ 100%</span></div>
+      <div class="auth-head"><div class="ow">🦉</div><h2>Create Account</h2><p>Join thousands of young learners!</p></div>
+      <div class="auth-scroll">
+        <button class="gbtn"><div class="gico"></div>Sign up with Google</button>
+        <div class="or"><span>or use email</span></div>
+        <div class="field"><label>Full Name</label><div class="fi"><span class="ic">👤</span><input type="text" placeholder="e.g. Aisha Khan"></div></div>
+        <div class="field"><label>Email</label><div class="fi"><span class="ic">📧</span><input type="email" placeholder="you@gmail.com"></div></div>
+        <div class="field"><label>Password</label><div class="fi"><span class="ic">🔒</span><input type="password" placeholder="Min 8 characters" id="rp1"><button class="ey" onclick="tp('rp1',this)">👁️</button></div></div>
+        <div class="field"><label>Confirm Password</label><div class="fi"><span class="ic">🔒</span><input type="password" placeholder="Repeat password" id="rp2"><button class="ey" onclick="tp('rp2',this)">👁️</button></div></div>
+        <button class="btn-main" onclick="go('s-chat')" style="margin-top:6px">Create Account 🚀</button>
+        <p class="sw">Already have an account? <a onclick="go('s-login')">Sign In</a></p>
+        <p class="safe">🔒 Safe for kids · No ads<br><a href="#">Terms</a> · <a href="#">Privacy</a></p>
+      </div>
+    </div>
+
+    <!-- LOGIN -->
+    <div class="screen" id="s-login">
+      <div class="sbar" style="background:var(--blue);color:#fff"><span>9:41</span><span>⚡ 100%</span></div>
+      <div class="auth-head"><div class="ow">🦉</div><h2>Welcome Back!</h2><p>Let's keep learning today 📚</p></div>
+      <div class="auth-scroll">
+        <button class="gbtn"><div class="gico"></div>Continue with Google</button>
+        <div class="or"><span>or sign in with email</span></div>
+        <div class="field"><label>Email</label><div class="fi"><span class="ic">📧</span><input type="email" placeholder="you@gmail.com"></div></div>
+        <div class="field"><label>Password</label><div class="fi"><span class="ic">🔒</span><input type="password" placeholder="Your password" id="lp"><button class="ey" onclick="tp('lp',this)">👁️</button></div></div>
+        <div class="fgt"><a href="#">Forgot password?</a></div>
+        <button class="btn-main" onclick="go('s-chat')">Sign In →</button>
+        <p class="sw">New here? <a onclick="go('s-register')">Create account</a></p>
+      </div>
+    </div>
+
+    <!-- CHAT — ChatGPT layout -->
+    <div class="screen" id="s-chat" style="background:var(--white)">
+      <div class="sbar"><span>9:41</span><span>⚡ 100%</span></div>
+
+      <!-- Top bar exactly like ChatGPT -->
+      <div class="chat-top">
+        <button class="ham" onclick="openSidebar()">
+          <span></span><span></span><span></span>
+        </button>
+        <div class="model-name">Kidsko<span>.ai</span> <span class="chevron">▾</span></div>
+        <button class="new-chat-btn" onclick="newChat()" title="New Chat">✏️</button>
+      </div>
+
+      <!-- Welcome center (ChatGPT style) -->
+      <div class="welcome-center" id="welcome-view">
+        <div class="wc-owl">🦉</div>
+        <div class="wc-title">Kidsko<span>.ai</span></div>
+        <p class="wc-sub">Ask me anything about your studies!<br>I'll explain it simply and clearly.</p>
+        <div class="wc-chips">
+          <button class="wc-chip" onclick="startChat()">🌍 Why is Earth round?</button>
+          <button class="wc-chip" onclick="startChat()">🔢 Explain fractions</button>
+          <button class="wc-chip" onclick="startChat()">🦕 Dinosaurs</button>
+          <button class="wc-chip" onclick="startChat()">📸 Homework photo</button>
+        </div>
+      </div>
+
+      <!-- Messages (hidden until chat starts) -->
+      <div class="msgs" id="msgs-view" style="display:none">
+        <div class="msg-row ai"><div class="msg-av">🦉</div><div class="msg-bbl">🌿 <strong>Photosynthesis</strong> is how plants make their own food! They use <strong>sunlight ☀️</strong>, <strong>water 💧</strong> and <strong>air 💨</strong> to create energy. Think of leaves as the plant's tiny kitchen! 🍃</div></div>
+        <div class="msg-row me"><div class="msg-av">A</div><div class="msg-bbl">Can you give me a simple example?</div></div>
+        <div class="typing-row"><div class="msg-av" style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#FFD54F,#FF6D3B);display:flex;align-items:center;justify-content:center;font-size:16px;margin-top:2px;">🦉</div><div class="tbbl"><div class="td"></div><div class="td"></div><div class="td"></div></div></div>
+      </div>
+
+      <!-- Image preview -->
+      <div class="img-strip" id="istrip">
+        <img class="ithumb" id="ithumb" src="" alt="">
+        <div class="iinfo"><p>📸 Photo ready</p><span>Type question & send</span></div>
+        <button class="iclose" onclick="clearImg()">✕</button>
+      </div>
+
+      <!-- Input bar — ChatGPT style -->
+      <div class="input-wrap">
+        <div class="input-box">
+          <input class="tinput" placeholder="Ask Kidsko anything..." id="chatinput" oninput="updateSend()">
+          <div class="icon-row">
+            <button class="ibtn">📷<input type="file" accept="image/*" capture="environment" onchange="attachImg(event)"></button>
+            <button class="ibtn" id="vbtn" onclick="toggleVoice()">🎤</button>
+            <button class="send-btn inactive" id="sendbtn">➤</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SIDEBAR — ChatGPT dark style -->
+      <div class="sidebar-overlay" id="soverlay" onclick="closeSidebar()"></div>
+      <div class="sidebar" id="sidebar">
+
+        <!-- Top: logo + new chat button -->
+        <div class="sb-top">
+          <div class="sb-logo">Kidsko<span>.ai</span></div>
+          <button class="sb-new" onclick="closeSidebar();newChat()">
+            <span class="ico">✏️</span><span>New Chat</span>
+          </button>
+        </div>
+
+        <!-- Recent chats — like ChatGPT -->
+        <div class="sb-scroll">
+          <div class="sb-section">Today</div>
+          <button class="chat-item active-chat">
+            <span class="ci">🔬</span>
+            <div class="ct"><h4>What is photosynthesis?</h4><p>Plants use sunlight to make food</p></div>
+            <span class="cm">Now</span>
+          </button>
+          <div class="sb-section">Yesterday</div>
+          <button class="chat-item" onclick="closeSidebar()">
+            <span class="ci">🔢</span>
+            <div class="ct"><h4>Explain fractions to me</h4><p>A fraction is a part of a whole</p></div>
+            <span class="cm">1d</span>
+          </button>
+          <button class="chat-item" onclick="closeSidebar()">
+            <span class="ci">🌍</span>
+            <div class="ct"><h4>Why is the sky blue?</h4><p>The sun sends light to Earth</p></div>
+            <span class="cm">1d</span>
+          </button>
+          <div class="sb-section">Previous 7 Days</div>
+          <button class="chat-item" onclick="closeSidebar()">
+            <span class="ci">🦕</span>
+            <div class="ct"><h4>Tell me about dinosaurs</h4><p>Dinosaurs lived 65 million years ago</p></div>
+            <span class="cm">3d</span>
+          </button>
+          <button class="chat-item" onclick="closeSidebar()">
+            <span class="ci">🧮</span>
+            <div class="ct"><h4>Multiplication table help</h4><p>Let's start with 5 times table</p></div>
+            <span class="cm">4d</span>
+          </button>
+          <button class="chat-item" onclick="closeSidebar()">
+            <span class="ci">🌊</span>
+            <div class="ct"><h4>How do oceans form?</h4><p>Water came from comets...</p></div>
+            <span class="cm">5d</span>
+          </button>
+          <button class="chat-item" onclick="closeSidebar()">
+            <span class="ci">🧬</span>
+            <div class="ct"><h4>What is DNA?</h4><p>DNA is the blueprint of life</p></div>
+            <span class="cm">6d</span>
+          </button>
+        </div>
+
+        <!-- Bottom: Settings + New Chat + Profile — like ChatGPT -->
+        <div class="sb-bottom">
+          <button class="sb-btn" onclick="closeSidebar();go('s-history')">
+            <span class="sbi">💬</span>
+            <div><div class="sbt">Chat History</div></div>
+          </button>
+          <button class="sb-btn" onclick="closeSidebar();go('s-settings')">
+            <span class="sbi">⚙️</span>
+            <div><div class="sbt">Settings</div></div>
+          </button>
+          <!-- Profile at very bottom like ChatGPT -->
+          <div class="sb-profile" onclick="closeSidebar();go('s-profile')">
+            <div class="sb-pav">👧</div>
+            <div><div class="sb-pname">Aisha Khan</div><div class="sb-pemail">aisha@gmail.com</div></div>
+            <div class="sb-pmore">···</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- SETTINGS HUB -->
+    <div class="screen settings-screen" id="s-settings">
+      <div class="sbar"><span>9:41</span><span>⚡ 100%</span></div>
+      <div class="stop"><button class="bk" onclick="go('s-chat')">←</button><div class="stitle">Settings</div></div>
+      <div class="ssb">
+        <div class="set-section">Account</div>
+        <button class="set-item" onclick="go('s-profile')"><div class="set-ico" style="background:var(--bl)">👤</div><div class="set-txt"><div class="set-tx"><h4>My Profile</h4><p>Edit name & photo</p></div></div><span class="set-arrow">›</span></button>
+        <button class="set-item" onclick="go('s-pwd')"><div class="set-ico" style="background:#fce8e6">🔒</div><div class="set-txt"><div class="set-tx"><h4>Change Password</h4><p>Update your password</p></div></div><span class="set-arrow">›</span></button>
+        <div class="set-section">App</div>
+        <button class="set-item" onclick="go('s-notif')"><div class="set-ico" style="background:#fff8e1">🔔</div><div class="set-txt"><div class="set-tx"><h4>Notifications</h4><p>Manage alerts</p></div></div><span class="set-arrow">›</span></button>
+        <button class="set-item" onclick="go('s-dark')"><div class="set-ico" style="background:#f3e5f5">🌙</div><div class="set-txt"><div class="set-tx"><h4>Appearance</h4><p>Light / Dark mode</p></div></div><span class="set-val">Light</span><span class="set-arrow">›</span></button>
+        <button class="set-item" onclick="go('s-lang')"><div class="set-ico" style="background:var(--bl)">🌐</div><div class="set-txt"><div class="set-tx"><h4>Language</h4><p>App language</p></div></div><span class="set-val">English</span><span class="set-arrow">›</span></button>
+        <div class="set-section">Support</div>
+        <button class="set-item"><div class="set-ico" style="background:#e6f4ea">❓</div><div class="set-txt"><div class="set-tx"><h4>Help & FAQ</h4></div></div><span class="set-arrow">›</span></button>
+        <button class="set-item"><div class="set-ico" style="background:#fff8e1">⭐</div><div class="set-txt"><div class="set-tx"><h4>Rate Kidsko.ai</h4></div></div><span class="set-arrow">›</span></button>
+        <button class="set-item"><div class="set-ico" style="background:var(--bl)">📢</div><div class="set-txt"><div class="set-tx"><h4>Share with Friends</h4></div></div><span class="set-arrow">›</span></button>
+        <div class="set-section">Danger Zone</div>
+        <button class="set-item" onclick="go('s-splash')"><div class="set-ico" style="background:#fce8e6">🚪</div><div class="set-txt"><div class="set-tx"><h4 style="color:var(--red)">Sign Out</h4></div></div></button>
+      </div>
+    </div>
+
+    <!-- MY PROFILE -->
+    <div class="screen settings-screen" id="s-profile">
+      <div class="sbar" style="background:var(--blue);color:#fff"><span>9:41</span><span>⚡ 100%</span></div>
+      <div class="stop" style="background:var(--blue)"><button class="bk" style="background:rgba(255,255,255,.2)" onclick="go('s-settings')">←</button><div class="stitle" style="color:#fff">My Profile</div><button class="sact" style="color:#fff">Save</button></div>
+      <div class="ssb">
+        <div class="phero"><div class="avc">👧<div class="cam">📷</div></div><h3>Aisha Khan</h3><p>Member since June 2026</p></div>
+        <div class="pform"><div class="pfl">Personal Info</div>
+          <div class="pfield"><label>Full Name</label><div class="pfi"><span class="ic">👤</span><input type="text" value="Aisha Khan"></div></div>
+          <div class="pfield"><label>Email</label><div class="pfi"><span class="ic">📧</span><input type="email" value="aisha@gmail.com"></div></div>
+          <div class="pfield"><label>Date of Birth</label><div class="pfi"><span class="ic">🎂</span><input type="date" value="2016-03-15"></div></div>
+          <div class="pfield"><label>Grade</label><div class="pfi"><span class="ic">🏫</span><select><option>Grade 3</option><option>Grade 4</option><option selected>Grade 5</option></select></div></div>
+        </div>
+        <button class="psave" onclick="go('s-settings')">Save Changes ✓</button>
+      </div>
+    </div>
+
+    <!-- CHANGE PASSWORD -->
+    <div class="screen settings-screen" id="s-pwd">
+      <div class="sbar" style="background:#e53935;color:#fff"><span>9:41</span><span>⚡ 100%</span></div>
+      <div class="stop" style="background:#e53935"><button class="bk" style="background:rgba(255,255,255,.2)" onclick="go('s-settings')">←</button><div class="stitle" style="color:#fff">Change Password</div></div>
+      <div class="ssb">
+        <div class="pwdhero"><div class="lk">🔐</div><h3>Update Password</h3><p>Keep your account safe & secure</p></div>
+        <div class="pwdbody">
+          <div class="field"><label>Current Password</label><div class="fi"><span class="ic">🔒</span><input type="password" placeholder="Current password" id="cp"><button class="ey" onclick="tp('cp',this)">👁️</button></div></div>
+          <div class="field"><label>New Password</label><div class="fi"><span class="ic">🔑</span><input type="password" placeholder="New password" id="np" value="MyPass123"><button class="ey" onclick="tp('np',this)">👁️</button></div><div class="stbar"><div class="stlbl">Strength: Medium</div><div class="sttrack"><div class="stfill"></div></div></div></div>
+          <div class="field"><label>Confirm Password</label><div class="fi"><span class="ic">🔑</span><input type="password" placeholder="Repeat new password" id="cp2"><button class="ey" onclick="tp('cp2',this)">👁️</button></div></div>
+          <div class="tips"><p>✅ At least 8 characters<br>✅ One uppercase letter<br>❌ One special character<br>✅ No spaces</p></div>
+          <button class="upbtn" onclick="go('s-settings')">Update Password 🔐</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CHAT HISTORY -->
+    <div class="screen" id="s-history" style="background:var(--bg)">
+      <div class="sbar"><span>9:41</span><span>⚡ 100%</span></div>
+      <div class="stop"><button class="bk" onclick="go('s-chat')">←</button><div class="stitle">Chat History</div><button class="sact">Clear All</button></div>
+      <div class="hsrch"><div class="swrap"><span class="si">🔍</span><input class="sbox" placeholder="Search conversations..."></div></div>
+      <div class="ssb"><div class="hlist">
+        <div class="hitem"><div class="hico" style="background:var(--bl)">🔬</div><div class="hinf"><h4>What is photosynthesis?</h4><p>Plants use sunlight to make food...</p></div><div class="hmeta"><div class="hdate">Today</div><div class="hcnt">6</div></div></div>
+        <div class="hitem"><div class="hico" style="background:#fff8e1">🔢</div><div class="hinf"><h4>Explain fractions to me</h4><p>A fraction is a part of a whole...</p></div><div class="hmeta"><div class="hdate">Yesterday</div><div class="hcnt">12</div></div></div>
+        <div class="hitem"><div class="hico" style="background:#e6f4ea">🌍</div><div class="hinf"><h4>Why is the sky blue?</h4><p>The sun sends light to Earth...</p></div><div class="hmeta"><div class="hdate">Mon</div><div class="hcnt">8</div></div></div>
+        <div class="hitem"><div class="hico" style="background:#f3e5f5">🦕</div><div class="hinf"><h4>Tell me about dinosaurs</h4><p>65 million years ago...</p></div><div class="hmeta"><div class="hdate">Sun</div><div class="hcnt">10</div></div></div>
+        <div class="hitem"><div class="hico" style="background:#fce8e6">🧮</div><div class="hinf"><h4>Multiplication table help</h4><p>Let's start with 5 times table...</p></div><div class="hmeta"><div class="hdate">Sat</div><div class="hcnt">15</div></div></div>
+        <div class="hitem"><div class="hico" style="background:var(--bl)">🌊</div><div class="hinf"><h4>How do oceans form?</h4><p>Water came from comets...</p></div><div class="hmeta"><div class="hdate">Fri</div><div class="hcnt">7</div></div></div>
+      </div></div>
+    </div>
+
+    <!-- NOTIFICATIONS -->
+    <div class="screen" id="s-notif" style="background:var(--bg)">
+      <div class="sbar"><span>9:41</span><span>⚡ 100%</span></div>
+      <div class="stop"><button class="bk" onclick="go('s-settings')">←</button><div class="stitle">Notifications</div></div>
+      <div class="ssb">
+        <div class="nhero"><div class="ni">🔔</div><h3>Manage Alerts</h3><p>Choose what to be notified about</p></div>
+        <div class="set-section">Study</div>
+        <div class="set-item"><div class="set-ico" style="background:var(--bl)">📚</div><div class="set-txt"><div class="set-tx"><h4>Daily Study Reminder</h4><p>Remind me to study every day</p></div></div><button class="tog on" onclick="this.classList.toggle('on')"></button></div>
+        <div class="set-item"><div class="set-ico" style="background:#fff8e1">🏆</div><div class="set-txt"><div class="set-tx"><h4>Streak Alert</h4><p>Don't break your daily streak!</p></div></div><button class="tog on" onclick="this.classList.toggle('on')"></button></div>
+        <div class="set-item"><div class="set-ico" style="background:#e6f4ea">⭐</div><div class="set-txt"><div class="set-tx"><h4>Weekly Progress</h4><p>Summary of your learning week</p></div></div><button class="tog" onclick="this.classList.toggle('on')"></button></div>
+        <div class="set-section">App</div>
+        <div class="set-item"><div class="set-ico" style="background:#f3e5f5">💬</div><div class="set-txt"><div class="set-tx"><h4>New Features</h4><p>Updates and new tools</p></div></div><button class="tog on" onclick="this.classList.toggle('on')"></button></div>
+        <div class="set-item"><div class="set-ico" style="background:#fce8e6">📢</div><div class="set-txt"><div class="set-tx"><h4>Tips & Tricks</h4><p>Study tips from Kidsko</p></div></div><button class="tog" onclick="this.classList.toggle('on')"></button></div>
+        <div class="set-section">Sound</div>
+        <div class="set-item"><div class="set-ico" style="background:var(--bl)">🔊</div><div class="set-txt"><div class="set-tx"><h4>Notification Sound</h4></div></div><button class="tog on" onclick="this.classList.toggle('on')"></button></div>
+      </div>
+    </div>
+
+    <!-- DARK MODE -->
+    <div class="screen" id="s-dark" style="background:var(--bg)">
+      <div class="sbar"><span>9:41</span><span>⚡ 100%</span></div>
+      <div class="stop"><button class="bk" onclick="go('s-settings')">←</button><div class="stitle">Appearance</div></div>
+      <div class="ssb">
+        <div style="padding:12px 13px 6px;font-size:10px;font-weight:900;letter-spacing:.8px;text-transform:uppercase;color:#bbb">PREVIEW</div>
+        <div class="dprev"><div class="dpl" id="dpbox">
+          <div class="drow"><div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#FFD54F,#FF6D3B);display:flex;align-items:center;justify-content:center;font-size:14px;">🦉</div><div style="flex:1"><div class="dbar l" id="db1"></div><div class="dbar l" style="width:55%;margin-top:4px" id="db2"></div></div></div>
+          <div class="dml" id="aimsg">🌿 Photosynthesis is how plants make food!</div>
+          <div class="dmml">What is photosynthesis?</div>
+        </div></div>
+        <div style="padding:12px 13px 8px;font-size:10px;font-weight:900;letter-spacing:.8px;text-transform:uppercase;color:#bbb">SELECT MODE</div>
+        <div class="mcards">
+          <div class="mcard sel" id="mc-l" onclick="setMode('l')"><div class="mico" style="background:#fff8e1">☀️</div><div class="mtx"><h4>Light Mode</h4><p>Bright & clean</p></div><div class="mchk" id="ck-l">✅</div></div>
+          <div class="mcard" id="mc-d" onclick="setMode('d')"><div class="mico" style="background:#1a1a2e">🌙</div><div class="mtx"><h4>Dark Mode</h4><p>Easy on eyes at night</p></div><div class="mchk" id="ck-d" style="opacity:0">✅</div></div>
+          <div class="mcard" id="mc-a" onclick="setMode('a')"><div class="mico" style="background:linear-gradient(135deg,#fff8e1,#1a1a2e)">⚙️</div><div class="mtx"><h4>Auto</h4><p>Follows device settings</p></div><div class="mchk" id="ck-a" style="opacity:0">✅</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LANGUAGE -->
+    <div class="screen" id="s-lang" style="background:var(--bg)">
+      <div class="sbar"><span>9:41</span><span>⚡ 100%</span></div>
+      <div class="stop"><button class="bk" onclick="go('s-settings')">←</button><div class="stitle">Language</div></div>
+      <div class="ssb">
+        <div style="padding:10px 13px 0"><div class="swrap"><span class="si">🔍</span><input class="sbox" placeholder="Search language..."></div></div>
+        <div class="lsec">Suggested</div>
+        <div class="llist">
+          <div class="litem sel" id="l-en" onclick="setLang('en')"><div class="lflag">🇬🇧</div><div class="linf"><h4>English</h4><p>Default</p></div><div class="lchk">✅</div></div>
+          <div class="litem" id="l-ur" onclick="setLang('ur')"><div class="lflag">🇵🇰</div><div class="linf"><h4>اردو</h4><p>Urdu</p></div><div class="lbadge">Popular</div></div>
+        </div>
+        <div class="lsec">All Languages</div>
+        <div class="llist">
+          <div class="litem" id="l-ar" onclick="setLang('ar')"><div class="lflag">🇸🇦</div><div class="linf"><h4>العربية</h4><p>Arabic</p></div></div>
+          <div class="litem" id="l-fr" onclick="setLang('fr')"><div class="lflag">🇫🇷</div><div class="linf"><h4>Français</h4><p>French</p></div></div>
+          <div class="litem" id="l-de" onclick="setLang('de')"><div class="lflag">🇩🇪</div><div class="linf"><h4>Deutsch</h4><p>German</p></div></div>
+          <div class="litem" id="l-hi" onclick="setLang('hi')"><div class="lflag">🇮🇳</div><div class="linf"><h4>हिन्दी</h4><p>Hindi</p></div></div>
+          <div class="litem" id="l-es" onclick="setLang('es')"><div class="lflag">🇪🇸</div><div class="linf"><h4>Español</h4><p>Spanish</p></div></div>
+          <div class="litem" id="l-tr" onclick="setLang('tr')"><div class="lflag">🇹🇷</div><div class="linf"><h4>Türkçe</h4><p>Turkish</p></div></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end phone -->
+  <div class="lbl">Complete Interactive Prototype</div>
+</div>
+
+</div>
+
+<script>
+function go(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+function tp(id,btn){
+  const f=document.getElementById(id);
+  f.type=f.type==='password'?'text':'password';
+  btn.textContent=f.type==='password'?'👁️':'🙈';
+}
+function openSidebar(){
+  document.getElementById('soverlay').classList.add('open');
+  document.getElementById('sidebar').classList.add('open');
+}
+function closeSidebar(){
+  document.getElementById('soverlay').classList.remove('open');
+  document.getElementById('sidebar').classList.remove('open');
+}
+function attachImg(e){
+  const f=e.target.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=ev=>{document.getElementById('ithumb').src=ev.target.result;document.getElementById('istrip').classList.add('show')};
+  r.readAsDataURL(f);
+}
+function clearImg(){document.getElementById('istrip').classList.remove('show');document.getElementById('ithumb').src=''}
+let von=false;
+function toggleVoice(){
+  const b=document.getElementById('vbtn');von=!von;
+  b.classList.toggle('von',von);b.textContent=von?'🔴':'🎤';
+}
+function updateSend(){
+  const v=document.getElementById('chatinput').value.trim();
+  const s=document.getElementById('sendbtn');
+  s.className=v?'send-btn':'send-btn inactive';
+}
+function startChat(){
+  document.getElementById('welcome-view').style.display='none';
+  document.getElementById('msgs-view').style.display='flex';
+}
+function newChat(){
+  document.getElementById('welcome-view').style.display='flex';
+  document.getElementById('msgs-view').style.display='none';
+  document.getElementById('chatinput').value='';
+  updateSend();
+}
+function setMode(m){
+  ['l','d','a'].forEach(x=>{document.getElementById('mc-'+x).classList.remove('sel');document.getElementById('ck-'+x).style.opacity='0'});
+  document.getElementById('mc-'+m).classList.add('sel');document.getElementById('ck-'+m).style.opacity='1';
+  const box=document.getElementById('dpbox'),ai=document.getElementById('aimsg');
+  if(m==='d'){box.style.background='#1a1a2e';ai.className='dmd';document.getElementById('db1').className='dbar dk';document.getElementById('db2').className='dbar dk'}
+  else{box.style.background='#fff';ai.className='dml';document.getElementById('db1').className='dbar l';document.getElementById('db2').className='dbar l'}
+}
+function setLang(l){
+  document.querySelectorAll('.litem').forEach(x=>{x.classList.remove('sel');const c=x.querySelector('.lchk');if(c)c.remove()});
+  const s=document.getElementById('l-'+l);s.classList.add('sel');
+  const c=document.createElement('div');c.className='lchk';c.textContent='✅';s.appendChild(c);
+}
+</script>
+</body>
+</html>

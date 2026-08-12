@@ -77,6 +77,7 @@ export default function App() {
     return (
       <>
         <LiveVoiceScreen
+          studentId={activeStudent.id}
           studentName={activeStudent.student_name}
           onBack={() => setScreen('home')}
           onLimitReached={handleLimitReached}

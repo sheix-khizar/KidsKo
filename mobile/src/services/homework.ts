@@ -1,6 +1,5 @@
 import { getToken } from './api';
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+import { API_URL } from './config';
 
 export async function analyzeHomework(studentId: string, imageBase64: string, threadId?: string) {
   const token = await getToken();

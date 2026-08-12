@@ -14,7 +14,7 @@ import { attachVoiceSocketServer } from './lib/voiceSocketServer';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT) || 3003;
 
 app.use(helmet());
 app.use(cors());
@@ -49,10 +49,10 @@ app.use('/api/homework', homeworkRoutes);
 app.use('/api/billing', billingRoutes);
 app.use('/api/transcript', transcriptRoutes);
 
-const httpServer = app.listen(PORT, () => {
-  console.log(`✅ Kidsko backend running on http://localhost:${PORT}`);
-  console.log(`   Health check: http://localhost:${PORT}/health`);
-  console.log(`   Voice WebSocket: ws://localhost:${PORT}/ws/voice`);
+const httpServer = app.listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ Kidsko backend running on http://0.0.0.0:${PORT}`);
+  console.log(`   Health check: http://192.168.18.95:${PORT}/health`);
+  console.log(`   Voice WebSocket: ws://192.168.18.95:${PORT}/ws/voice`);
 });
 
 attachVoiceSocketServer(httpServer);

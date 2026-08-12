@@ -1,11 +1,7 @@
-import { Platform } from 'react-native';
 import { createAudioPlayer } from 'expo-audio';
 import { ExpoSpeechRecognitionModule } from 'expo-speech-recognition';
 import { getToken } from './api';
-
-const defaultHost = Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
-const rawApiUrl = process.env.EXPO_PUBLIC_API_URL || defaultHost;
-const WS_URL = rawApiUrl.replace(/^http/, 'ws');
+import { WS_URL } from './config';
 
 type VoiceCallbacks = {
   onReady: (capSeconds: number) => void;
@@ -13,6 +9,8 @@ type VoiceCallbacks = {
   onError: (reason: string) => void;
   onClose: (reason?: string | number) => void;
   onTranscript?: (text: string) => void;
+  onSnapshotAck?: (remaining: number) => void;
+  onSnapshotError?: (reason: string) => void;
 };
 
 export class VoiceSession {
@@ -28,7 +26,7 @@ export class VoiceSession {
   private promptSentTime = 0;
   private firstChunkTime = 0;
 
-  async start(callbacks: VoiceCallbacks) {
+  async start(callbacks: VoiceCallbacks, studentId?: string) {
     const token = await getToken();
     if (!token) {
       callbacks.onError('Not authenticated');
@@ -36,7 +34,8 @@ export class VoiceSession {
     }
 
     this.isSessionActive = true;
-    const socketUrl = `${WS_URL}/ws/voice?token=${token}`;
+    const studentParam = studentId ? `&studentId=${studentId}` : '';
+    const socketUrl = `${WS_URL}/ws/voice?token=${token}${studentParam}`;
     console.log('Connecting Voice WebSocket to:', socketUrl);
     this.ws = new WebSocket(socketUrl);
 
@@ -69,6 +68,12 @@ export class VoiceSession {
           this.playFullTurnBufferedAudio();
         } else if (msg.type === 'text') {
           callbacks.onTranscript?.(msg.data);
+        } else if (msg.type === 'snapshot_ack') {
+          console.log(`[Mobile Snapshot Ack]: ${msg.remaining} remaining this week`);
+          callbacks.onSnapshotAck?.(msg.remaining);
+        } else if (msg.type === 'snapshot_error') {
+          console.warn('[Mobile Snapshot Error]:', msg.reason);
+          callbacks.onSnapshotError?.(msg.reason);
         }
       } catch (err) {
         console.error('Error parsing WebSocket message:', err);
@@ -91,6 +96,16 @@ export class VoiceSession {
     };
 
     await this.startSpeechRecognition();
+  }
+
+  sendImageCapture(base64Jpeg: string, caption?: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      console.log('[Mobile Sending Image Capture]:', base64Jpeg.length, 'base64 chars, caption:', caption || '(none)');
+      this.promptSentTime = Date.now();
+      this.firstChunkTime = 0;
+      this.pcmTurnChunks = [];
+      this.ws.send(JSON.stringify({ type: 'image_capture', data: base64Jpeg, caption }));
+    }
   }
 
   private async startSpeechRecognition() {
