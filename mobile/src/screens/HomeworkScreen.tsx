@@ -1,8 +1,8 @@
 import { useState, useRef } from 'react';
 import { View, Text, Pressable, StyleSheet, ActivityIndicator, Image, ScrollView } from 'react-native';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
-import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { analyzeHomework } from '../services/homework';
+import { pickImageFromGallery, processAndCompressImage } from '../utils/imageHelper';
 
 type Props = {
   studentId: string;
@@ -34,9 +34,9 @@ export default function HomeworkScreen({ studentId, studentName, onBack, onScanS
   if (!permission.granted) {
     return (
       <View style={styles.center}>
-        <Text style={styles.title}>Camera Permission Needed 📷</Text>
+        <Text style={styles.title}>Camera & Photo Permission Needed 📷</Text>
         <Text style={styles.subtitle}>
-          Kidsko needs camera access so your child can scan homework worksheets.
+          Kidsko needs camera and photo access so your child can scan or upload homework worksheets.
         </Text>
         <Pressable style={styles.button} onPress={requestPermission}>
           <Text style={styles.buttonText}>Grant Permission</Text>
@@ -58,22 +58,36 @@ export default function HomeworkScreen({ studentId, studentName, onBack, onScanS
       setPhotoUri(photo.uri);
       setAnalyzing(true);
 
-      // Compress and convert to base64
-      const manipResult = await manipulateAsync(
-        photo.uri,
-        [{ resize: { width: 1024 } }],
-        { compress: 0.75, format: SaveFormat.JPEG, base64: true }
-      );
-
-      if (!manipResult.base64) {
-        throw new Error('Failed to process image data.');
-      }
-
-      const res = await analyzeHomework(studentId, manipResult.base64);
+      const processed = await processAndCompressImage(photo.uri);
+      const res = await analyzeHomework(studentId, processed.base64);
       setExplanation(res.explanation);
       setResultThreadId(res.threadId);
     } catch (err: any) {
       setErrorMsg(err.message || 'Could not scan photo.');
+      setPhotoUri(null);
+      if (err.status === 429 && onLimitReached) {
+        onLimitReached();
+      }
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const handlePickGallery = async () => {
+    if (analyzing) return;
+    try {
+      setErrorMsg(null);
+      const picked = await pickImageFromGallery();
+      if (!picked) return;
+
+      setPhotoUri(picked.uri);
+      setAnalyzing(true);
+
+      const res = await analyzeHomework(studentId, picked.base64);
+      setExplanation(res.explanation);
+      setResultThreadId(res.threadId);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Could not process gallery image.');
       setPhotoUri(null);
       if (err.status === 429 && onLimitReached) {
         onLimitReached();
@@ -114,7 +128,7 @@ export default function HomeworkScreen({ studentId, studentName, onBack, onScanS
           <CameraView style={styles.camera} facing={facing} ref={cameraRef} />
           <View style={styles.cameraOverlay}>
             <View style={styles.scanFrame} />
-            <Text style={styles.cameraHint}>Align worksheet inside the box</Text>
+            <Text style={styles.cameraHint}>Align worksheet inside the box or pick from gallery</Text>
           </View>
           <View style={styles.controls}>
             <Pressable
@@ -126,7 +140,9 @@ export default function HomeworkScreen({ studentId, studentName, onBack, onScanS
             <Pressable style={styles.snapButtonOuter} onPress={handleSnap}>
               <View style={styles.snapButtonInner} />
             </Pressable>
-            <View style={{ width: 60 }} />
+            <Pressable style={styles.galleryButton} onPress={handlePickGallery}>
+              <Text style={styles.galleryText}>🖼️ Gallery</Text>
+            </Pressable>
           </View>
         </View>
       ) : (
@@ -156,7 +172,7 @@ export default function HomeworkScreen({ studentId, studentName, onBack, onScanS
               </Pressable>
 
               <Pressable style={styles.retakeButton} onPress={handleRetake}>
-                <Text style={styles.retakeText}>← Scan Another Page</Text>
+                <Text style={styles.retakeText}>← Scan / Select Another Page</Text>
               </Pressable>
             </View>
           ) : null}
@@ -214,7 +230,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   flipButton: { padding: 12 },
-  flipText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  flipText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  galleryButton: { padding: 12 },
+  galleryText: { color: '#FFD54F', fontWeight: '700', fontSize: 14 },
   snapButtonOuter: {
     width: 76,
     height: 76,

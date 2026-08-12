@@ -10,7 +10,8 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSSpeechRecognitionUsageDescription": "Kidsko needs speech recognition to understand your child's questions.",
-        "NSMicrophoneUsageDescription": "Kidsko needs microphone access so your child can ask questions by voice."
+        "NSMicrophoneUsageDescription": "Kidsko needs microphone access so your child can ask questions by voice.",
+        "NSPhotoLibraryUsageDescription": "Kidsko needs photo library access so you can select homework images to upload."
       }
     },
     "android": {
@@ -23,7 +24,8 @@
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_MEDIA_IMAGES"
       ],
       "package": "kidsko.ai"
     },
@@ -37,6 +39,12 @@
         "expo-camera",
         {
           "cameraPermission": "Kidsko needs camera access so your child can scan homework worksheets."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Kidsko needs access to your photos so you can select homework images to upload."
         }
       ],
       [

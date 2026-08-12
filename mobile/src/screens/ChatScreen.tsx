@@ -9,10 +9,14 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Modal,
+  Image,
 } from 'react-native';
 import * as Speech from 'expo-speech';
 import { sendMessage, Message } from '../services/chat';
+import { analyzeHomework } from '../services/homework';
 import { useVoiceInput } from '../hooks/useVoiceInput';
+import { pickImageFromGallery, captureImageFromCamera, ProcessedImage } from '../utils/imageHelper';
 
 type Props = {
   studentId: string;
@@ -39,6 +43,12 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
   const [speakingIdx, setSpeakingIdx] = useState<number | null>(null);
   const [remaining, setRemaining] = useState<number | null>(null);
   const [isPremium, setIsPremium] = useState(false);
+
+  // Image upload states
+  const [showImagePickerModal, setShowImagePickerModal] = useState(false);
+  const [previewImage, setPreviewImage] = useState<ProcessedImage | null>(null);
+  const [analyzingImage, setAnalyzingImage] = useState(false);
+
   const listRef = useRef<FlatList>(null);
 
   const { listening, startListening, stopListening } = useVoiceInput((transcript) => {
@@ -107,6 +117,58 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
     }
   };
 
+  const handlePickGallery = async () => {
+    setShowImagePickerModal(false);
+    try {
+      const result = await pickImageFromGallery();
+      if (result) {
+        setPreviewImage(result);
+      }
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Could not pick image from gallery.');
+    }
+  };
+
+  const handleTakeCamera = async () => {
+    setShowImagePickerModal(false);
+    try {
+      const result = await captureImageFromCamera();
+      if (result) {
+        setPreviewImage(result);
+      }
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Could not capture image from camera.');
+    }
+  };
+
+  const handleSendImage = async () => {
+    if (!previewImage || analyzingImage) return;
+
+    setErrorMsg(null);
+    setAnalyzingImage(true);
+    setMessages((prev) => [...prev, { role: 'user', content: '📸 [Homework worksheet photo]' }]);
+
+    try {
+      const res = await analyzeHomework(studentId, previewImage.base64, threadId);
+      setThreadId(res.threadId);
+      setMessages((prev) => [...prev, { role: 'assistant', content: res.explanation }]);
+      setPreviewImage(null);
+
+      Speech.speak(res.explanation, {
+        language: 'en-US',
+        rate: 0.9,
+      });
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Could not analyze homework photo.');
+      if (err.status === 429 && onLimitReached) {
+        onLimitReached();
+      }
+    } finally {
+      setAnalyzingImage(false);
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -131,7 +193,7 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
         <View style={styles.welcome}>
           <Text style={styles.welcomeEmoji}>🦉</Text>
           <Text style={styles.welcomeTitle}>Ask me anything!</Text>
-          <Text style={styles.welcomeSubtitle}>Type or tap the mic 🎙️ to talk to me!</Text>
+          <Text style={styles.welcomeSubtitle}>Type, tap the mic 🎙️, or tap 📷 to send homework photos!</Text>
         </View>
       ) : (
         <FlatList
@@ -165,6 +227,34 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
         />
       )}
 
+      {/* Image Preview Box */}
+      {previewImage && (
+        <View style={styles.previewCard}>
+          <Image source={{ uri: previewImage.uri }} style={styles.previewThumbnail} />
+          <View style={styles.previewActions}>
+            <Text style={styles.previewTitle}>Homework Photo Selected</Text>
+            {analyzingImage ? (
+              <View style={styles.analyzingRow}>
+                <ActivityIndicator size="small" color="#1a73e8" />
+                <Text style={styles.analyzingText}>Reading worksheet... 🦉</Text>
+              </View>
+            ) : (
+              <View style={styles.previewBtnRow}>
+                <Pressable style={styles.sendPhotoBtn} onPress={handleSendImage}>
+                  <Text style={styles.sendPhotoBtnText}>Send Photo 🚀</Text>
+                </Pressable>
+                <Pressable style={styles.changePhotoBtn} onPress={() => setShowImagePickerModal(true)}>
+                  <Text style={styles.changePhotoBtnText}>Change</Text>
+                </Pressable>
+                <Pressable style={styles.cancelPhotoBtn} onPress={() => setPreviewImage(null)}>
+                  <Text style={styles.cancelPhotoBtnText}>✕</Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
+        </View>
+      )}
+
       {sending && (
         <View style={styles.typingRow}>
           <ActivityIndicator size="small" color="#1a73e8" />
@@ -175,6 +265,13 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
       {errorMsg && <Text style={styles.error}>{errorMsg}</Text>}
 
       <View style={styles.inputBar}>
+        <Pressable
+          style={styles.imagePickerButton}
+          onPress={() => setShowImagePickerModal(true)}
+        >
+          <Text style={styles.imagePickerButtonText}>📷</Text>
+        </Pressable>
+
         <Pressable
           style={[styles.micButton, listening && styles.micButtonListening]}
           onPress={listening ? stopListening : startListening}
@@ -197,6 +294,28 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
           <Text style={styles.sendButtonText}>➤</Text>
         </Pressable>
       </View>
+
+      {/* Image Selection Modal */}
+      <Modal visible={showImagePickerModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Select Homework Photo</Text>
+            <Text style={styles.modalSubtitle}>How would you like to attach the photo?</Text>
+
+            <Pressable style={styles.optionButton} onPress={handleTakeCamera}>
+              <Text style={styles.optionButtonText}>📸 Take Photo with Camera</Text>
+            </Pressable>
+
+            <Pressable style={[styles.optionButton, styles.optionButtonSecondary]} onPress={handlePickGallery}>
+              <Text style={styles.optionButtonTextSecondary}>🖼️ Choose from Gallery</Text>
+            </Pressable>
+
+            <Pressable style={styles.cancelModalButton} onPress={() => setShowImagePickerModal(false)}>
+              <Text style={styles.cancelModalText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -227,7 +346,7 @@ const styles = StyleSheet.create({
   welcome: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   welcomeEmoji: { fontSize: 56, marginBottom: 10 },
   welcomeTitle: { fontSize: 20, fontWeight: '800', color: '#111' },
-  welcomeSubtitle: { fontSize: 13, color: '#6b7280', marginTop: 4 },
+  welcomeSubtitle: { fontSize: 13, color: '#6b7280', marginTop: 4, textAlign: 'center' },
   messagesList: { flex: 1 },
   msgRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
   msgRowUser: { flexDirection: 'row-reverse' },
@@ -272,6 +391,15 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#f0f0f0',
   },
+  imagePickerButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#e8f0fe',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imagePickerButtonText: { fontSize: 18 },
   micButton: {
     width: 40,
     height: 40,
@@ -310,4 +438,39 @@ const styles = StyleSheet.create({
   },
   sendButtonInactive: { backgroundColor: '#ccc' },
   sendButtonText: { color: '#fff', fontSize: 16 },
+
+  // Preview Card styles
+  previewCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    padding: 12,
+    gap: 12,
+  },
+  previewThumbnail: { width: 60, height: 60, borderRadius: 12, backgroundColor: '#CBD5E1' },
+  previewActions: { flex: 1, gap: 6 },
+  previewTitle: { fontSize: 13, fontWeight: '700', color: '#1E293B' },
+  previewBtnRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sendPhotoBtn: { backgroundColor: '#1a73e8', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  sendPhotoBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  changePhotoBtn: { backgroundColor: '#E2E8F0', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
+  changePhotoBtnText: { color: '#334155', fontSize: 12, fontWeight: '700' },
+  cancelPhotoBtn: { backgroundColor: '#FEE2E2', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
+  cancelPhotoBtnText: { color: '#EF4444', fontSize: 12, fontWeight: '700' },
+  analyzingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  analyzingText: { fontSize: 12, fontWeight: '700', color: '#1a73e8' },
+
+  // Modal styles
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, alignItems: 'center', gap: 12 },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: '#111' },
+  modalSubtitle: { fontSize: 13, color: '#6b7280', marginBottom: 8, textAlign: 'center' },
+  optionButton: { width: '100%', backgroundColor: '#1a73e8', borderRadius: 16, paddingVertical: 14, alignItems: 'center' },
+  optionButtonText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  optionButtonSecondary: { backgroundColor: '#f4f4f4', borderWidth: 1, borderColor: '#e0e0e0' },
+  optionButtonTextSecondary: { color: '#111', fontWeight: '700', fontSize: 15 },
+  cancelModalButton: { marginTop: 8, paddingVertical: 10 },
+  cancelModalText: { color: '#EA4335', fontWeight: '700', fontSize: 15 },
 });

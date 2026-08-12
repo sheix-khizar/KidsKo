@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { CameraView, useCameraPermissions } from 'expo-camera';
-import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
+import { View, Text, Pressable, StyleSheet, Modal, ActivityIndicator } from 'react-native';
 import { VoiceSession } from '../services/voiceSocket';
+import { pickImageFromGallery, captureImageFromCamera } from '../utils/imageHelper';
 
 type Props = {
   studentId: string;
@@ -15,12 +14,12 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
   const [status, setStatus] = useState<'connecting' | 'live' | 'ended'>('connecting');
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [errorReason, setErrorReason] = useState<string | null>(null);
-  const [cameraOpen, setCameraOpen] = useState(false);
+  const [showOptionModal, setShowOptionModal] = useState(false);
+  const [isSendingSnapshot, setIsSendingSnapshot] = useState(false);
   const [snapshotsRemaining, setSnapshotsRemaining] = useState<number | null>(null);
-  const [permission, requestPermission] = useCameraPermissions();
+
   const sessionRef = useRef<VoiceSession | null>(null);
   const timerRef = useRef<any>(null);
-  const cameraRef = useRef<CameraView | null>(null);
 
   useEffect(() => {
     const session = new VoiceSession();
@@ -51,10 +50,10 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
         },
         onSnapshotAck: (remaining) => {
           setSnapshotsRemaining(remaining);
-          setCameraOpen(false);
+          setIsSendingSnapshot(false);
         },
         onSnapshotError: (reason) => {
-          setCameraOpen(false);
+          setIsSendingSnapshot(false);
           if (reason.toLowerCase().includes('upgrade') || reason.toLowerCase().includes('used up')) {
             onLimitReached();
           } else {
@@ -76,67 +75,94 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
     onBack();
   };
 
-  const handleOpenCamera = async () => {
-    if (!permission?.granted) {
-      const result = await requestPermission();
-      if (!result.granted) return;
+  const handlePickGallery = async () => {
+    setShowOptionModal(false);
+    try {
+      const result = await pickImageFromGallery();
+      if (result) {
+        sendHomeworkPhoto(result.base64);
+      }
+    } catch (err: any) {
+      setErrorReason(err?.message || 'Could not pick image from gallery.');
     }
-    setCameraOpen(true);
   };
 
-  const handleCapture = async () => {
-    if (!cameraRef.current) return;
-    const photo = await cameraRef.current.takePictureAsync({ quality: 0.8 });
-    if (!photo) return;
-
-    const manipResult = await manipulateAsync(
-      photo.uri,
-      [{ resize: { width: 1024 } }],
-      { compress: 0.75, format: SaveFormat.JPEG, base64: true }
-    );
-    if (manipResult.base64) {
-      sessionRef.current?.sendImageCapture(manipResult.base64, 'Please look at this and help me with my homework.');
+  const handleTakeCamera = async () => {
+    setShowOptionModal(false);
+    try {
+      const result = await captureImageFromCamera();
+      if (result) {
+        sendHomeworkPhoto(result.base64);
+      }
+    } catch (err: any) {
+      setErrorReason(err?.message || 'Could not capture image from camera.');
     }
+  };
+
+  const sendHomeworkPhoto = (base64: string) => {
+    setIsSendingSnapshot(true);
+    setErrorReason(null);
+    sessionRef.current?.sendImageCapture(base64, 'Please look at this and help me with my homework.');
   };
 
   return (
     <View style={styles.container}>
-      {cameraOpen ? (
-        <View style={StyleSheet.absoluteFill}>
-          <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" />
-          <View style={styles.cameraControls}>
-            <Pressable style={styles.captureButton} onPress={handleCapture}>
-              <Text style={styles.captureButtonText}>📸 Capture</Text>
+      <Text style={styles.title}>
+        {status === 'connecting'
+          ? 'Connecting to Kidsko Live...'
+          : status === 'live'
+          ? `🎙️ Talking to Kidsko (${studentName})`
+          : 'Voice Session Ended'}
+      </Text>
+
+      {secondsLeft !== null && status === 'live' && (
+        <Text style={styles.timer}>{secondsLeft}s remaining</Text>
+      )}
+
+      {isSendingSnapshot ? (
+        <View style={styles.analyzingBox}>
+          <ActivityIndicator size="large" color="#FFD54F" />
+          <Text style={styles.analyzingText}>🦉 Looking at your homework...</Text>
+        </View>
+      ) : (
+        status === 'live' && (
+          <Pressable style={styles.showButton} onPress={() => setShowOptionModal(true)}>
+            <Text style={styles.showButtonText}>📷 Show Homework</Text>
+          </Pressable>
+        )
+      )}
+
+      {snapshotsRemaining !== null && (
+        <Text style={styles.snapshotCount}>{snapshotsRemaining} photo helps left this week</Text>
+      )}
+
+      {errorReason && <Text style={styles.errorSub}>{errorReason}</Text>}
+
+      <Pressable style={styles.endButton} onPress={handleEnd}>
+        <Text style={styles.endButtonText}>{status === 'ended' ? 'Close' : 'End Call'}</Text>
+      </Pressable>
+
+      {/* Option Sheet Modal */}
+      <Modal visible={showOptionModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Show Homework to Kidsko</Text>
+            <Text style={styles.modalSubtitle}>How would you like to provide the homework photo?</Text>
+
+            <Pressable style={styles.optionButton} onPress={handleTakeCamera}>
+              <Text style={styles.optionButtonText}>📸 Take Photo with Camera</Text>
             </Pressable>
-            <Pressable onPress={() => setCameraOpen(false)}>
-              <Text style={styles.cancelText}>Cancel</Text>
+
+            <Pressable style={[styles.optionButton, styles.optionButtonSecondary]} onPress={handlePickGallery}>
+              <Text style={styles.optionButtonTextSecondary}>🖼️ Choose from Gallery</Text>
+            </Pressable>
+
+            <Pressable style={styles.cancelModalButton} onPress={() => setShowOptionModal(false)}>
+              <Text style={styles.cancelModalText}>Cancel</Text>
             </Pressable>
           </View>
         </View>
-      ) : (
-        <>
-          <Text style={styles.title}>
-            {status === 'connecting'
-              ? 'Connecting to Kidsko Live...'
-              : status === 'live'
-              ? `🎙️ Talking to Kidsko (${studentName})`
-              : 'Voice Session Ended'}
-          </Text>
-          {secondsLeft !== null && status === 'live' && <Text style={styles.timer}>{secondsLeft}s remaining</Text>}
-          {status === 'live' && (
-            <Pressable style={styles.showButton} onPress={handleOpenCamera}>
-              <Text style={styles.showButtonText}>📷 Show Kidsko my homework</Text>
-            </Pressable>
-          )}
-          {snapshotsRemaining !== null && (
-            <Text style={styles.snapshotCount}>{snapshotsRemaining} photo helps left this week</Text>
-          )}
-          {errorReason && <Text style={styles.errorSub}>{errorReason}</Text>}
-          <Pressable style={styles.endButton} onPress={handleEnd}>
-            <Text style={styles.endButtonText}>{status === 'ended' ? 'Close' : 'End Call'}</Text>
-          </Pressable>
-        </>
-      )}
+      </Modal>
     </View>
   );
 }
@@ -146,13 +172,23 @@ const styles = StyleSheet.create({
   title: { fontSize: 20, fontWeight: '800', color: '#fff', marginBottom: 12, textAlign: 'center' },
   timer: { fontSize: 16, color: '#FFD54F', fontWeight: '700', marginBottom: 20 },
   errorSub: { fontSize: 14, color: '#FF8A80', fontWeight: '600', marginBottom: 30, textAlign: 'center' },
-  endButton: { backgroundColor: '#EA4335', borderRadius: 30, paddingVertical: 14, paddingHorizontal: 40 },
+  endButton: { backgroundColor: '#EA4335', borderRadius: 30, paddingVertical: 14, paddingHorizontal: 40, marginTop: 10 },
   endButtonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  showButton: { backgroundColor: '#1a73e8', borderRadius: 20, paddingVertical: 12, paddingHorizontal: 24, marginBottom: 12 },
-  showButtonText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  showButton: { backgroundColor: '#1a73e8', borderRadius: 24, paddingVertical: 14, paddingHorizontal: 28, marginBottom: 12 },
+  showButtonText: { color: '#fff', fontWeight: '800', fontSize: 16 },
   snapshotCount: { color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: '600', marginBottom: 20 },
-  cameraControls: { position: 'absolute', bottom: 40, width: '100%', alignItems: 'center', gap: 16 },
-  captureButton: { backgroundColor: '#fff', borderRadius: 30, paddingVertical: 14, paddingHorizontal: 30 },
-  captureButtonText: { fontWeight: '800', fontSize: 16, color: '#1a1a2e' },
-  cancelText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  analyzingBox: { alignItems: 'center', marginVertical: 20, gap: 10 },
+  analyzingText: { color: '#FFD54F', fontSize: 16, fontWeight: '700' },
+
+  // Modal styles
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: '#22223b', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, alignItems: 'center', gap: 12 },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: '#fff' },
+  modalSubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.7)', marginBottom: 8, textAlign: 'center' },
+  optionButton: { width: '100%', backgroundColor: '#1a73e8', borderRadius: 16, paddingVertical: 14, alignItems: 'center' },
+  optionButtonText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  optionButtonSecondary: { backgroundColor: '#333355', borderWidth: 1, borderColor: '#555577' },
+  optionButtonTextSecondary: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  cancelModalButton: { marginTop: 8, paddingVertical: 10 },
+  cancelModalText: { color: '#FF8A80', fontWeight: '700', fontSize: 15 },
 });
