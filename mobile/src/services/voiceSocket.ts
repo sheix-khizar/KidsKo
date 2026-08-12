@@ -22,10 +22,9 @@ export class VoiceSession {
   private isSessionActive = false;
   private isStartingSpeech = false;
 
-  // Diagnostic & Concurrency Timers
+  // Diagnostic Timers
   private promptSentTime = 0;
   private firstChunkTime = 0;
-  private speechStartTime = 0;
 
   async start(callbacks: VoiceCallbacks, studentId?: string) {
     const token = await getToken();
@@ -58,17 +57,16 @@ export class VoiceSession {
           if (this.pcmTurnChunks.length === 0) {
             this.firstChunkTime = Date.now();
             const latencyToFirstChunk = this.promptSentTime > 0 ? this.firstChunkTime - this.promptSentTime : 0;
-            console.log(`[Voice Metrics] First audio chunk received: +${latencyToFirstChunk} ms`);
+            console.log(`[Mobile Audio] First chunk received: +${latencyToFirstChunk} ms after prompt sent`);
           }
           this.pcmTurnChunks.push(msg.data);
           console.log(`[Mobile Inbound Audio Chunk #${this.pcmTurnChunks.length}]: base64 len = ${msg.data.length}`);
         } else if (msg.type === 'turn_complete') {
           const turnCompleteTime = Date.now();
           const latencyToTurnComplete = this.promptSentTime > 0 ? turnCompleteTime - this.promptSentTime : 0;
-          console.log(`[Voice Metrics] Turn complete signal: +${latencyToTurnComplete} ms (Collected ${this.pcmTurnChunks.length} chunks)`);
+          console.log(`[Mobile Audio] Turn complete: +${latencyToTurnComplete} ms after prompt sent. Total chunks collected = ${this.pcmTurnChunks.length}`);
           this.playFullTurnBufferedAudio();
         } else if (msg.type === 'text') {
-          // UI / Transcript logging only — NEVER invoke local TTS during Gemini voice calls!
           callbacks.onTranscript?.(msg.data);
         } else if (msg.type === 'snapshot_ack') {
           console.log(`[Mobile Snapshot Ack]: ${msg.remaining} remaining this week`);
@@ -102,27 +100,12 @@ export class VoiceSession {
 
   sendImageCapture(base64Jpeg: string, caption?: string) {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.stopActivePlaybackAndPurgeBuffer('New Image Snapshot Sent');
+      console.log('[Mobile Sending Image Capture]:', base64Jpeg.length, 'base64 chars, caption:', caption || '(none)');
       this.promptSentTime = Date.now();
       this.firstChunkTime = 0;
-      console.log('[Voice Metrics] Image capture sent to backend: +0 ms');
+      this.pcmTurnChunks = [];
       this.ws.send(JSON.stringify({ type: 'image_capture', data: base64Jpeg, caption }));
     }
-  }
-
-  /**
-   * Immediately stops any currently playing turn audio and purges old PCM buffer
-   * to guarantee zero double-voice overlap or concurrency bugs.
-   */
-  private stopActivePlaybackAndPurgeBuffer(reason: string) {
-    if (this.activePlayer) {
-      console.log(`[Voice Turn Manager]: Interruption/Barge-in (${reason}) -> Stopping active AudioPlayer immediately.`);
-      try {
-        this.activePlayer.remove();
-      } catch {}
-      this.activePlayer = null;
-    }
-    this.pcmTurnChunks = [];
   }
 
   private async startSpeechRecognition() {
@@ -140,28 +123,24 @@ export class VoiceSession {
       this.clearSpeechSubscriptions();
 
       const subStart = ExpoSpeechRecognitionModule.addListener('start', () => {
-        this.speechStartTime = Date.now();
-        console.log('[SpeechRec Lifecycle]: Started listening for spoken user turn...');
+        console.log('[SpeechRec Lifecycle]: Started listening for spoken user turns...');
       });
 
       const subResult = ExpoSpeechRecognitionModule.addListener('result', (event: any) => {
         const transcript = event.results?.[0]?.transcript?.trim();
-        const isFinal = !!event.isFinal;
-
-        // ONLY dispatch final recognized speech turns to prevent interim text flooding
-        if (transcript && transcript.length > 0 && isFinal && transcript !== this.lastSentTranscript && this.ws?.readyState === WebSocket.OPEN) {
-          const sttDuration = this.speechStartTime > 0 ? Date.now() - this.speechStartTime : 0;
-          console.log(`[Voice Metrics] STT final: "${transcript}" (${sttDuration} ms)`);
-
-          // 1. Interruption: Stop active audio player & clear old buffer
-          this.stopActivePlaybackAndPurgeBuffer('New Spoken User Turn');
-
-          // 2. Reset diagnostic timers for new turn
+        if (transcript && transcript.length > 0 && transcript !== this.lastSentTranscript && this.ws?.readyState === WebSocket.OPEN) {
+          if (this.activePlayer) {
+            console.log('[Mobile Turn Interrupted]: New user turn spoken while previous audio was playing. Stopping active player.');
+            try {
+              this.activePlayer.remove();
+            } catch {}
+            this.activePlayer = null;
+          }
           this.promptSentTime = Date.now();
           this.firstChunkTime = 0;
+          this.pcmTurnChunks = [];
+          console.log('[Mobile Voice Input] Sending final spoken turn to Gemini Live:', transcript);
           this.lastSentTranscript = transcript;
-
-          console.log('[Voice Metrics] Prompt sent to backend: +0 ms');
           this.ws.send(JSON.stringify({ type: 'text_prompt', data: transcript }));
         }
       });
@@ -284,7 +263,8 @@ export class VoiceSession {
 
       const playbackStartTime = Date.now();
       const timeToFirstAudio = this.promptSentTime > 0 ? playbackStartTime - this.promptSentTime : 0;
-      console.log(`[Voice Metrics] Playback started: +${timeToFirstAudio} ms`);
+      console.log(`[Mobile Audio] Playback started: +${timeToFirstAudio} ms after prompt sent`);
+      console.log(`[Mobile Audio] Time to first audio: ${timeToFirstAudio} ms`);
 
       const player = createAudioPlayer({ uri: `data:audio/wav;base64,${wavBase64}` });
       this.activePlayer = player;
@@ -293,7 +273,7 @@ export class VoiceSession {
         if (status.didJustFinish) {
           const playbackEndTime = Date.now();
           const totalTurnTime = this.promptSentTime > 0 ? playbackEndTime - this.promptSentTime : 0;
-          console.log(`[Voice Metrics] Playback finished: +${totalTurnTime} ms. Session remains WAITING FOR NEXT USER TURN.`);
+          console.log(`[Mobile Audio] Playback finished: +${totalTurnTime} ms after prompt sent. Session remains WAITING FOR NEXT USER TURN.`);
           try {
             player.remove();
           } catch {}
