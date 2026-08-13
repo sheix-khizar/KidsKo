@@ -6,6 +6,7 @@ import { checkAndIncrementUsage } from '../lib/usageLimits';
 import { getCachedAnswer, setCachedAnswer } from '../lib/cache';
 import { logUsageEvent } from '../lib/usageEvents';
 import { getThreadImage, setThreadImage } from '../lib/threadImageStore';
+import { downloadHomeworkImageFromStorage } from '../lib/homeworkStorage';
 
 const router = Router();
 
@@ -75,24 +76,41 @@ router.post('/', requireAuth, userRateLimit, async (req: Request, res: Response)
       // If memory cache is empty (e.g. after server restart), scan DB history for persistent image marker
       if (!threadImage && recentMessages) {
         for (const m of recentMessages) {
-          if (m.content && m.content.includes('[IMAGE:')) {
-            const match = m.content.match(/\[IMAGE:(.*?)\]/);
-            if (match && match[1]) {
-              const base64 = match[1];
-              setThreadImage(activeThreadId, base64, 'image/jpeg');
-              threadImage = { base64, mimeType: 'image/jpeg', updatedAt: Date.now() };
-              console.log(`[Visual Memory Restored]: Found and restored homework photo from Supabase DB history for thread ${activeThreadId}`);
-              break;
+          if (m.content) {
+            if (m.content.includes('[STORAGE:')) {
+              const match = m.content.match(/\[STORAGE:(.*?)\]/);
+              if (match && match[1]) {
+                const storagePath = match[1];
+                const downloadedBase64 = await downloadHomeworkImageFromStorage(req.supabase!, storagePath);
+                if (downloadedBase64) {
+                  setThreadImage(activeThreadId, downloadedBase64, 'image/jpeg');
+                  threadImage = { base64: downloadedBase64, mimeType: 'image/jpeg', updatedAt: Date.now() };
+                  console.log(`[Visual Memory Restored]: Downloaded and restored photo from Supabase Storage (${storagePath}) for thread ${activeThreadId}`);
+                  break;
+                }
+              }
+            } else if (m.content.includes('[IMAGE:')) {
+              const match = m.content.match(/\[IMAGE:(.*?)\]/);
+              if (match && match[1]) {
+                const base64 = match[1];
+                setThreadImage(activeThreadId, base64, 'image/jpeg');
+                threadImage = { base64, mimeType: 'image/jpeg', updatedAt: Date.now() };
+                console.log(`[Visual Memory Restored]: Found and restored photo from DB history for thread ${activeThreadId}`);
+                break;
+              }
             }
           }
         }
       }
 
-      // Format history for Gemini: strip raw [IMAGE:base64] payload from message content text
+      // Format history for Gemini: strip raw [STORAGE:...] & [IMAGE:...] payload from message content text
       const history: ChatMessage[] = (recentMessages || []).reverse().map((m) => {
         let cleanContent = m.content;
-        if (cleanContent.includes('[IMAGE:')) {
-          cleanContent = cleanContent.replace(/📸\s*\[IMAGE:.*?\]\s*/g, '📸 ').trim();
+        if (cleanContent.includes('[STORAGE:') || cleanContent.includes('[IMAGE:')) {
+          cleanContent = cleanContent
+            .replace(/📸\s*\[STORAGE:.*?\]\s*/g, '📸 ')
+            .replace(/📸\s*\[IMAGE:.*?\]\s*/g, '📸 ')
+            .trim();
         }
         return {
           role: m.role as 'user' | 'assistant',

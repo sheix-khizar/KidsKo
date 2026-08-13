@@ -53,8 +53,11 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
   });
 
   const cleanBubbleContent = (content: string) => {
-    if (content.includes('[IMAGE:')) {
-      return content.replace(/📸\s*\[IMAGE:.*?\]\s*/g, '📸 ').trim();
+    if (content.includes('[STORAGE:') || content.includes('[IMAGE:')) {
+      return content
+        .replace(/📸\s*\[STORAGE:.*?\]\s*/g, '📸 ')
+        .replace(/📸\s*\[IMAGE:.*?\]\s*/g, '📸 ')
+        .trim();
     }
     return content;
   };

@@ -6,6 +6,7 @@ import { generateHomeworkExplanation } from '../lib/gemini';
 import { checkAndIncrementUsage } from '../lib/usageLimits';
 import { logUsageEvent } from '../lib/usageEvents';
 import { setThreadImage } from '../lib/threadImageStore';
+import { uploadHomeworkImageToStorage } from '../lib/homeworkStorage';
 
 const router = Router();
 
@@ -42,13 +43,17 @@ router.post('/analyze', requireAuth, imageRateLimit, async (req: Request, res: R
       activeThreadId = thread.id;
     }
 
-    // Store latest image in visual memory cache for this thread
+    // Store in-memory cache for fast immediate turns
     setThreadImage(activeThreadId, compressedBase64, 'image/jpeg');
 
-    // Save persistent DB message with embedded image marker so image memory survives server restarts
-    const userMessageContent = prompt?.trim()
-      ? `📸 [IMAGE:${compressedBase64}] ${prompt.trim()}`
-      : `📸 [IMAGE:${compressedBase64}] [Homework photo submitted]`;
+    // Attempt Supabase Storage bucket upload
+    const storageResult = await uploadHomeworkImageToStorage(req.supabase!, activeThreadId, compressedBuffer);
+
+    // Format DB message content: use lightweight Storage Path reference if uploaded, else fallback
+    const userPromptText = prompt?.trim() || '';
+    const userMessageContent = storageResult
+      ? `📸 [STORAGE:${storageResult.storagePath}] ${userPromptText || '[Homework photo submitted]'}`.trim()
+      : `📸 [IMAGE:${compressedBase64}] ${userPromptText || '[Homework photo submitted]'}`.trim();
 
     // Log the scan as a message (image type)
     await req.supabase!.from('messages').insert({
