@@ -5,6 +5,7 @@ import { generateChatReply, sanitizeChatResponse, ChatMessage } from '../lib/gem
 import { checkAndIncrementUsage } from '../lib/usageLimits';
 import { getCachedAnswer, setCachedAnswer } from '../lib/cache';
 import { logUsageEvent } from '../lib/usageEvents';
+import { getThreadImage } from '../lib/threadImageStore';
 
 const router = Router();
 
@@ -74,7 +75,8 @@ router.post('/', requireAuth, userRateLimit, async (req: Request, res: Response)
         content: m.content,
       }));
 
-      aiReply = await generateChatReply(history);
+      const threadImage = getThreadImage(activeThreadId);
+      aiReply = await generateChatReply(history, threadImage);
       aiReply = sanitizeChatResponse(aiReply);
       if (isFreshThread) await setCachedAnswer(message, aiReply);
     }

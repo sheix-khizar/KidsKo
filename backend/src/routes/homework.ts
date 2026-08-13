@@ -5,6 +5,7 @@ import { imageRateLimit } from '../middleware/userRateLimit';
 import { generateHomeworkExplanation } from '../lib/gemini';
 import { checkAndIncrementUsage } from '../lib/usageLimits';
 import { logUsageEvent } from '../lib/usageEvents';
+import { setThreadImage } from '../lib/threadImageStore';
 
 const router = Router();
 
@@ -40,6 +41,9 @@ router.post('/analyze', requireAuth, imageRateLimit, async (req: Request, res: R
       if (threadError) throw threadError;
       activeThreadId = thread.id;
     }
+
+    // Store latest image in visual memory cache for this thread
+    setThreadImage(activeThreadId, compressedBase64, 'image/jpeg');
 
     const userMessageContent = prompt?.trim()
       ? `📸 ${prompt.trim()}`

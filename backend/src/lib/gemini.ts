@@ -70,12 +70,27 @@ export function sanitizeChatResponse(text: string): string {
   return cleaned;
 }
 
-export async function generateChatReply(history: ChatMessage[]): Promise<string> {
-  // Convert our stored format into Gemini's expected format
-  const contents = history.map((m) => ({
-    role: m.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: m.content }],
-  }));
+export async function generateChatReply(
+  history: ChatMessage[],
+  threadImage?: { base64: string; mimeType: string }
+): Promise<string> {
+  // Convert stored format into Gemini's expected contents array
+  const contents = history.map((m, index) => {
+    const isFirstUserTurnWithImage = index === 0 && m.role === 'user' && threadImage;
+    const parts: any[] = [];
+
+    if (isFirstUserTurnWithImage) {
+      // Attach the thread's homework photo to the first user turn in context!
+      parts.push({ inlineData: { data: threadImage.base64, mimeType: threadImage.mimeType } });
+    }
+
+    parts.push({ text: m.content });
+
+    return {
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts,
+    };
+  });
 
   const response = await ai.models.generateContent({
     model: 'gemini-3.1-flash-lite',
