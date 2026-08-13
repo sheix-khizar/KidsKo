@@ -5,7 +5,7 @@ import { generateChatReply, sanitizeChatResponse, ChatMessage } from '../lib/gem
 import { checkAndIncrementUsage } from '../lib/usageLimits';
 import { getCachedAnswer, setCachedAnswer } from '../lib/cache';
 import { logUsageEvent } from '../lib/usageEvents';
-import { getThreadImage, setThreadImage } from '../lib/threadImageStore';
+import { getThreadImage, setThreadImage, awaitPendingUpload } from '../lib/threadImageStore';
 import { downloadHomeworkImageFromStorage } from '../lib/homeworkStorage';
 
 const router = Router();
@@ -41,6 +41,9 @@ router.post('/', requireAuth, userRateLimit, async (req: Request, res: Response)
       activeThreadId = thread.id;
     }
 
+    // STEP 3 FIX: Await any in-flight image compression/upload for this thread to prevent race conditions
+    await awaitPendingUpload(activeThreadId);
+
     // Save the user's message
     const { error: userMsgError } = await req.supabase!.from('messages').insert({
       thread_id: activeThreadId,
@@ -72,55 +75,79 @@ router.post('/', requireAuth, userRateLimit, async (req: Request, res: Response)
       if (historyError) throw historyError;
 
       let threadImage = getThreadImage(activeThreadId);
+      let hasImageMarkerInHistory = false;
+      let storageDownloadAttempted = false;
+      let storageDownloadFailed = false;
 
-      // If memory cache is empty (e.g. after server restart), scan DB history for persistent image marker
-      if (!threadImage && recentMessages) {
+      // Scan history for persistent image references if RAM cache is empty (e.g. after server restart)
+      if (recentMessages) {
         for (const m of recentMessages) {
           if (m.content) {
             if (m.content.includes('[STORAGE:')) {
-              const match = m.content.match(/\[STORAGE:(.*?)\]/);
-              if (match && match[1]) {
-                const storagePath = match[1];
-                const downloadedBase64 = await downloadHomeworkImageFromStorage(req.supabase!, storagePath);
-                if (downloadedBase64) {
-                  setThreadImage(activeThreadId, downloadedBase64, 'image/jpeg');
-                  threadImage = { base64: downloadedBase64, mimeType: 'image/jpeg', updatedAt: Date.now() };
-                  console.log(`[Visual Memory Restored]: Downloaded and restored photo from Supabase Storage (${storagePath}) for thread ${activeThreadId}`);
-                  break;
+              hasImageMarkerInHistory = true;
+              if (!threadImage) {
+                const match = m.content.match(/\[STORAGE:(.*?)\]/);
+                if (match && match[1]) {
+                  const storagePath = match[1];
+                  storageDownloadAttempted = true;
+                  try {
+                    const downloadedBase64 = await downloadHomeworkImageFromStorage(req.supabase!, storagePath);
+                    if (downloadedBase64) {
+                      setThreadImage(activeThreadId, downloadedBase64, 'image/jpeg');
+                      threadImage = { base64: downloadedBase64, mimeType: 'image/jpeg', updatedAt: Date.now() };
+                      console.log(`[Visual Memory Restored]: Downloaded photo from Supabase Storage (${storagePath}) for thread ${activeThreadId}`);
+                      break;
+                    } else {
+                      storageDownloadFailed = true;
+                    }
+                  } catch (downloadErr: any) {
+                    storageDownloadFailed = true;
+                    console.error(`[Storage Download Exception]: Thread ${activeThreadId} path ${storagePath} failed:`, downloadErr.message);
+                  }
                 }
               }
             } else if (m.content.includes('[IMAGE:')) {
-              const match = m.content.match(/\[IMAGE:(.*?)\]/);
-              if (match && match[1]) {
-                const base64 = match[1];
-                setThreadImage(activeThreadId, base64, 'image/jpeg');
-                threadImage = { base64, mimeType: 'image/jpeg', updatedAt: Date.now() };
-                console.log(`[Visual Memory Restored]: Found and restored photo from DB history for thread ${activeThreadId}`);
-                break;
+              hasImageMarkerInHistory = true;
+              if (!threadImage) {
+                const match = m.content.match(/\[IMAGE:(.*?)\]/);
+                if (match && match[1]) {
+                  const base64 = match[1];
+                  setThreadImage(activeThreadId, base64, 'image/jpeg');
+                  threadImage = { base64, mimeType: 'image/jpeg', updatedAt: Date.now() };
+                  console.log(`[Visual Memory Restored]: Restored photo from DB history for thread ${activeThreadId}`);
+                  break;
+                }
               }
             }
           }
         }
       }
 
-      // Format history for Gemini: strip raw [STORAGE:...] & [IMAGE:...] payload from message content text
-      const history: ChatMessage[] = (recentMessages || []).reverse().map((m) => {
-        let cleanContent = m.content;
-        if (cleanContent.includes('[STORAGE:') || cleanContent.includes('[IMAGE:')) {
-          cleanContent = cleanContent
-            .replace(/📸\s*\[STORAGE:.*?\]\s*/g, '📸 ')
-            .replace(/📸\s*\[IMAGE:.*?\]\s*/g, '📸 ')
-            .trim();
-        }
-        return {
-          role: m.role as 'user' | 'assistant',
-          content: cleanContent,
-        };
-      });
+      // STEP 2 FIX: Handle Storage Download Failures gracefully
+      // If a student's thread had a photo reference BUT retrieving it failed, return a friendly retry prompt instead of an AI hallucination
+      if (hasImageMarkerInHistory && storageDownloadAttempted && storageDownloadFailed && !threadImage) {
+        console.error(`[Storage Failure Guard]: Storage download failed for thread ${activeThreadId}. Prompting student for fresh photo.`);
+        aiReply = "Hmm, I lost track of your picture! Can you snap it again for me?";
+      } else {
+        // Format history for Gemini: strip raw [STORAGE:...] & [IMAGE:...] payload from message content text
+        const history: ChatMessage[] = (recentMessages || []).reverse().map((m) => {
+          let cleanContent = m.content;
+          if (cleanContent.includes('[STORAGE:') || cleanContent.includes('[IMAGE:')) {
+            cleanContent = cleanContent
+              .replace(/📸\s*\[STORAGE:.*?\]\s*/g, '📸 ')
+              .replace(/📸\s*\[IMAGE:.*?\]\s*/g, '📸 ')
+              .trim();
+          }
+          return {
+            role: m.role as 'user' | 'assistant',
+            content: cleanContent,
+          };
+        });
 
-      aiReply = await generateChatReply(history, threadImage);
-      aiReply = sanitizeChatResponse(aiReply);
-      if (isFreshThread) await setCachedAnswer(message, aiReply);
+        aiReply = await generateChatReply(history, threadImage);
+        aiReply = sanitizeChatResponse(aiReply);
+        if (isFreshThread) await setCachedAnswer(message, aiReply);
+      }
     }
 
     await logUsageEvent(req.supabase!, req.user!.id, studentId, 'message');

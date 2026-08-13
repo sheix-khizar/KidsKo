@@ -24,7 +24,7 @@ export async function uploadHomeworkImageToStorage(
       });
 
     if (error) {
-      console.warn(`[Supabase Storage Notice]: Upload to bucket '${BUCKET_NAME}' failed (${error.message}).`);
+      console.error(`[Supabase Storage Upload Error]: Bucket '${BUCKET_NAME}' path '${fileName}' failed: ${error.message}`);
       return null;
     }
 
@@ -35,7 +35,7 @@ export async function uploadHomeworkImageToStorage(
       publicUrl: urlData?.publicUrl,
     };
   } catch (err: any) {
-    console.warn(`[Supabase Storage Warning]: Exception during storage upload (${err.message}).`);
+    console.error(`[Supabase Storage Upload Exception]: Path 'threads/${threadId}/latest.jpg' error:`, err.message);
     return null;
   }
 }
@@ -51,7 +51,7 @@ export async function downloadHomeworkImageFromStorage(
       .download(storagePath);
 
     if (error || !data) {
-      console.warn(`[Supabase Storage Download Error]: Could not download image ${storagePath} (${error?.message}).`);
+      console.error(`[Supabase Storage Download Failure]: Could not download '${storagePath}' from bucket '${BUCKET_NAME}'. Error details: ${error?.message || 'Empty data returned'}`);
       return null;
     }
 
@@ -59,7 +59,7 @@ export async function downloadHomeworkImageFromStorage(
     const buffer = Buffer.from(arrayBuffer);
     return buffer.toString('base64');
   } catch (err: any) {
-    console.warn(`[Supabase Storage Download Exception]: ${err.message}`);
+    console.error(`[Supabase Storage Download Exception]: Path '${storagePath}' thrown error:`, err.stack || err.message);
     return null;
   }
 }

@@ -5,7 +5,7 @@ import { imageRateLimit } from '../middleware/userRateLimit';
 import { generateHomeworkExplanation } from '../lib/gemini';
 import { checkAndIncrementUsage } from '../lib/usageLimits';
 import { logUsageEvent } from '../lib/usageEvents';
-import { setThreadImage } from '../lib/threadImageStore';
+import { setThreadImage, registerPendingUpload } from '../lib/threadImageStore';
 import { uploadHomeworkImageToStorage } from '../lib/homeworkStorage';
 
 const router = Router();
@@ -24,14 +24,6 @@ router.post('/analyze', requireAuth, imageRateLimit, async (req: Request, res: R
       return res.status(429).json({ error: usage.reason, remaining: 0, isPremium: false });
     }
 
-    // Compress server-side regardless of what the client sent (defense in depth)
-    const rawBuffer = Buffer.from(imageBase64, 'base64');
-    const compressedBuffer = await sharp(rawBuffer)
-      .resize({ width: 1024, height: 1024, fit: 'inside' })
-      .jpeg({ quality: 75 })
-      .toBuffer();
-    const compressedBase64 = compressedBuffer.toString('base64');
-
     let activeThreadId = threadId;
     if (!activeThreadId) {
       const { data: thread, error: threadError } = await req.supabase!
@@ -43,11 +35,26 @@ router.post('/analyze', requireAuth, imageRateLimit, async (req: Request, res: R
       activeThreadId = thread.id;
     }
 
-    // Store in-memory cache for fast immediate turns
-    setThreadImage(activeThreadId, compressedBase64, 'image/jpeg');
+    // Process image compression, memory caching, and storage upload as an awaited pending task
+    const processImageTask = (async () => {
+      const rawBuffer = Buffer.from(imageBase64, 'base64');
+      const compressedBuffer = await sharp(rawBuffer)
+        .resize({ width: 1024, height: 1024, fit: 'inside' })
+        .jpeg({ quality: 75 })
+        .toBuffer();
+      const compressedBase64 = compressedBuffer.toString('base64');
 
-    // Attempt Supabase Storage bucket upload
-    const storageResult = await uploadHomeworkImageToStorage(req.supabase!, activeThreadId, compressedBuffer);
+      setThreadImage(activeThreadId, compressedBase64, 'image/jpeg');
+
+      const storageResult = await uploadHomeworkImageToStorage(req.supabase!, activeThreadId, compressedBuffer);
+
+      return { compressedBase64, storageResult };
+    })();
+
+    // Register pending task so parallel follow-up requests in POST /api/chat will await it
+    registerPendingUpload(activeThreadId, processImageTask);
+
+    const { compressedBase64, storageResult } = await processImageTask;
 
     // Format DB message content: use lightweight Storage Path reference if uploaded, else fallback
     const userPromptText = prompt?.trim() || '';
