@@ -1,6 +1,33 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 
 const BUCKET_NAME = 'homework-snapshots';
+let bucketChecked = false;
+
+// Automatically ensures that the Supabase Storage bucket exists
+async function ensureBucketExists(supabase: SupabaseClient) {
+  if (bucketChecked) return;
+  try {
+    const { data: bucket } = await supabase.storage.getBucket(BUCKET_NAME);
+    if (!bucket) {
+      console.log(`[Supabase Storage]: Bucket '${BUCKET_NAME}' not found. Auto-creating public bucket...`);
+      const { error: createErr } = await supabase.storage.createBucket(BUCKET_NAME, {
+        public: true,
+        fileSizeLimit: 10485760, // 10MB
+        allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
+      });
+      if (createErr) {
+        console.warn(`[Supabase Storage Auto-Create Notice]: ${createErr.message}. If using anon client, create bucket in Supabase Dashboard.`);
+      } else {
+        console.log(`[Supabase Storage]: Bucket '${BUCKET_NAME}' created automatically!`);
+        bucketChecked = true;
+      }
+    } else {
+      bucketChecked = true;
+    }
+  } catch (err: any) {
+    console.warn(`[Supabase Storage Notice]: Could not check bucket status (${err.message}).`);
+  }
+}
 
 export type StorageResult = {
   storagePath: string;
@@ -14,6 +41,8 @@ export async function uploadHomeworkImageToStorage(
   imageBuffer: Buffer
 ): Promise<StorageResult | null> {
   const fileName = `threads/${threadId}/latest.jpg`;
+
+  await ensureBucketExists(supabase);
 
   try {
     const { data, error } = await supabase.storage
