@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,6 @@ import {
   Modal,
   Image,
 } from 'react-native';
-import * as Speech from 'expo-speech';
 import { sendMessage, Message } from '../services/chat';
 import { analyzeHomework } from '../services/homework';
 import { useVoiceInput } from '../hooks/useVoiceInput';
@@ -40,7 +39,6 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
   const [threadId, setThreadId] = useState<string | undefined>(initialThreadId);
   const [sending, setSending] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [speakingIdx, setSpeakingIdx] = useState<number | null>(null);
   const [remaining, setRemaining] = useState<number | null>(null);
   const [isPremium, setIsPremium] = useState(false);
 
@@ -54,31 +52,6 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
     setInput(transcript);
   });
 
-  useEffect(() => {
-    return () => {
-      Speech.stop();
-    };
-  }, []);
-
-  const handleSpeak = async (text: string, index: number) => {
-    const isSpeaking = await Speech.isSpeakingAsync();
-    if (isSpeaking && speakingIdx === index) {
-      Speech.stop();
-      setSpeakingIdx(null);
-      return;
-    }
-
-    Speech.stop();
-    setSpeakingIdx(index);
-    Speech.speak(text, {
-      language: 'en-US',
-      rate: 0.9,
-      onDone: () => setSpeakingIdx(null),
-      onStopped: () => setSpeakingIdx(null),
-      onError: () => setSpeakingIdx(null),
-    });
-  };
-
   const handleSend = async () => {
     const userText = input.trim();
     const imageToSend = previewImage;
@@ -86,8 +59,6 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
     if ((!userText && !imageToSend) || sending) return;
 
     if (listening) stopListening();
-    Speech.stop();
-    setSpeakingIdx(null);
 
     setErrorMsg(null);
 
@@ -105,14 +76,8 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
         const res = await analyzeHomework(studentId, imageToSend.base64, threadId, promptForBackend);
         setThreadId(res.threadId);
         setMessages((prev) => [...prev, { role: 'assistant', content: res.explanation }]);
-
-        Speech.speak(res.explanation, {
-          language: 'en-US',
-          rate: 0.9,
-        });
       } catch (err: any) {
         setErrorMsg(err.message || 'Could not analyze homework photo.');
-        // Preserve typed prompt on failure so child doesn't lose their question!
         if (userText) setInput(userText);
         setPreviewImage(imageToSend); // keep image preview on failure
         if (err.status === 429 && onLimitReached) {
@@ -134,11 +99,6 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
         setMessages((prev) => [...prev, { role: 'assistant', content: result.reply }]);
         setRemaining(result.remaining);
         setIsPremium(result.isPremium);
-
-        Speech.speak(result.reply, {
-          language: 'en-US',
-          rate: 0.9,
-        });
       } catch (err: any) {
         setErrorMsg(err.message);
         setRemaining(0);
@@ -183,7 +143,7 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View style={styles.header}>
-        <Pressable onPress={() => { Speech.stop(); onBack(); }}>
+        <Pressable onPress={onBack}>
           <Text style={styles.backButton}>← Back</Text>
         </Pressable>
         <Text style={styles.headerTitle}>Kidsko.ai 🦉</Text>
@@ -210,7 +170,7 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
           keyExtractor={(_, i) => i.toString()}
           style={styles.messagesList}
           contentContainerStyle={{ padding: 14, gap: 12 }}
-          renderItem={({ item, index }) => (
+          renderItem={({ item }) => (
             <View style={[styles.msgRow, item.role === 'user' && styles.msgRowUser]}>
               <View style={styles.avatar}>
                 <Text>{item.role === 'user' ? '🧒' : '🦉'}</Text>
@@ -219,16 +179,6 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
                 <Text style={[styles.bubbleText, item.role === 'user' && styles.bubbleTextUser]}>
                   {item.content}
                 </Text>
-                {item.role === 'assistant' && (
-                  <Pressable
-                    style={styles.speakButton}
-                    onPress={() => handleSpeak(item.content, index)}
-                  >
-                    <Text style={styles.speakButtonText}>
-                      {speakingIdx === index ? '⏹️ Stop Reading' : '🔊 Read Aloud'}
-                    </Text>
-                  </Pressable>
-                )}
               </View>
             </View>
           )}
@@ -370,19 +320,6 @@ const styles = StyleSheet.create({
   bubbleUser: { backgroundColor: '#1a73e8' },
   bubbleText: { fontSize: 14, color: '#111', lineHeight: 20 },
   bubbleTextUser: { color: '#fff' },
-  speakButton: {
-    marginTop: 8,
-    alignSelf: 'flex-start',
-    backgroundColor: '#E6F4FE',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-  },
-  speakButtonText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#0369A1',
-  },
   typingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingBottom: 6 },
   typingText: { fontSize: 12, color: '#6b7280' },
   error: { color: '#EA4335', textAlign: 'center', paddingHorizontal: 16, paddingBottom: 6, fontSize: 12 },
