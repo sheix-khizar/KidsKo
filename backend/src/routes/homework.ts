@@ -8,9 +8,9 @@ import { logUsageEvent } from '../lib/usageEvents';
 
 const router = Router();
 
-// POST /api/homework/analyze  { studentId, threadId?, imageBase64 }
+// POST /api/homework/analyze  { studentId, threadId?, imageBase64, prompt? }
 router.post('/analyze', requireAuth, imageRateLimit, async (req: Request, res: Response) => {
-  const { studentId, threadId, imageBase64 } = req.body;
+  const { studentId, threadId, imageBase64, prompt } = req.body;
 
   if (!studentId || !imageBase64) {
     return res.status(400).json({ error: 'studentId and imageBase64 are required' });
@@ -34,23 +34,27 @@ router.post('/analyze', requireAuth, imageRateLimit, async (req: Request, res: R
     if (!activeThreadId) {
       const { data: thread, error: threadError } = await req.supabase!
         .from('chat_threads')
-        .insert({ student_id: studentId, title: 'Homework scan' })
+        .insert({ student_id: studentId, title: prompt?.slice(0, 40) || 'Homework scan' })
         .select()
         .single();
       if (threadError) throw threadError;
       activeThreadId = thread.id;
     }
 
-    // Log the scan as a message (image type) — content stores a short placeholder, not the raw image
+    const userMessageContent = prompt?.trim()
+      ? `📸 ${prompt.trim()}`
+      : '📸 [Homework photo submitted]';
+
+    // Log the scan as a message (image type)
     await req.supabase!.from('messages').insert({
       thread_id: activeThreadId,
       student_id: studentId,
       role: 'user',
-      content: '[Homework photo submitted]',
+      content: userMessageContent,
       message_type: 'image',
     });
 
-    const explanation = await generateHomeworkExplanation(compressedBase64, 'image/jpeg');
+    const explanation = await generateHomeworkExplanation(compressedBase64, 'image/jpeg', prompt);
 
     await req.supabase!.from('messages').insert({
       thread_id: activeThreadId,

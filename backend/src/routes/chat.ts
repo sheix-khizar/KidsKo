@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/auth';
 import { userRateLimit } from '../middleware/userRateLimit';
-import { generateChatReply, ChatMessage } from '../lib/gemini';
+import { generateChatReply, sanitizeChatResponse, ChatMessage } from '../lib/gemini';
 import { checkAndIncrementUsage } from '../lib/usageLimits';
 import { getCachedAnswer, setCachedAnswer } from '../lib/cache';
 import { logUsageEvent } from '../lib/usageEvents';
@@ -54,7 +54,7 @@ router.post('/', requireAuth, userRateLimit, async (req: Request, res: Response)
     if (isFreshThread) {
       const cached = await getCachedAnswer(message);
       if (cached) {
-        aiReply = cached;
+        aiReply = sanitizeChatResponse(cached);
         servedFromCache = true;
         await logUsageEvent(req.supabase!, req.user!.id, studentId, 'cache_hit');
       }
@@ -75,6 +75,7 @@ router.post('/', requireAuth, userRateLimit, async (req: Request, res: Response)
       }));
 
       aiReply = await generateChatReply(history);
+      aiReply = sanitizeChatResponse(aiReply);
       if (isFreshThread) await setCachedAnswer(message, aiReply);
     }
 

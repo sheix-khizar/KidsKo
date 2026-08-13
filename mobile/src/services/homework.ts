@@ -1,7 +1,7 @@
 import { getToken } from './api';
 import { API_URL } from './config';
 
-export async function analyzeHomework(studentId: string, imageBase64: string, threadId?: string) {
+export async function analyzeHomework(studentId: string, imageBase64: string, threadId?: string, prompt?: string) {
   const token = await getToken();
   const res = await fetch(`${API_URL}/api/homework/analyze`, {
     method: 'POST',
@@ -9,7 +9,7 @@ export async function analyzeHomework(studentId: string, imageBase64: string, th
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ studentId, imageBase64, threadId }),
+    body: JSON.stringify({ studentId, imageBase64, threadId, prompt }),
   });
   const data = await res.json();
   if (!res.ok) {

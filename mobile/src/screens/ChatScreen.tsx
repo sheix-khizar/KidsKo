@@ -47,7 +47,6 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
   // Image upload states
   const [showImagePickerModal, setShowImagePickerModal] = useState(false);
   const [previewImage, setPreviewImage] = useState<ProcessedImage | null>(null);
-  const [analyzingImage, setAnalyzingImage] = useState(false);
 
   const listRef = useRef<FlatList>(null);
 
@@ -81,39 +80,76 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
   };
 
   const handleSend = async () => {
-    const text = input.trim();
-    if (!text || sending) return;
+    const userText = input.trim();
+    const imageToSend = previewImage;
+
+    if ((!userText && !imageToSend) || sending) return;
 
     if (listening) stopListening();
     Speech.stop();
     setSpeakingIdx(null);
 
     setErrorMsg(null);
-    setInput('');
-    setMessages((prev) => [...prev, { role: 'user', content: text }]);
-    setSending(true);
 
-    try {
-      const result = await sendMessage(studentId, text, threadId);
-      setThreadId(result.threadId);
-      setMessages((prev) => [...prev, { role: 'assistant', content: result.reply }]);
-      setRemaining(result.remaining);
-      setIsPremium(result.isPremium);
+    if (imageToSend) {
+      // IMAGE + TEXT (or IMAGE ONLY) flow
+      const promptForBackend = userText || 'Please look at this image and help me understand it.';
+      const displayContent = userText ? `📸 ${userText}` : '📸 [Homework photo submitted]';
 
-      // Auto-read Kidsko's reply aloud for kids!
-      Speech.speak(result.reply, {
-        language: 'en-US',
-        rate: 0.9,
-      });
-    } catch (err: any) {
-      setErrorMsg(err.message);
-      setRemaining(0);
-      if (err.status === 429 && onLimitReached) {
-        onLimitReached();
+      setMessages((prev) => [...prev, { role: 'user', content: displayContent }]);
+      setSending(true);
+      setPreviewImage(null);
+      setInput('');
+
+      try {
+        const res = await analyzeHomework(studentId, imageToSend.base64, threadId, promptForBackend);
+        setThreadId(res.threadId);
+        setMessages((prev) => [...prev, { role: 'assistant', content: res.explanation }]);
+
+        Speech.speak(res.explanation, {
+          language: 'en-US',
+          rate: 0.9,
+        });
+      } catch (err: any) {
+        setErrorMsg(err.message || 'Could not analyze homework photo.');
+        // Preserve typed prompt on failure so child doesn't lose their question!
+        if (userText) setInput(userText);
+        setPreviewImage(imageToSend); // keep image preview on failure
+        if (err.status === 429 && onLimitReached) {
+          onLimitReached();
+        }
+      } finally {
+        setSending(false);
+        setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
       }
-    } finally {
-      setSending(false);
-      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
+    } else {
+      // TEXT ONLY flow
+      setInput('');
+      setMessages((prev) => [...prev, { role: 'user', content: userText }]);
+      setSending(true);
+
+      try {
+        const result = await sendMessage(studentId, userText, threadId);
+        setThreadId(result.threadId);
+        setMessages((prev) => [...prev, { role: 'assistant', content: result.reply }]);
+        setRemaining(result.remaining);
+        setIsPremium(result.isPremium);
+
+        Speech.speak(result.reply, {
+          language: 'en-US',
+          rate: 0.9,
+        });
+      } catch (err: any) {
+        setErrorMsg(err.message);
+        setRemaining(0);
+        if (userText) setInput(userText);
+        if (err.status === 429 && onLimitReached) {
+          onLimitReached();
+        }
+      } finally {
+        setSending(false);
+        setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
+      }
     }
   };
 
@@ -138,34 +174,6 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
       }
     } catch (err: any) {
       setErrorMsg(err?.message || 'Could not capture image from camera.');
-    }
-  };
-
-  const handleSendImage = async () => {
-    if (!previewImage || analyzingImage) return;
-
-    setErrorMsg(null);
-    setAnalyzingImage(true);
-    setMessages((prev) => [...prev, { role: 'user', content: '📸 [Homework worksheet photo]' }]);
-
-    try {
-      const res = await analyzeHomework(studentId, previewImage.base64, threadId);
-      setThreadId(res.threadId);
-      setMessages((prev) => [...prev, { role: 'assistant', content: res.explanation }]);
-      setPreviewImage(null);
-
-      Speech.speak(res.explanation, {
-        language: 'en-US',
-        rate: 0.9,
-      });
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Could not analyze homework photo.');
-      if (err.status === 429 && onLimitReached) {
-        onLimitReached();
-      }
-    } finally {
-      setAnalyzingImage(false);
-      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
     }
   };
 
@@ -227,31 +235,17 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
         />
       )}
 
-      {/* Image Preview Box */}
+      {/* Image Attachment Bar (directly above inputBar) */}
       {previewImage && (
-        <View style={styles.previewCard}>
-          <Image source={{ uri: previewImage.uri }} style={styles.previewThumbnail} />
-          <View style={styles.previewActions}>
-            <Text style={styles.previewTitle}>Homework Photo Selected</Text>
-            {analyzingImage ? (
-              <View style={styles.analyzingRow}>
-                <ActivityIndicator size="small" color="#1a73e8" />
-                <Text style={styles.analyzingText}>Reading worksheet... 🦉</Text>
-              </View>
-            ) : (
-              <View style={styles.previewBtnRow}>
-                <Pressable style={styles.sendPhotoBtn} onPress={handleSendImage}>
-                  <Text style={styles.sendPhotoBtnText}>Send Photo 🚀</Text>
-                </Pressable>
-                <Pressable style={styles.changePhotoBtn} onPress={() => setShowImagePickerModal(true)}>
-                  <Text style={styles.changePhotoBtnText}>Change</Text>
-                </Pressable>
-                <Pressable style={styles.cancelPhotoBtn} onPress={() => setPreviewImage(null)}>
-                  <Text style={styles.cancelPhotoBtnText}>✕</Text>
-                </Pressable>
-              </View>
-            )}
+        <View style={styles.attachmentBar}>
+          <Image source={{ uri: previewImage.uri }} style={styles.attachmentThumbnail} />
+          <View style={styles.attachmentInfo}>
+            <Text style={styles.attachmentTitle}>Homework Photo Attached 📷</Text>
+            <Text style={styles.attachmentSub}>Type your question below or tap send</Text>
           </View>
+          <Pressable style={styles.removeAttachmentBtn} onPress={() => setPreviewImage(null)}>
+            <Text style={styles.removeAttachmentText}>✕</Text>
+          </Pressable>
         </View>
       )}
 
@@ -281,15 +275,24 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
 
         <TextInput
           style={[styles.input, listening && styles.inputListening]}
-          placeholder={listening ? 'Listening... Speak now!' : 'Ask Kidsko anything...'}
+          placeholder={
+            listening
+              ? 'Listening... Speak now!'
+              : previewImage
+              ? 'Ask a question about this photo...'
+              : 'Ask Kidsko anything...'
+          }
           value={input}
           onChangeText={setInput}
           multiline
         />
         <Pressable
-          style={[styles.sendButton, !input.trim() && styles.sendButtonInactive]}
+          style={[
+            styles.sendButton,
+            !input.trim() && !previewImage && styles.sendButtonInactive,
+          ]}
           onPress={handleSend}
-          disabled={!input.trim() || sending}
+          disabled={(!input.trim() && !previewImage) || sending}
         >
           <Text style={styles.sendButtonText}>➤</Text>
         </Pressable>
@@ -439,28 +442,30 @@ const styles = StyleSheet.create({
   sendButtonInactive: { backgroundColor: '#ccc' },
   sendButtonText: { color: '#fff', fontSize: 16 },
 
-  // Preview Card styles
-  previewCard: {
+  // Attachment Bar styles (Thumbnail + Title + X button)
+  attachmentBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#F1F5F9',
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
-    padding: 12,
-    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 10,
   },
-  previewThumbnail: { width: 60, height: 60, borderRadius: 12, backgroundColor: '#CBD5E1' },
-  previewActions: { flex: 1, gap: 6 },
-  previewTitle: { fontSize: 13, fontWeight: '700', color: '#1E293B' },
-  previewBtnRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  sendPhotoBtn: { backgroundColor: '#1a73e8', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
-  sendPhotoBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  changePhotoBtn: { backgroundColor: '#E2E8F0', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
-  changePhotoBtnText: { color: '#334155', fontSize: 12, fontWeight: '700' },
-  cancelPhotoBtn: { backgroundColor: '#FEE2E2', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
-  cancelPhotoBtnText: { color: '#EF4444', fontSize: 12, fontWeight: '700' },
-  analyzingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  analyzingText: { fontSize: 12, fontWeight: '700', color: '#1a73e8' },
+  attachmentThumbnail: { width: 44, height: 44, borderRadius: 8, backgroundColor: '#CBD5E1' },
+  attachmentInfo: { flex: 1, justifyContent: 'center' },
+  attachmentTitle: { fontSize: 12, fontWeight: '700', color: '#1E293B' },
+  attachmentSub: { fontSize: 11, color: '#64748B' },
+  removeAttachmentBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#E2E8F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  removeAttachmentText: { color: '#475569', fontSize: 14, fontWeight: '800' },
 
   // Modal styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
