@@ -5,7 +5,7 @@ import { generateChatReply, sanitizeChatResponse, ChatMessage } from '../lib/gem
 import { checkAndIncrementUsage } from '../lib/usageLimits';
 import { getCachedAnswer, setCachedAnswer } from '../lib/cache';
 import { logUsageEvent } from '../lib/usageEvents';
-import { getThreadImage } from '../lib/threadImageStore';
+import { getThreadImage, setThreadImage } from '../lib/threadImageStore';
 
 const router = Router();
 
@@ -70,12 +70,36 @@ router.post('/', requireAuth, userRateLimit, async (req: Request, res: Response)
         .limit(MAX_HISTORY_MESSAGES);
       if (historyError) throw historyError;
 
-      const history: ChatMessage[] = (recentMessages || []).reverse().map((m) => ({
-        role: m.role as 'user' | 'assistant',
-        content: m.content,
-      }));
+      let threadImage = getThreadImage(activeThreadId);
 
-      const threadImage = getThreadImage(activeThreadId);
+      // If memory cache is empty (e.g. after server restart), scan DB history for persistent image marker
+      if (!threadImage && recentMessages) {
+        for (const m of recentMessages) {
+          if (m.content && m.content.includes('[IMAGE:')) {
+            const match = m.content.match(/\[IMAGE:(.*?)\]/);
+            if (match && match[1]) {
+              const base64 = match[1];
+              setThreadImage(activeThreadId, base64, 'image/jpeg');
+              threadImage = { base64, mimeType: 'image/jpeg', updatedAt: Date.now() };
+              console.log(`[Visual Memory Restored]: Found and restored homework photo from Supabase DB history for thread ${activeThreadId}`);
+              break;
+            }
+          }
+        }
+      }
+
+      // Format history for Gemini: strip raw [IMAGE:base64] payload from message content text
+      const history: ChatMessage[] = (recentMessages || []).reverse().map((m) => {
+        let cleanContent = m.content;
+        if (cleanContent.includes('[IMAGE:')) {
+          cleanContent = cleanContent.replace(/📸\s*\[IMAGE:.*?\]\s*/g, '📸 ').trim();
+        }
+        return {
+          role: m.role as 'user' | 'assistant',
+          content: cleanContent,
+        };
+      });
+
       aiReply = await generateChatReply(history, threadImage);
       aiReply = sanitizeChatResponse(aiReply);
       if (isFreshThread) await setCachedAnswer(message, aiReply);

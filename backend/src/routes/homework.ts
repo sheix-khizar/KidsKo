@@ -45,9 +45,10 @@ router.post('/analyze', requireAuth, imageRateLimit, async (req: Request, res: R
     // Store latest image in visual memory cache for this thread
     setThreadImage(activeThreadId, compressedBase64, 'image/jpeg');
 
+    // Save persistent DB message with embedded image marker so image memory survives server restarts
     const userMessageContent = prompt?.trim()
-      ? `📸 ${prompt.trim()}`
-      : '📸 [Homework photo submitted]';
+      ? `📸 [IMAGE:${compressedBase64}] ${prompt.trim()}`
+      : `📸 [IMAGE:${compressedBase64}] [Homework photo submitted]`;
 
     // Log the scan as a message (image type)
     await req.supabase!.from('messages').insert({

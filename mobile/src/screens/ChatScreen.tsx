@@ -52,6 +52,13 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
     setInput(transcript);
   });
 
+  const cleanBubbleContent = (content: string) => {
+    if (content.includes('[IMAGE:')) {
+      return content.replace(/📸\s*\[IMAGE:.*?\]\s*/g, '📸 ').trim();
+    }
+    return content;
+  };
+
   const handleSend = async () => {
     const userText = input.trim();
     const imageToSend = previewImage;
@@ -177,7 +184,7 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
               </View>
               <View style={[styles.bubble, item.role === 'user' && styles.bubbleUser]}>
                 <Text style={[styles.bubbleText, item.role === 'user' && styles.bubbleTextUser]}>
-                  {item.content}
+                  {cleanBubbleContent(item.content)}
                 </Text>
               </View>
             </View>
