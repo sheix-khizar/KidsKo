@@ -42,7 +42,7 @@ router.post('/', requireAuth, userRateLimit, async (req: Request, res: Response)
       activeThreadId = thread.id;
     }
 
-    // STEP 3 FIX: Await any in-flight image compression/upload for this thread to prevent race conditions
+    // Await any in-flight image compression/upload for this thread to prevent race conditions
     await awaitPendingUpload(activeThreadId);
 
     // Save the user's message
@@ -75,57 +75,72 @@ router.post('/', requireAuth, userRateLimit, async (req: Request, res: Response)
         .limit(MAX_HISTORY_MESSAGES);
       if (historyError) throw historyError;
 
-      let threadImage = getThreadImage(activeThreadId);
+      let threadImage: { base64: string; mimeType: string } | undefined = undefined;
       let hasImageMarkerInHistory = false;
       let storageDownloadAttempted = false;
       let storageDownloadFailed = false;
 
-      // Scan history for persistent image references if RAM cache is empty (e.g. after server restart)
+      // Scan history for versioned image references
+      const imageMarkers: { storagePath?: string; base64?: string }[] = [];
+
       if (recentMessages) {
         for (const m of recentMessages) {
           if (m.content) {
             if (m.content.includes('[STORAGE:')) {
               hasImageMarkerInHistory = true;
-              if (!threadImage) {
-                const match = m.content.match(/\[STORAGE:(.*?)\]/);
-                if (match && match[1]) {
-                  const storagePath = match[1];
-                  storageDownloadAttempted = true;
-                  try {
-                    const downloadedBase64 = await downloadHomeworkImageFromStorage(supabaseAdmin, storagePath);
-                    if (downloadedBase64) {
-                      setThreadImage(activeThreadId, downloadedBase64, 'image/jpeg');
-                      threadImage = { base64: downloadedBase64, mimeType: 'image/jpeg', updatedAt: Date.now() };
-                      console.log(`[Visual Memory Restored]: Downloaded photo from Supabase Storage (${storagePath}) for thread ${activeThreadId}`);
-                      break;
-                    } else {
-                      storageDownloadFailed = true;
-                    }
-                  } catch (downloadErr: any) {
-                    storageDownloadFailed = true;
-                    console.error(`[Storage Download Exception]: Thread ${activeThreadId} path ${storagePath} failed:`, downloadErr.message);
-                  }
-                }
+              const match = m.content.match(/\[STORAGE:(.*?)\]/);
+              if (match && match[1]) {
+                imageMarkers.push({ storagePath: match[1] });
               }
             } else if (m.content.includes('[IMAGE:')) {
               hasImageMarkerInHistory = true;
-              if (!threadImage) {
-                const match = m.content.match(/\[IMAGE:(.*?)\]/);
-                if (match && match[1]) {
-                  const base64 = match[1];
-                  setThreadImage(activeThreadId, base64, 'image/jpeg');
-                  threadImage = { base64, mimeType: 'image/jpeg', updatedAt: Date.now() };
-                  console.log(`[Visual Memory Restored]: Restored photo from DB history for thread ${activeThreadId}`);
-                  break;
-                }
+              const match = m.content.match(/\[IMAGE:(.*?)\]/);
+              if (match && match[1]) {
+                imageMarkers.push({ base64: match[1] });
               }
             }
           }
         }
       }
 
-      // STEP 2 FIX: Handle Storage Download Failures gracefully
-      // If a student's thread had a photo reference BUT retrieving it failed, return a friendly retry prompt instead of an AI hallucination
+      if (imageMarkers.length > 0) {
+        // STEP 3: Multi-Image Context Resolution
+        // Check if student's prompt specifically requests an earlier / first photo
+        const requestsEarlierPicture = /first (picture|photo|image|worksheet)|earlier (picture|photo|image|worksheet)|previous (picture|photo|image|worksheet)|go back to/i.test(message);
+
+        // imageMarkers is ordered newest to oldest. Pick earliest if requested, else most recent (index 0)
+        const targetMarker = (requestsEarlierPicture && imageMarkers.length > 1)
+          ? imageMarkers[imageMarkers.length - 1]
+          : imageMarkers[0];
+
+        if (targetMarker.storagePath) {
+          // Check memory cache by storagePath or threadId first
+          const cached = getThreadImage(targetMarker.storagePath) || getThreadImage(activeThreadId);
+          if (cached) {
+            threadImage = cached;
+          } else {
+            storageDownloadAttempted = true;
+            try {
+              const downloadedBase64 = await downloadHomeworkImageFromStorage(supabaseAdmin, targetMarker.storagePath);
+              if (downloadedBase64) {
+                setThreadImage(targetMarker.storagePath, downloadedBase64, 'image/jpeg');
+                setThreadImage(activeThreadId, downloadedBase64, 'image/jpeg');
+                threadImage = { base64: downloadedBase64, mimeType: 'image/jpeg' };
+                console.log(`[Visual Memory Restored]: Downloaded photo '${targetMarker.storagePath}' for thread ${activeThreadId}`);
+              } else {
+                storageDownloadFailed = true;
+              }
+            } catch (downloadErr: any) {
+              storageDownloadFailed = true;
+              console.error(`[Storage Download Exception]: Thread ${activeThreadId} path ${targetMarker.storagePath} failed:`, downloadErr.message);
+            }
+          }
+        } else if (targetMarker.base64) {
+          threadImage = { base64: targetMarker.base64, mimeType: 'image/jpeg' };
+        }
+      }
+
+      // Handle Storage Download Failures gracefully
       if (hasImageMarkerInHistory && storageDownloadAttempted && storageDownloadFailed && !threadImage) {
         console.error(`[Storage Failure Guard]: Storage download failed for thread ${activeThreadId}. Prompting student for fresh photo.`);
         aiReply = "Hmm, I lost track of your picture! Can you snap it again for me?";

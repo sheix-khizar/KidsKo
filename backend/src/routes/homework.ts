@@ -36,7 +36,7 @@ router.post('/analyze', requireAuth, imageRateLimit, async (req: Request, res: R
       activeThreadId = thread.id;
     }
 
-    // Process image compression, memory caching, and storage upload as an awaited pending task
+    // Process image compression, memory caching, and versioned storage upload as an awaited task
     const processImageTask = (async () => {
       const rawBuffer = Buffer.from(imageBase64, 'base64');
       const compressedBuffer = await sharp(rawBuffer)
@@ -45,10 +45,18 @@ router.post('/analyze', requireAuth, imageRateLimit, async (req: Request, res: R
         .toBuffer();
       const compressedBase64 = compressedBuffer.toString('base64');
 
+      const imageId = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+      // Store in memory under latest threadId
       setThreadImage(activeThreadId, compressedBase64, 'image/jpeg');
 
-      // Use service-role client for guaranteed storage operations bypassing user RLS restrictions
-      const storageResult = await uploadHomeworkImageToStorage(supabaseAdmin, activeThreadId, compressedBuffer);
+      // Use service-role client for guaranteed storage operations using versioned path
+      const storageResult = await uploadHomeworkImageToStorage(supabaseAdmin, activeThreadId, compressedBuffer, imageId);
+
+      if (storageResult) {
+        // Also store in memory under specific storagePath
+        setThreadImage(storageResult.storagePath, compressedBase64, 'image/jpeg');
+      }
 
       return { compressedBase64, storageResult };
     })();
@@ -58,7 +66,7 @@ router.post('/analyze', requireAuth, imageRateLimit, async (req: Request, res: R
 
     const { compressedBase64, storageResult } = await processImageTask;
 
-    // Format DB message content: use lightweight Storage Path reference if uploaded, else fallback
+    // Format DB message content: use lightweight versioned Storage Path reference if uploaded, else fallback
     const userPromptText = prompt?.trim() || '';
     const userMessageContent = storageResult
       ? `📸 [STORAGE:${storageResult.storagePath}] ${userPromptText || '[Homework photo submitted]'}`.trim()

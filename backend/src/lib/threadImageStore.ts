@@ -4,7 +4,7 @@ type ThreadImage = {
   updatedAt: number;
 };
 
-// In-memory cache mapping threadId -> latest image base64 & mimeType
+// In-memory cache mapping threadId or storagePath -> image base64 & mimeType
 const threadImageMap = new Map<string, ThreadImage>();
 
 // In-flight upload promise registry mapping threadId -> Promise<any>
@@ -13,8 +13,8 @@ const pendingUploadsMap = new Map<string, Promise<any>>();
 // Keep max 100 recent thread images to prevent memory leaks
 const MAX_CACHED_THREADS = 100;
 
-export function setThreadImage(threadId: string, base64: string, mimeType: string = 'image/jpeg') {
-  if (!threadId || !base64) return;
+export function setThreadImage(key: string, base64: string, mimeType: string = 'image/jpeg') {
+  if (!key || !base64) return;
 
   // Prune oldest if cache size exceeded
   if (threadImageMap.size >= MAX_CACHED_THREADS) {
@@ -22,16 +22,16 @@ export function setThreadImage(threadId: string, base64: string, mimeType: strin
     if (oldestKey) threadImageMap.delete(oldestKey);
   }
 
-  threadImageMap.set(threadId, {
+  threadImageMap.set(key, {
     base64,
     mimeType,
     updatedAt: Date.now(),
   });
 }
 
-export function getThreadImage(threadId?: string): ThreadImage | undefined {
-  if (!threadId) return undefined;
-  return threadImageMap.get(threadId);
+export function getThreadImage(key?: string): ThreadImage | undefined {
+  if (!key) return undefined;
+  return threadImageMap.get(key);
 }
 
 // Register an in-flight image compression/upload promise for a thread

@@ -34,13 +34,15 @@ export type StorageResult = {
   publicUrl?: string;
 };
 
-// Uploads a compressed JPEG buffer to Supabase Storage bucket
+// Uploads a compressed JPEG buffer to Supabase Storage bucket using versioned paths
 export async function uploadHomeworkImageToStorage(
   supabase: SupabaseClient,
   threadId: string,
-  imageBuffer: Buffer
+  imageBuffer: Buffer,
+  imageId?: string
 ): Promise<StorageResult | null> {
-  const fileName = `threads/${threadId}/latest.jpg`;
+  const imageTag = imageId || `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const fileName = `threads/${threadId}/images/${imageTag}.jpg`;
 
   await ensureBucketExists(supabase);
 
@@ -64,7 +66,7 @@ export async function uploadHomeworkImageToStorage(
       publicUrl: urlData?.publicUrl,
     };
   } catch (err: any) {
-    console.error(`[Supabase Storage Upload Exception]: Path 'threads/${threadId}/latest.jpg' error:`, err.message);
+    console.error(`[Supabase Storage Upload Exception]: Path '${fileName}' error:`, err.message);
     return null;
   }
 }
