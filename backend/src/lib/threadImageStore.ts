@@ -34,6 +34,17 @@ export function getThreadImage(key?: string): ThreadImage | undefined {
   return threadImageMap.get(key);
 }
 
+// Purges RAM cache entries for a specific key, path, or threadId (COPPA compliance)
+export function clearThreadImageCache(keyOrThreadId: string) {
+  if (!keyOrThreadId) return;
+  threadImageMap.delete(keyOrThreadId);
+  for (const k of threadImageMap.keys()) {
+    if (k.includes(keyOrThreadId)) {
+      threadImageMap.delete(k);
+    }
+  }
+}
+
 // Register an in-flight image compression/upload promise for a thread
 export function registerPendingUpload(threadId: string, promise: Promise<any>) {
   if (!threadId || !promise) return;

@@ -1,4 +1,6 @@
 import { SupabaseClient } from '@supabase/supabase-js';
+import { clearThreadImageCache } from './threadImageStore';
+import { supabaseAdmin } from './supabase';
 
 const BUCKET_NAME = 'homework-snapshots';
 let bucketChecked = false;
@@ -44,10 +46,10 @@ export async function uploadHomeworkImageToStorage(
   const imageTag = imageId || `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const fileName = `threads/${threadId}/images/${imageTag}.jpg`;
 
-  await ensureBucketExists(supabase);
+  await ensureBucketExists(supabaseAdmin);
 
   try {
-    const { data, error } = await supabase.storage
+    const { data, error } = await supabaseAdmin.storage
       .from(BUCKET_NAME)
       .upload(fileName, imageBuffer, {
         contentType: 'image/jpeg',
@@ -59,7 +61,7 @@ export async function uploadHomeworkImageToStorage(
       return null;
     }
 
-    const { data: urlData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(fileName);
+    const { data: urlData } = supabaseAdmin.storage.from(BUCKET_NAME).getPublicUrl(fileName);
 
     return {
       storagePath: fileName,
@@ -77,7 +79,7 @@ export async function downloadHomeworkImageFromStorage(
   storagePath: string
 ): Promise<string | null> {
   try {
-    const { data, error } = await supabase.storage
+    const { data, error } = await supabaseAdmin.storage
       .from(BUCKET_NAME)
       .download(storagePath);
 
@@ -92,5 +94,64 @@ export async function downloadHomeworkImageFromStorage(
   } catch (err: any) {
     console.error(`[Supabase Storage Download Exception]: Path '${storagePath}' thrown error:`, err.stack || err.message);
     return null;
+  }
+}
+
+// Deletes a single image file from Supabase Storage and clears RAM cache
+export async function deleteSingleImageFromStorage(
+  supabase: SupabaseClient,
+  storagePath: string
+): Promise<boolean> {
+  try {
+    const { data, error } = await supabaseAdmin.storage.from(BUCKET_NAME).remove([storagePath]);
+    if (error || !data || data.length === 0) {
+      console.error(`[Supabase Storage Deletion Error]: Could not remove '${storagePath}':`, error?.message || 'No items removed');
+      return false;
+    }
+    clearThreadImageCache(storagePath);
+    return true;
+  } catch (err: any) {
+    console.error(`[Supabase Storage Deletion Exception]: '${storagePath}' error: ${err.message}`);
+    return false;
+  }
+}
+
+// Deletes all images belonging to a specific thread from Supabase Storage and clears RAM cache
+export async function deleteThreadImagesFromStorage(
+  supabase: SupabaseClient,
+  threadId: string
+): Promise<number> {
+  try {
+    let deletedCount = 0;
+
+    // List images directly in subfolder threads/{threadId}/images
+    const { data: imgFiles } = await supabaseAdmin.storage.from(BUCKET_NAME).list(`threads/${threadId}/images`, { limit: 100 });
+
+    if (imgFiles && imgFiles.length > 0) {
+      const validFiles = imgFiles.filter((f) => f.name && !f.name.startsWith('.'));
+      for (const f of validFiles) {
+        const fullPath = `threads/${threadId}/images/${f.name}`;
+        const ok = await deleteSingleImageFromStorage(supabaseAdmin, fullPath);
+        if (ok) deletedCount++;
+      }
+    }
+
+    // Also list legacy images directly under threads/{threadId}/
+    const { data: legacyFiles } = await supabaseAdmin.storage.from(BUCKET_NAME).list(`threads/${threadId}`, { limit: 100 });
+    if (legacyFiles && legacyFiles.length > 0) {
+      const validLegacy = legacyFiles.filter((f) => f.name && f.name.endsWith('.jpg'));
+      for (const f of validLegacy) {
+        const fullPath = `threads/${threadId}/${f.name}`;
+        const ok = await deleteSingleImageFromStorage(supabaseAdmin, fullPath);
+        if (ok) deletedCount++;
+      }
+    }
+
+    clearThreadImageCache(threadId);
+    console.log(`[COPPA Data Retention]: Purged ${deletedCount} images for thread '${threadId}' from Supabase Storage & RAM cache.`);
+    return deletedCount;
+  } catch (err: any) {
+    console.error(`[COPPA Data Retention Exception]: Could not purge thread '${threadId}' images: ${err.message}`);
+    return 0;
   }
 }

@@ -6,12 +6,46 @@ import { checkAndIncrementUsage } from '../lib/usageLimits';
 import { getCachedAnswer, setCachedAnswer } from '../lib/cache';
 import { logUsageEvent } from '../lib/usageEvents';
 import { getThreadImage, setThreadImage, awaitPendingUpload } from '../lib/threadImageStore';
-import { downloadHomeworkImageFromStorage } from '../lib/homeworkStorage';
+import { downloadHomeworkImageFromStorage, deleteThreadImagesFromStorage } from '../lib/homeworkStorage';
 import { supabaseAdmin } from '../lib/supabase';
 
 const router = Router();
 
 const MAX_HISTORY_MESSAGES = 10; // Ticket 2.9: bound the payload sent to Gemini
+
+// POST /api/chat/cleanup { threadId } (Ticket 2.7 & COPPA NFR-4: New Chat / Thread Reset cleanup)
+router.post('/cleanup', requireAuth, async (req: Request, res: Response) => {
+  const { threadId } = req.body;
+  if (!threadId) {
+    return res.status(400).json({ error: 'threadId is required' });
+  }
+
+  try {
+    const deletedCount = await deleteThreadImagesFromStorage(supabaseAdmin, threadId);
+    return res.status(200).json({ success: true, threadId, deletedImagesCount: deletedCount });
+  } catch (err: any) {
+    console.error(`[Chat Cleanup Error]: ${err.message}`);
+    return res.status(500).json({ error: 'Could not cleanup thread images' });
+  }
+});
+
+// DELETE /api/chat/threads/:threadId (Explicit thread deletion)
+router.delete('/threads/:threadId', requireAuth, async (req: Request, res: Response) => {
+  const { threadId } = req.params;
+  if (!threadId) {
+    return res.status(400).json({ error: 'threadId is required' });
+  }
+
+  try {
+    const deletedCount = await deleteThreadImagesFromStorage(supabaseAdmin, threadId);
+    await req.supabase!.from('messages').delete().eq('thread_id', threadId);
+    await req.supabase!.from('chat_threads').delete().eq('id', threadId);
+    return res.status(200).json({ success: true, threadId, deletedImagesCount: deletedCount });
+  } catch (err: any) {
+    console.error(`[Thread Delete Error]: ${err.message}`);
+    return res.status(500).json({ error: 'Could not delete thread' });
+  }
+});
 
 // POST /api/chat  { studentId, threadId?, message }
 router.post('/', requireAuth, userRateLimit, async (req: Request, res: Response) => {
