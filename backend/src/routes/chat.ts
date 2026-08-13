@@ -7,6 +7,7 @@ import { getCachedAnswer, setCachedAnswer } from '../lib/cache';
 import { logUsageEvent } from '../lib/usageEvents';
 import { getThreadImage, setThreadImage, awaitPendingUpload } from '../lib/threadImageStore';
 import { downloadHomeworkImageFromStorage } from '../lib/homeworkStorage';
+import { supabaseAdmin } from '../lib/supabase';
 
 const router = Router();
 
@@ -91,7 +92,7 @@ router.post('/', requireAuth, userRateLimit, async (req: Request, res: Response)
                   const storagePath = match[1];
                   storageDownloadAttempted = true;
                   try {
-                    const downloadedBase64 = await downloadHomeworkImageFromStorage(req.supabase!, storagePath);
+                    const downloadedBase64 = await downloadHomeworkImageFromStorage(supabaseAdmin, storagePath);
                     if (downloadedBase64) {
                       setThreadImage(activeThreadId, downloadedBase64, 'image/jpeg');
                       threadImage = { base64: downloadedBase64, mimeType: 'image/jpeg', updatedAt: Date.now() };

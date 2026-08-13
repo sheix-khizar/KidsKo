@@ -7,6 +7,7 @@ import { checkAndIncrementUsage } from '../lib/usageLimits';
 import { logUsageEvent } from '../lib/usageEvents';
 import { setThreadImage, registerPendingUpload } from '../lib/threadImageStore';
 import { uploadHomeworkImageToStorage } from '../lib/homeworkStorage';
+import { supabaseAdmin } from '../lib/supabase';
 
 const router = Router();
 
@@ -46,7 +47,8 @@ router.post('/analyze', requireAuth, imageRateLimit, async (req: Request, res: R
 
       setThreadImage(activeThreadId, compressedBase64, 'image/jpeg');
 
-      const storageResult = await uploadHomeworkImageToStorage(req.supabase!, activeThreadId, compressedBuffer);
+      // Use service-role client for guaranteed storage operations bypassing user RLS restrictions
+      const storageResult = await uploadHomeworkImageToStorage(supabaseAdmin, activeThreadId, compressedBuffer);
 
       return { compressedBase64, storageResult };
     })();
