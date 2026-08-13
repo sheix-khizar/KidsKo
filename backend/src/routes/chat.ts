@@ -11,7 +11,7 @@ import { supabaseAdmin } from '../lib/supabase';
 
 const router = Router();
 
-const MAX_HISTORY_MESSAGES = 10; // Ticket 2.9: bound the payload sent to Gemini
+const MAX_HISTORY_MESSAGES = 10; // Ticket 2.9: bound the payload sent to Gemini for cost control
 
 // POST /api/chat/cleanup { threadId } (Ticket 2.7 & COPPA NFR-4: New Chat / Thread Reset cleanup)
 router.post('/cleanup', requireAuth, async (req: Request, res: Response) => {
@@ -101,6 +101,7 @@ router.post('/', requireAuth, userRateLimit, async (req: Request, res: Response)
     }
 
     if (!servedFromCache) {
+      // 1. Fetch conversational history (trimmed to MAX_HISTORY_MESSAGES for prompt economy & cost control)
       const { data: recentMessages, error: historyError } = await req.supabase!
         .from('messages')
         .select('role, content')
@@ -109,73 +110,71 @@ router.post('/', requireAuth, userRateLimit, async (req: Request, res: Response)
         .limit(MAX_HISTORY_MESSAGES);
       if (historyError) throw historyError;
 
-      let threadImage: { base64: string; mimeType: string } | undefined = undefined;
-      let hasImageMarkerInHistory = false;
-      let storageDownloadAttempted = false;
-      let storageDownloadFailed = false;
+      // 2. STEP 3: Decoupled active image lookup from thread_images table (INDEPENDENT of trimmed history)
+      const { data: latestImageRow } = await req.supabase!
+        .from('thread_images')
+        .select('storage_path')
+        .eq('thread_id', activeThreadId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      // Scan history for versioned image references
-      const imageMarkers: { storagePath?: string; base64?: string }[] = [];
+      let activeStoragePath: string | undefined = latestImageRow?.storage_path;
+      let legacyBase64: string | undefined = undefined;
 
-      if (recentMessages) {
+      // Legacy fallback: if thread_images row not found (e.g. legacy thread), scan history array
+      if (!activeStoragePath && recentMessages) {
         for (const m of recentMessages) {
           if (m.content) {
             if (m.content.includes('[STORAGE:')) {
-              hasImageMarkerInHistory = true;
               const match = m.content.match(/\[STORAGE:(.*?)\]/);
               if (match && match[1]) {
-                imageMarkers.push({ storagePath: match[1] });
+                activeStoragePath = match[1];
+                break;
               }
             } else if (m.content.includes('[IMAGE:')) {
-              hasImageMarkerInHistory = true;
               const match = m.content.match(/\[IMAGE:(.*?)\]/);
               if (match && match[1]) {
-                imageMarkers.push({ base64: match[1] });
+                legacyBase64 = match[1];
+                break;
               }
             }
           }
         }
       }
 
-      if (imageMarkers.length > 0) {
-        // STEP 3: Multi-Image Context Resolution
-        // Check if student's prompt specifically requests an earlier / first photo
-        const requestsEarlierPicture = /first (picture|photo|image|worksheet)|earlier (picture|photo|image|worksheet)|previous (picture|photo|image|worksheet)|go back to/i.test(message);
+      let threadImage: { base64: string; mimeType: string } | undefined = undefined;
+      let storageDownloadAttempted = false;
+      let storageDownloadFailed = false;
 
-        // imageMarkers is ordered newest to oldest. Pick earliest if requested, else most recent (index 0)
-        const targetMarker = (requestsEarlierPicture && imageMarkers.length > 1)
-          ? imageMarkers[imageMarkers.length - 1]
-          : imageMarkers[0];
-
-        if (targetMarker.storagePath) {
-          // Check memory cache by storagePath or threadId first
-          const cached = getThreadImage(targetMarker.storagePath) || getThreadImage(activeThreadId);
-          if (cached) {
-            threadImage = cached;
-          } else {
-            storageDownloadAttempted = true;
-            try {
-              const downloadedBase64 = await downloadHomeworkImageFromStorage(supabaseAdmin, targetMarker.storagePath);
-              if (downloadedBase64) {
-                setThreadImage(targetMarker.storagePath, downloadedBase64, 'image/jpeg');
-                setThreadImage(activeThreadId, downloadedBase64, 'image/jpeg');
-                threadImage = { base64: downloadedBase64, mimeType: 'image/jpeg' };
-                console.log(`[Visual Memory Restored]: Downloaded photo '${targetMarker.storagePath}' for thread ${activeThreadId}`);
-              } else {
-                storageDownloadFailed = true;
-              }
-            } catch (downloadErr: any) {
+      // 3. Resolve threadImage payload (RAM cache first, Storage download second)
+      if (activeStoragePath) {
+        const cached = getThreadImage(activeStoragePath) || getThreadImage(activeThreadId);
+        if (cached) {
+          threadImage = cached;
+        } else {
+          storageDownloadAttempted = true;
+          try {
+            const downloadedBase64 = await downloadHomeworkImageFromStorage(supabaseAdmin, activeStoragePath);
+            if (downloadedBase64) {
+              setThreadImage(activeStoragePath, downloadedBase64, 'image/jpeg');
+              setThreadImage(activeThreadId, downloadedBase64, 'image/jpeg');
+              threadImage = { base64: downloadedBase64, mimeType: 'image/jpeg' };
+              console.log(`[Visual Memory Restored via thread_images]: Downloaded photo '${activeStoragePath}' for thread ${activeThreadId}`);
+            } else {
               storageDownloadFailed = true;
-              console.error(`[Storage Download Exception]: Thread ${activeThreadId} path ${targetMarker.storagePath} failed:`, downloadErr.message);
             }
+          } catch (downloadErr: any) {
+            storageDownloadFailed = true;
+            console.error(`[Storage Download Exception]: Thread ${activeThreadId} path ${activeStoragePath} failed:`, downloadErr.message);
           }
-        } else if (targetMarker.base64) {
-          threadImage = { base64: targetMarker.base64, mimeType: 'image/jpeg' };
         }
+      } else if (legacyBase64) {
+        threadImage = { base64: legacyBase64, mimeType: 'image/jpeg' };
       }
 
-      // Handle Storage Download Failures gracefully
-      if (hasImageMarkerInHistory && storageDownloadAttempted && storageDownloadFailed && !threadImage) {
+      // 4. Handle Storage Download Failures gracefully
+      if (activeStoragePath && storageDownloadAttempted && storageDownloadFailed && !threadImage) {
         console.error(`[Storage Failure Guard]: Storage download failed for thread ${activeThreadId}. Prompting student for fresh photo.`);
         aiReply = "Hmm, I lost track of your picture! Can you snap it again for me?";
       } else {

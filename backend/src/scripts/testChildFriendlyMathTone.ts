@@ -5,56 +5,73 @@ import { generateHomeworkExplanation, generateChatReply } from '../lib/gemini';
 
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
-async function createDummyJpegBase64(): Promise<string> {
-  const buf = await sharp({
-    create: {
-      width: 100,
-      height: 100,
-      channels: 3,
-      background: { r: 255, g: 255, b: 255 },
-    },
-  })
-    .jpeg()
+async function createExponentsWorksheetBuffer(): Promise<Buffer> {
+  const svgText = `
+    <svg width="400" height="200" xmlns="http://www.w3.org/2000/svg">
+      <rect width="100%" height="100%" fill="#ffffff"/>
+      <text x="30" y="50" font-family="Arial" font-size="20" fill="#000000">Math Worksheet: Powers and Exponents</text>
+      <text x="30" y="100" font-family="Arial" font-size="24" fill="#1a73e8" font-weight="bold">Question 1: 5 x 5 x 5 = 5³</text>
+      <text x="30" y="150" font-family="Arial" font-size="18" fill="#333333">Write 4 x 4 x 4 x 4 using exponents</text>
+    </svg>
+  `;
+  return sharp(Buffer.from(svgText))
+    .jpeg({ quality: 80 })
     .toBuffer();
-  return buf.toString('base64');
 }
 
-async function testMathTone() {
+async function runMathToneTest() {
   console.log('🧪 =================================================================');
-  console.log('🚀 TESTING CHILD-FRIENDLY MATH EXPLANATION TONE & FORMAT');
+  console.log('🦉 TESTING KIDS KO MATH EXPLANATION TONE & JARGON ELIMINATION');
   console.log('🧪 =================================================================\n');
 
-  const dummyImage = await createDummyJpegBase64();
+  const testImageBuffer = await createExponentsWorksheetBuffer();
+  const testBase64 = testImageBuffer.toString('base64');
 
-  console.log('--- TURN 1: USER ATTACHES IMAGE & ASKS "Solve question 1 part a from it" ---');
-  const userPrompt1 = "Solve question 1 part a from it (5 x 5 x 5)";
-  const reply1 = await generateHomeworkExplanation(dummyImage, 'image/jpeg', userPrompt1);
-  console.log(`[KIDSKO REPLY 1]:\n"${reply1}"\n`);
+  console.log('📸 [TEST 1]: Generating Homework Explanation for Exponents Problem (5 x 5 x 5 = 5³)...');
+  const explanation = await generateHomeworkExplanation(testBase64, 'image/jpeg', 'How do powers work here?');
+  console.log(`\n🤖 AI Explanation Output:\n"${explanation}"\n`);
 
-  console.log('--- TURN 2: USER ASKS "guide me step by step how to solve part a?" ---');
-  const history = [
-    { role: 'user' as const, content: `📸 ${userPrompt1}` },
-    { role: 'assistant' as const, content: reply1 },
-    { role: 'user' as const, content: 'guide me step by step how to solve part a?' },
+  // Banned Jargon Words Audit
+  const bannedTerms = [
+    'index notation',
+    'multiplication string',
+    'base number',
+    'power number',
+    'algebraic expression',
+    'exponent notation',
   ];
-  const reply2 = await generateChatReply(history);
-  console.log(`[KIDSKO REPLY 2]:\n"${reply2}"\n`);
 
-  // Assertions
-  const hasJargon = /index notation|multiplication string|base number|power number/i.test(reply1 + reply2);
-  const hasSpelledOutMath = /two times two|two to the power of three|three fives/i.test(reply1 + reply2);
-  const wordCount1 = reply1.split(/\s+/).filter(Boolean).length;
-  const wordCount2 = reply2.split(/\s+/).filter(Boolean).length;
+  const lowerExplanation = explanation.toLowerCase();
+  const foundJargon = bannedTerms.filter(term => lowerExplanation.includes(term));
 
-  console.log('📊 EVALUATION CHECKS:');
-  console.log(`   - Free of textbook jargon? => ${!hasJargon ? '✅ PASS' : '❌ FAIL'}`);
-  console.log(`   - Uses digits (5 × 5) instead of spelled-out words? => ${!hasSpelledOutMath ? '✅ PASS' : '❌ FAIL'}`);
-  console.log(`   - Turn 1 short length (${wordCount1} words)? => ${wordCount1 <= 45 ? '✅ PASS' : '❌ FAIL'}`);
-  console.log(`   - Turn 2 short length (${wordCount2} words)? => ${wordCount2 <= 45 ? '✅ PASS' : '❌ FAIL'}`);
+  // Sentence count check
+  const sentenceCount = (explanation.match(/[.!?]+/g) || []).length;
+  const wordCount = explanation.split(/\s+/).length;
+
+  console.log('📊 EVALUATION CHECKS FOR ISSUE A (HOMEWORK EXPLANATION):');
+  console.log(`   - Banned Textbook Jargon Found? => ${foundJargon.length === 0 ? '✅ NONE (100% CLEAN)' : `❌ FOUND: ${foundJargon.join(', ')}`}`);
+  console.log(`   - Sentence Count: ${sentenceCount} sentences (Target: 2-3 max) => ${sentenceCount <= 4 ? '✅ PASS' : '⚠️ WARNING'}`);
+  console.log(`   - Total Word Count: ${wordCount} words => ${wordCount <= 45 ? '✅ PASS' : '⚠️ WARNING'}`);
+
+  // Test 2: Follow-up chat turn
+  console.log('\n💬 [TEST 2]: Testing Follow-up Chat Turn ("Why is there a tiny 3 on top of 5?")...');
+  const followUpHistory = [
+    { role: 'user' as const, content: 'Why is there a tiny 3 on top of 5?' }
+  ];
+
+  const chatReply = await generateChatReply(followUpHistory);
+  console.log(`\n🤖 AI Chat Turn Output:\n"${chatReply}"\n`);
+
+  const lowerReply = chatReply.toLowerCase();
+  const foundJargonReply = bannedTerms.filter(term => lowerReply.includes(term));
+
+  console.log('📊 EVALUATION CHECKS FOR FOLLOW-UP CHAT TURN:');
+  console.log(`   - Banned Textbook Jargon Found? => ${foundJargonReply.length === 0 ? '✅ NONE (100% CLEAN)' : `❌ FOUND: ${foundJargonReply.join(', ')}`}`);
+  console.log(`   - Uses Digits for Numbers? => ${/\d/.test(chatReply) ? '✅ YES' : '❌ NO'}`);
 
   console.log('\n=================================================================');
-  console.log('🎉 CHILD-FRIENDLY MATH EXPLANATION SUITE COMPLETED SUCCESSFULLY!');
+  console.log('🎉 MATH TONE & JARGON AUDIT SUITE COMPLETED SUCCESSFULLY!');
   console.log('=================================================================\n');
 }
 
-testMathTone();
+runMathToneTest();

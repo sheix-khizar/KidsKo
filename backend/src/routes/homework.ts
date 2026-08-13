@@ -56,6 +56,16 @@ router.post('/analyze', requireAuth, imageRateLimit, async (req: Request, res: R
       if (storageResult) {
         // Also store in memory under specific storagePath
         setThreadImage(storageResult.storagePath, compressedBase64, 'image/jpeg');
+
+        // STEP 2: Decoupled thread_images table insert
+        try {
+          await req.supabase!.from('thread_images').insert({
+            thread_id: activeThreadId,
+            storage_path: storageResult.storagePath,
+          });
+        } catch (dbErr: any) {
+          console.warn(`[thread_images Insert Notice]: ${dbErr.message}`);
+        }
       }
 
       return { compressedBase64, storageResult };
