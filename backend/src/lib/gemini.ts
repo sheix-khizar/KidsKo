@@ -74,14 +74,16 @@ export async function generateChatReply(
   history: ChatMessage[],
   threadImage?: { base64: string; mimeType: string }
 ): Promise<string> {
-  // Convert stored format into Gemini's expected contents array
+  // Attach the active homework image to the latest user message in history
+  const lastUserIndex = history.map((m) => m.role).lastIndexOf('user');
+
   const contents = history.map((m, index) => {
-    const isFirstUserTurnWithImage = index === 0 && m.role === 'user' && threadImage;
+    const isLatestUserTurnWithImage = index === lastUserIndex && threadImage;
     const parts: any[] = [];
 
-    if (isFirstUserTurnWithImage) {
-      // Attach the thread's homework photo to the first user turn in context!
+    if (isLatestUserTurnWithImage) {
       parts.push({ inlineData: { data: threadImage.base64, mimeType: threadImage.mimeType } });
+      parts.push({ text: '📸 [Homework Worksheet Photo attached below for student]' });
     }
 
     parts.push({ text: m.content });
