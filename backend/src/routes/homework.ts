@@ -1,22 +1,25 @@
 import { Router, Request, Response } from 'express';
 import sharp from 'sharp';
 import { requireAuth } from '../middleware/auth';
-import { imageRateLimit } from '../middleware/userRateLimit';
-import { generateHomeworkExplanation } from '../lib/gemini';
+import { generateHomeworkExplanation, sanitizeChatResponse } from '../lib/gemini';
+import { uploadHomeworkImageToStorage } from '../lib/homeworkStorage';
+import { setThreadImage, setThreadStoragePath, registerPendingUpload } from '../lib/threadImageStore';
 import { checkAndIncrementUsage } from '../lib/usageLimits';
 import { logUsageEvent } from '../lib/usageEvents';
-import { setThreadImage, registerPendingUpload } from '../lib/threadImageStore';
-import { uploadHomeworkImageToStorage } from '../lib/homeworkStorage';
 import { supabaseAdmin } from '../lib/supabase';
 
 const router = Router();
 
-// POST /api/homework/analyze  { studentId, threadId?, imageBase64, prompt? }
-router.post('/analyze', requireAuth, imageRateLimit, async (req: Request, res: Response) => {
-  const { studentId, threadId, imageBase64, prompt } = req.body;
+// POST /api/homework/analyze — Uploads and analyzes a homework image snapshot
+router.post('/analyze', requireAuth, async (req: Request, res: Response) => {
+  const file = (req as any).file;
+  if (!file) {
+    return res.status(400).json({ error: 'No image file uploaded' });
+  }
 
-  if (!studentId || !imageBase64) {
-    return res.status(400).json({ error: 'studentId and imageBase64 are required' });
+  const { studentId, threadId, prompt } = req.body;
+  if (!studentId) {
+    return res.status(400).json({ error: 'studentId is required' });
   }
 
   try {
@@ -26,26 +29,30 @@ router.post('/analyze', requireAuth, imageRateLimit, async (req: Request, res: R
     }
 
     let activeThreadId = threadId;
+
+    // Create a thread if none was passed
     if (!activeThreadId) {
       const { data: thread, error: threadError } = await req.supabase!
         .from('chat_threads')
-        .insert({ student_id: studentId, title: prompt?.slice(0, 40) || 'Homework scan' })
+        .insert({ student_id: studentId, title: 'Homework Help' })
         .select()
         .single();
+
       if (threadError) throw threadError;
       activeThreadId = thread.id;
     }
 
-    // Process image compression, memory caching, and versioned storage upload as an awaited task
-    const processImageTask = (async () => {
-      const rawBuffer = Buffer.from(imageBase64, 'base64');
-      const compressedBuffer = await sharp(rawBuffer)
-        .resize({ width: 1024, height: 1024, fit: 'inside' })
-        .jpeg({ quality: 75 })
-        .toBuffer();
-      const compressedBase64 = compressedBuffer.toString('base64');
+    // Register a background task promise to compress, upload to Storage, and save in DB
+    const imageId = `${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
 
-      const imageId = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const processImageTask = (async () => {
+      // Compress image using Sharp
+      const compressedBuffer = await sharp(file.buffer)
+        .resize({ width: 1024, height: 1024, fit: 'inside' })
+        .jpeg({ quality: 80 })
+        .toBuffer();
+
+      const compressedBase64 = compressedBuffer.toString('base64');
 
       // Store in memory under latest threadId
       setThreadImage(activeThreadId, compressedBase64, 'image/jpeg');
@@ -54,8 +61,9 @@ router.post('/analyze', requireAuth, imageRateLimit, async (req: Request, res: R
       const storageResult = await uploadHomeworkImageToStorage(supabaseAdmin, activeThreadId, compressedBuffer, imageId);
 
       if (storageResult) {
-        // Also store in memory under specific storagePath
+        // Also store in memory under specific storagePath and threadId
         setThreadImage(storageResult.storagePath, compressedBase64, 'image/jpeg');
+        setThreadStoragePath(activeThreadId, storageResult.storagePath);
 
         // STEP 2: Decoupled thread_images table insert
         try {
@@ -78,21 +86,24 @@ router.post('/analyze', requireAuth, imageRateLimit, async (req: Request, res: R
 
     // Format DB message content: use lightweight versioned Storage Path reference if uploaded, else fallback
     const userPromptText = prompt?.trim() || '';
-    const userMessageContent = storageResult
-      ? `📸 [STORAGE:${storageResult.storagePath}] ${userPromptText || '[Homework photo submitted]'}`.trim()
-      : `📸 [IMAGE:${compressedBase64}] ${userPromptText || '[Homework photo submitted]'}`.trim();
+    const messageContentText = storageResult
+      ? `📸 [STORAGE:${storageResult.storagePath}] ${userPromptText}`
+      : `📸 [IMAGE:${compressedBase64}] ${userPromptText}`;
 
-    // Log the scan as a message (image type)
+    // Save user message to database
     await req.supabase!.from('messages').insert({
       thread_id: activeThreadId,
       student_id: studentId,
       role: 'user',
-      content: userMessageContent,
+      content: messageContentText,
       message_type: 'image',
     });
 
-    const explanation = await generateHomeworkExplanation(compressedBase64, 'image/jpeg', prompt);
+    // Generate AI explanation with Gemini Vision
+    const rawExplanation = await generateHomeworkExplanation(compressedBase64, 'image/jpeg', prompt);
+    const explanation = sanitizeChatResponse(rawExplanation);
 
+    // Save AI response to database
     await req.supabase!.from('messages').insert({
       thread_id: activeThreadId,
       student_id: studentId,
@@ -109,10 +120,8 @@ router.post('/analyze', requireAuth, imageRateLimit, async (req: Request, res: R
       isPremium: usage.isPremium,
     });
   } catch (error: any) {
-    console.error('Homework analysis error:', error.message);
-    return res.status(500).json({
-      error: "I couldn't quite read that photo. Can you try again with better lighting?",
-    });
+    console.error('Homework error:', error.message);
+    return res.status(500).json({ error: 'Failed to analyze homework image. Please try again.' });
   }
 });
 

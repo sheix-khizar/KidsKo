@@ -3,9 +3,10 @@ import path from 'path';
 import sharp from 'sharp';
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
-import { generateHomeworkExplanation, generateChatReply, sanitizeChatResponse, ChatMessage } from '../lib/gemini';
-import { uploadHomeworkImageToStorage, downloadHomeworkImageFromStorage } from '../lib/homeworkStorage';
-import { setThreadImage, getThreadImage, clearThreadImageCache } from '../lib/threadImageStore';
+import { generateHomeworkExplanation } from '../lib/gemini';
+import { uploadHomeworkImageToStorage } from '../lib/homeworkStorage';
+import { setThreadImage, setThreadStoragePath, clearThreadImageCache } from '../lib/threadImageStore';
+import { processChatTurnCore } from '../routes/chat';
 
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
@@ -13,23 +14,23 @@ const supabaseUrl = process.env.SUPABASE_URL!;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY! || process.env.SUPABASE_ANON_KEY!;
 const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
-const MAX_HISTORY_MESSAGES = 10;
-
-// In-memory fallback map for test thread_images resolution if table not yet migrated in local DB
+// In-memory fallback map for test thread_images resolution if table not yet created in local DB
 const inMemoryThreadImagesMap = new Map<string, string[]>();
 
-// Helper to handle transient Gemini 503/429 spikes gracefully
-async function generateChatReplyWithRetry(
-  history: ChatMessage[],
-  threadImage?: { base64: string; mimeType: string },
+// Helper to handle transient Gemini 503/429 spikes gracefully during 14-turn test sequence
+async function executeRealChatTurnWithRetry(
+  threadId: string,
+  studentId: string,
+  userMessage: string,
   retries = 3
 ): Promise<string> {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      return await generateChatReply(history, threadImage);
+      // Calls the EXACT exported production function processChatTurnCore from chat.ts
+      return await processChatTurnCore(supabaseAdmin, threadId, studentId, userMessage);
     } catch (err: any) {
       if (attempt === retries) throw err;
-      console.warn(`⚠️ [Gemini API Spike]: Attempt ${attempt} failed (${err.message}). Retrying in ${attempt * 1500}ms...`);
+      console.warn(`⚠️ [Gemini API Spike]: Turn attempt ${attempt} failed (${err.message}). Retrying in ${attempt * 1500}ms...`);
       await new Promise((r) => setTimeout(r, attempt * 1500));
     }
   }
@@ -55,135 +56,10 @@ async function createReadableMathWorksheetBuffer(): Promise<Buffer> {
     .toBuffer();
 }
 
-// Executes the exact production route logic in chat.ts using real Supabase queries & storage lookups
-async function executeRealChatTurn(
-  threadId: string,
-  studentId: string,
-  userMessage: string
-): Promise<string> {
-  // 1. Save user message to database
-  const { error: userErr } = await supabaseAdmin.from('messages').insert({
-    thread_id: threadId,
-    student_id: studentId,
-    role: 'user',
-    content: userMessage,
-  });
-  if (userErr) console.warn(`[DB Insert User Msg Warning]: ${userErr.message}`);
-
-  // 2. Fetch conversational history (trimmed to MAX_HISTORY_MESSAGES = 10)
-  const { data: recentMessages, error: historyError } = await supabaseAdmin
-    .from('messages')
-    .select('role, content')
-    .eq('thread_id', threadId)
-    .order('created_at', { ascending: false })
-    .limit(MAX_HISTORY_MESSAGES);
-  if (historyError) console.warn(`[History Fetch Warning]: ${historyError.message}`);
-
-  // 3. Decoupled active image lookup from thread_images table
-  const { data: latestImageRow } = await supabaseAdmin
-    .from('thread_images')
-    .select('storage_path')
-    .eq('thread_id', threadId)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  let activeStoragePath: string | undefined = latestImageRow?.storage_path;
-
-  // Fallback for test runner if thread_images table not yet migrated in DB schema
-  if (!activeStoragePath) {
-    const list = inMemoryThreadImagesMap.get(threadId);
-    if (list && list.length > 0) {
-      activeStoragePath = list[list.length - 1];
-    }
-  }
-
-  // Legacy fallback: scan trimmed history
-  let legacyBase64: string | undefined = undefined;
-  if (!activeStoragePath && recentMessages) {
-    for (const m of recentMessages) {
-      if (m.content) {
-        if (m.content.includes('[STORAGE:')) {
-          const match = m.content.match(/\[STORAGE:(.*?)\]/);
-          if (match && match[1]) {
-            activeStoragePath = match[1];
-            break;
-          }
-        } else if (m.content.includes('[IMAGE:')) {
-          const match = m.content.match(/\[IMAGE:(.*?)\]/);
-          if (match && match[1]) {
-            legacyBase64 = match[1];
-            break;
-          }
-        }
-      }
-    }
-  }
-
-  let threadImage: { base64: string; mimeType: string } | undefined = undefined;
-  let storageDownloadAttempted = false;
-  let storageDownloadFailed = false;
-
-  if (activeStoragePath) {
-    const cached = getThreadImage(activeStoragePath) || getThreadImage(threadId);
-    if (cached) {
-      threadImage = cached;
-    } else {
-      storageDownloadAttempted = true;
-      try {
-        const downloadedBase64 = await downloadHomeworkImageFromStorage(supabaseAdmin, activeStoragePath);
-        if (downloadedBase64) {
-          setThreadImage(activeStoragePath, downloadedBase64, 'image/jpeg');
-          setThreadImage(threadId, downloadedBase64, 'image/jpeg');
-          threadImage = { base64: downloadedBase64, mimeType: 'image/jpeg' };
-        } else {
-          storageDownloadFailed = true;
-        }
-      } catch (err: any) {
-        storageDownloadFailed = true;
-      }
-    }
-  } else if (legacyBase64) {
-    threadImage = { base64: legacyBase64, mimeType: 'image/jpeg' };
-  }
-
-  let aiReply = '';
-  if (activeStoragePath && storageDownloadAttempted && storageDownloadFailed && !threadImage) {
-    aiReply = "Hmm, I lost track of your picture! Can you snap it again for me?";
-  } else {
-    const history: ChatMessage[] = (recentMessages || []).reverse().map((m) => {
-      let cleanContent = m.content;
-      if (cleanContent.includes('[STORAGE:') || cleanContent.includes('[IMAGE:')) {
-        cleanContent = cleanContent
-          .replace(/📸\s*\[STORAGE:.*?\]\s*/g, '📸 ')
-          .replace(/📸\s*\[IMAGE:.*?\]\s*/g, '📸 ')
-          .trim();
-      }
-      return {
-        role: m.role as 'user' | 'assistant',
-        content: cleanContent,
-      };
-    });
-
-    aiReply = await generateChatReplyWithRetry(history, threadImage);
-    aiReply = sanitizeChatResponse(aiReply);
-  }
-
-  // 4. Save AI reply to database
-  const { error: aiErr } = await supabaseAdmin.from('messages').insert({
-    thread_id: threadId,
-    student_id: studentId,
-    role: 'assistant',
-    content: aiReply,
-  });
-  if (aiErr) console.warn(`[DB Insert AI Msg Warning]: ${aiErr.message}`);
-
-  return aiReply;
-}
-
 async function runMultiTurnVisualMemoryIntegrationTest() {
   console.log('🧪 =================================================================');
   console.log('🚀 REAL INTEGRATION TEST: DECOUPLED VISUAL MEMORY ACROSS 14 TURNS');
+  console.log('🧪 (Calling production processChatTurnCore from backend/src/routes/chat)');
   console.log('🧪 =================================================================\n');
 
   // Fetch or create student in database
@@ -227,6 +103,7 @@ async function runMultiTurnVisualMemoryIntegrationTest() {
 
   if (storageResult) {
     setThreadImage(storageResult.storagePath, compressedBase64, 'image/jpeg');
+    setThreadStoragePath(testThreadId, storageResult.storagePath);
 
     // Insert into thread_images table
     const { error: threadImgErr } = await supabaseAdmin.from('thread_images').insert({
@@ -296,14 +173,15 @@ async function runMultiTurnVisualMemoryIntegrationTest() {
     // Brief delay between API turns to prevent 503 high-demand spikes
     await new Promise((r) => setTimeout(r, 600));
 
-    // Purge RAM cache before Turn 14 to force real Supabase Storage download fallback
+    // Purge RAM Base64 image cache before Turn 14 to force real Supabase Storage download fallback
     if (turnNumber === 14 && storageResult?.storagePath) {
-      console.log('🧹 [Cache Purge Test]: Purging RAM cache before Turn 14 to test Supabase Storage download fallback...');
+      console.log('🧹 [Cache Purge Test]: Purging RAM image cache before Turn 14 to test Supabase Storage download fallback...');
       clearThreadImageCache(storageResult.storagePath);
       clearThreadImageCache(testThreadId);
     }
 
-    const aiResponse = await executeRealChatTurn(testThreadId, studentId, userPrompt);
+    // Call processChatTurnCore (shared production logic exported from chat.ts)
+    const aiResponse = await executeRealChatTurnWithRetry(testThreadId, studentId, userPrompt);
 
     console.log(`[TURN ${turnNumber} - USER]: "${userPrompt}"`);
     console.log(`[TURN ${turnNumber} - KIDSKO AI]: "${aiResponse}"\n`);
@@ -320,7 +198,7 @@ async function runMultiTurnVisualMemoryIntegrationTest() {
   }
 
   // -------------------------------------------------------------------------
-  // STEP 3: ASSERTIONS
+  // STEP 3: ASSERTIONS (STRICT GROUNDING REQUIREMENT)
   // -------------------------------------------------------------------------
   console.log('=================================================================');
   console.log('📊 EVALUATION CHECKS FOR REAL INTEGRATION TEST:');
@@ -331,10 +209,16 @@ async function runMultiTurnVisualMemoryIntegrationTest() {
   console.log(`1. Early Turn Check (Turn 3 / Question 2): ${earlyTurnPass ? '✅ PASS' : '❌ FAIL'}`);
   console.log(`2. Late Turn Vision Check (Turn 14): ${!deniesVision ? '✅ PASS (No Vision Denial)' : '❌ FAIL (Vision Denied!)'}`);
 
-  // Check 2: Content grounding check for Question 4 ("8 x 4 = ?" / "32")
+  // Check 2: Strict Question 4 Content Grounding Check
+  // Question 4 is "8 x 4 = ?" (Answer: 32). Requires explicit mathematical evidence (32 OR 8 x 4 / 8 × 4 / 8 times 4 / 8 multiplied by 4)
   const lowerFinal = finalReply.toLowerCase();
-  const referencesQuestion4 = lowerFinal.includes('8') || lowerFinal.includes('4') || lowerFinal.includes('32') || lowerFinal.includes('eight') || lowerFinal.includes('four') || lowerFinal.includes('multiply');
-  console.log(`3. Question 4 Image Content Grounding: ${referencesQuestion4 ? '✅ PASS (References 8 x 4 / 32)' : '❌ FAIL (Vague / Un-grounded)'}`);
+  const referencesQuestion4 = lowerFinal.includes('32') ||
+    lowerFinal.includes('8 x 4') ||
+    lowerFinal.includes('8 × 4') ||
+    lowerFinal.includes('8 times 4') ||
+    lowerFinal.includes('8 multiplied by 4');
+
+  console.log(`3. Strict Question 4 Image Grounding (32 or 8x4): ${referencesQuestion4 ? '✅ PASS (Strict Grounding Verified)' : '❌ FAIL (Failed Strict Grounding)'}`);
 
   // Cleanup test thread & storage image
   if (storageResult?.storagePath) {
@@ -348,7 +232,7 @@ async function runMultiTurnVisualMemoryIntegrationTest() {
 
   console.log('\n=================================================================');
   if (allPassed) {
-    console.log('🎉 100% REAL INTEGRATION SUITE PASSED PERFECTLY!');
+    console.log('🎉 100% REAL INTEGRATION SUITE PASSED PERFECTLY WITH STRICT GROUNDING!');
   } else {
     console.log('❌ INTEGRATION TEST FAILED - CHECK TRANSCRIPT ABOVE');
   }

@@ -7,6 +7,9 @@ type ThreadImage = {
 // In-memory cache mapping threadId or storagePath -> image base64 & mimeType
 const threadImageMap = new Map<string, ThreadImage>();
 
+// Persistent mapping threadId -> latest storagePath
+const threadStoragePathMap = new Map<string, string>();
+
 // In-flight upload promise registry mapping threadId -> Promise<any>
 const pendingUploadsMap = new Map<string, Promise<any>>();
 
@@ -34,15 +37,32 @@ export function getThreadImage(key?: string): ThreadImage | undefined {
   return threadImageMap.get(key);
 }
 
-// Purges RAM cache entries for a specific key, path, or threadId (COPPA compliance)
+export function setThreadStoragePath(threadId: string, storagePath: string) {
+  if (!threadId || !storagePath) return;
+  threadStoragePathMap.set(threadId, storagePath);
+}
+
+export function getThreadStoragePath(threadId?: string): string | undefined {
+  if (!threadId) return undefined;
+  return threadStoragePathMap.get(threadId);
+}
+
+// Purges RAM Base64 image cache entries for a specific key, path, or threadId (COPPA compliance & storage fallback testing)
 export function clearThreadImageCache(keyOrThreadId: string) {
   if (!keyOrThreadId) return;
   threadImageMap.delete(keyOrThreadId);
-  for (const k of threadImageMap.keys()) {
+  for (const k of Array.from(threadImageMap.keys())) {
     if (k.includes(keyOrThreadId)) {
       threadImageMap.delete(k);
     }
   }
+}
+
+// Purges all memory stores for a thread (Thread deletion / cleanup)
+export function clearAllThreadMemory(threadId: string) {
+  if (!threadId) return;
+  clearThreadImageCache(threadId);
+  threadStoragePathMap.delete(threadId);
 }
 
 // Register an in-flight image compression/upload promise for a thread
