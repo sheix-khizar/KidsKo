@@ -8,18 +8,37 @@ import { checkAndIncrementUsage } from '../lib/usageLimits';
 import { logUsageEvent } from '../lib/usageEvents';
 import { supabaseAdmin } from '../lib/supabase';
 
+let uploadMiddleware: any = (_req: any, _res: any, next: any) => next();
+try {
+  const multer = require('multer');
+  uploadMiddleware = multer({ limits: { fileSize: 10 * 1024 * 1024 } }).single('image');
+} catch (e) {
+  // Ignore if multer package is not present
+}
+
 const router = Router();
 
-// POST /api/homework/analyze — Uploads and analyzes a homework image snapshot
-router.post('/analyze', requireAuth, async (req: Request, res: Response) => {
-  const file = (req as any).file;
-  if (!file) {
-    return res.status(400).json({ error: 'No image file uploaded' });
-  }
+// POST /api/homework/analyze — Uploads and analyzes a homework image snapshot (supports multipart file & JSON imageBase64)
+router.post('/analyze', requireAuth, uploadMiddleware, async (req: Request, res: Response) => {
+  const { studentId, imageBase64, threadId, prompt } = req.body;
 
-  const { studentId, threadId, prompt } = req.body;
   if (!studentId) {
     return res.status(400).json({ error: 'studentId is required' });
+  }
+
+  const file = (req as any).file;
+  let imageBuffer: Buffer | undefined = undefined;
+
+  if (file && file.buffer) {
+    imageBuffer = file.buffer;
+  } else if (imageBase64) {
+    // Strip data URI scheme prefix if present (e.g. data:image/jpeg;base64,...)
+    const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+    imageBuffer = Buffer.from(cleanBase64, 'base64');
+  }
+
+  if (!imageBuffer) {
+    return res.status(400).json({ error: 'No image file uploaded' });
   }
 
   try {
@@ -47,7 +66,7 @@ router.post('/analyze', requireAuth, async (req: Request, res: Response) => {
 
     const processImageTask = (async () => {
       // Compress image using Sharp
-      const compressedBuffer = await sharp(file.buffer)
+      const compressedBuffer = await sharp(imageBuffer!)
         .resize({ width: 1024, height: 1024, fit: 'inside' })
         .jpeg({ quality: 80 })
         .toBuffer();
