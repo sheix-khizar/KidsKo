@@ -17,7 +17,7 @@ type VoiceCallbacks = {
 // 24000 Hz, 16-bit mono PCM = 48000 bytes/sec
 // ~400ms initial buffer = 19200 bytes (~4 chunks) -> preserves fast first-chunk latency (~900ms-1150ms)
 const INITIAL_BUFFER_BYTES = 19200;
-// ~1200ms chunk buffer = 57600 bytes per queued segment -> Step 3 tuning pass experiment (drastically reduces segment boundaries)
+// ~1200ms chunk buffer = 57600 bytes per queued segment -> drastically reduces segment boundaries
 const CHUNK_BUFFER_BYTES = 57600;
 
 function createWavBase64(pcmBinary: string): string {
@@ -63,7 +63,6 @@ export class VoiceSession {
   private lastSentTranscript = '';
   private isSessionActive = false;
   private isStartingSpeech = false;
-  private pendingSpeechRestart = false;
   private speechSessionConfigured = false;
 
   // Streaming Audio Queue State
@@ -214,7 +213,6 @@ export class VoiceSession {
 
   private resetTurnState() {
     this.stopAudioPlayback();
-    this.pendingSpeechRestart = false;
     this.promptSentTime = 0;
     this.firstChunkTime = 0;
     this.lastSegmentFinishTime = 0;
@@ -257,13 +255,13 @@ export class VoiceSession {
   private restartSpeechRecognition() {
     if (!this.isSessionActive || this.ws?.readyState !== WebSocket.OPEN) return;
     setTimeout(() => {
-      if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN && !this.isKidskoSpeaking()) {
+      if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN) {
         try {
-          console.log(`[SpeechRec Lifecycle] [${new Date().toISOString()}]: Lightweight restart (omitting session reconfig)...`);
-          // Pass ONLY lightweight options on restarts — omit iosCategory and iosVoiceProcessingEnabled
+          console.log(`[SpeechRec Lifecycle] [${new Date().toISOString()}]: Restarting continuous speech recognition (interimResults: true)...`);
+          // STEP 1 & 2: Restart continuously regardless of isKidskoSpeaking(), passing interimResults: true
           ExpoSpeechRecognitionModule.start({
             lang: 'en-US',
-            interimResults: false,
+            interimResults: true,
             continuous: true,
           });
         } catch (err: any) {
@@ -294,7 +292,7 @@ export class VoiceSession {
       const subResult = ExpoSpeechRecognitionModule.addListener('result', (event: any) => {
         const transcript = event.results?.[0]?.transcript?.trim();
         if (transcript && transcript.length > 0 && transcript !== this.lastSentTranscript && this.ws?.readyState === WebSocket.OPEN) {
-          // Interrupt active AI playback if user speaks
+          // Interrupt active AI playback if user speaks (Barge-In)
           this.resetTurnState();
           this.promptSentTime = Date.now();
           console.log('[Mobile Voice Input] Sending final spoken turn to Gemini Live:', transcript);
@@ -307,25 +305,15 @@ export class VoiceSession {
       const subEnd = ExpoSpeechRecognitionModule.addListener('end', () => {
         console.log(`[SpeechRec Lifecycle] [${new Date().toISOString()}]: Recognition cycle ended natively.`);
         if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN) {
-          if (this.isKidskoSpeaking()) {
-            console.log('[SpeechRec Lifecycle]: Kidsko is still speaking -> Deferring speech recognition restart until playback finishes.');
-            this.pendingSpeechRestart = true;
-          } else {
-            console.log('[SpeechRec Lifecycle]: Kidsko is not speaking -> Auto-restarting speech recognition for next user turn...');
-            this.restartSpeechRecognition();
-          }
+          console.log('[SpeechRec Lifecycle]: Auto-restarting continuous speech recognition for next user turn...');
+          this.restartSpeechRecognition();
         }
       });
 
       const subError = ExpoSpeechRecognitionModule.addListener('error', (event: any) => {
-        console.error('[SpeechRec Lifecycle]: Error event =', event.error, event.message);
+        console.log('[SpeechRec Lifecycle]: Error event =', event.error, event.message);
         if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN && event.error !== 'no-match') {
-          if (this.isKidskoSpeaking()) {
-            console.log('[SpeechRec Lifecycle]: Error event during playback -> Deferring speech recognition restart.');
-            this.pendingSpeechRestart = true;
-          } else {
-            this.restartSpeechRecognition();
-          }
+          this.restartSpeechRecognition();
         }
       });
 
@@ -333,7 +321,7 @@ export class VoiceSession {
 
       const initialOptions: any = {
         lang: 'en-US',
-        interimResults: false,
+        interimResults: true,
         continuous: true,
       };
 
@@ -349,7 +337,7 @@ export class VoiceSession {
         console.log('[Mobile Audio Session]: AEC not available via speech rec module (Android)');
       }
 
-      console.log(`[SpeechRec Lifecycle] [${new Date().toISOString()}]: Initializing speech session with full options...`);
+      console.log(`[SpeechRec Lifecycle] [${new Date().toISOString()}]: Initializing speech session (interimResults: true)...`);
       ExpoSpeechRecognitionModule.start(initialOptions);
       this.speechSessionConfigured = true;
     } catch (err: any) {
@@ -464,13 +452,6 @@ export class VoiceSession {
         const playbackEndTime = Date.now();
         const totalTurnTime = this.promptSentTime > 0 ? playbackEndTime - this.promptSentTime : 0;
         console.log(`[Mobile Audio] Playback finished: +${totalTurnTime} ms after prompt sent. Session remains WAITING FOR NEXT USER TURN.`);
-
-        // Trigger deferred speech recognition restart after Kidsko has finished speaking
-        if (this.pendingSpeechRestart || (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN)) {
-          this.pendingSpeechRestart = false;
-          console.log('[SpeechRec Lifecycle]: Playback finished -> Triggering speech recognition restart for next user turn...');
-          this.restartSpeechRecognition();
-        }
       } else {
         console.log('[Mobile Audio Stream]: Queue emptied mid-stream, awaiting next audio chunk...');
       }
@@ -519,7 +500,6 @@ export class VoiceSession {
   async end() {
     console.log('[Mobile Session End Call]: User manually ending voice session...');
     this.isSessionActive = false;
-    this.pendingSpeechRestart = false;
     this.speechSessionConfigured = false;
     this.stopSpeechRecognition();
     this.stopAudioPlayback();
