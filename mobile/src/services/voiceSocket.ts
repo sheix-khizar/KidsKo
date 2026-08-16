@@ -4,6 +4,8 @@ import { Platform } from 'react-native';
 import { getToken } from './api';
 import { WS_URL } from './config';
 
+export type VoiceSessionState = 'IDLE' | 'LISTENING' | 'THINKING' | 'SPEAKING' | 'INTERRUPTED';
+
 type VoiceCallbacks = {
   onReady: (capSeconds: number) => void;
   onCapReached: () => void;
@@ -12,6 +14,7 @@ type VoiceCallbacks = {
   onTranscript?: (text: string) => void;
   onSnapshotAck?: (remaining: number) => void;
   onSnapshotError?: (reason: string) => void;
+  onStateChange?: (state: VoiceSessionState) => void;
 };
 
 // 24000 Hz, 16-bit mono PCM = 48000 bytes/sec
@@ -20,8 +23,8 @@ const INITIAL_BUFFER_BYTES = 19200;
 // ~1200ms chunk buffer = 57600 bytes per queued segment -> drastically reduces segment boundaries
 const CHUNK_BUFFER_BYTES = 57600;
 
-// ~300ms adaptive utterance debounce to convert progressive speech recognition updates into ONE Gemini turn
-const SPEECH_SEND_DEBOUNCE_MS = 300;
+// Configurable adaptive utterance debounce to convert progressive speech recognition updates into ONE Gemini turn
+const SPEECH_SEND_DEBOUNCE_MS = 400;
 
 function createWavBase64(pcmBinary: string): string {
   const pcmBytesLength = pcmBinary.length;
@@ -68,6 +71,10 @@ export class VoiceSession {
   private isStartingSpeech = false;
   private speechSessionConfigured = false;
 
+  // Turn-Taking State Machine & Monotonic Turn Tracking
+  private sessionState: VoiceSessionState = 'IDLE';
+  private currentTurnId = 1;
+
   // Utterance Stabilization & Debounce State
   private pendingTranscript = '';
   private transcriptDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -92,6 +99,21 @@ export class VoiceSession {
     return this.lastSentTranscript;
   }
 
+  getCurrentTurnId(): number {
+    return this.currentTurnId;
+  }
+
+  getSessionState(): VoiceSessionState {
+    return this.sessionState;
+  }
+
+  private setSessionState(newState: VoiceSessionState) {
+    if (this.sessionState !== newState) {
+      this.sessionState = newState;
+      this.callbacks?.onStateChange?.(newState);
+    }
+  }
+
   private isKidskoSpeaking(): boolean {
     return (
       this.isPlayingQueue ||
@@ -110,9 +132,9 @@ export class VoiceSession {
     this.pendingTranscript = '';
   }
 
-  private commitPendingTranscript(cycleId: number) {
-    if (cycleId !== this.speechCycleId) {
-      console.log(`[SpeechRec #${cycleId}] Ignoring stale commit attempt (current cycle #${this.speechCycleId}).`);
+  private commitPendingTranscript(cycleId: number, targetTurnId: number) {
+    if (cycleId !== this.speechCycleId || targetTurnId !== this.currentTurnId) {
+      console.log(`[Turn] Ignoring stale commit attempt for Turn #${targetTurnId} / Cycle #${cycleId} (Active Turn is #${this.currentTurnId})`);
       return;
     }
 
@@ -127,22 +149,23 @@ export class VoiceSession {
     if (!transcript || transcript.length === 0) return;
 
     if (transcript === this.lastSentTranscript) {
-      console.log(`[SpeechRec #${cycleId}] Suppressing duplicate transcript for turn: "${transcript}"`);
+      console.log(`[Turn] Suppressing duplicate transcript for turn: "${transcript}"`);
       return;
     }
 
     if (!this.isSessionActive || this.ws?.readyState !== WebSocket.OPEN) {
-      console.warn(`[SpeechRec #${cycleId}] Cannot send transcript: WebSocket not open.`);
+      console.warn(`[Turn] Cannot send transcript: WebSocket not open.`);
       return;
     }
 
+    this.setSessionState('THINKING');
     this.resetTurnState();
     this.promptSentTime = Date.now();
     this.lastSentTranscript = transcript;
 
-    console.log(`[SpeechRec #${cycleId}] Candidate stabilized: "${transcript}"`);
-    console.log(`[SpeechRec #${cycleId}] Sending ONE Gemini turn: "${transcript}"`);
-    this.ws.send(JSON.stringify({ type: 'text_prompt', data: transcript }));
+    console.log(`[Turn] User turn finalized: #${this.currentTurnId} "${transcript}"`);
+    console.log(`[Turn] Sending Gemini Turn #${this.currentTurnId}`);
+    this.ws.send(JSON.stringify({ type: 'text_prompt', data: transcript, turnId: this.currentTurnId }));
     this.callbacks?.onTranscript?.(transcript);
   }
 
@@ -155,6 +178,7 @@ export class VoiceSession {
 
     this.callbacks = callbacks;
     this.isSessionActive = true;
+    this.setSessionState('LISTENING');
     const studentParam = studentId ? `&studentId=${studentId}` : '';
     const socketUrl = `${WS_URL}/ws/voice?token=${token}${studentParam}`;
     console.log('Connecting Voice WebSocket to:', socketUrl);
@@ -164,25 +188,37 @@ export class VoiceSession {
       try {
         const msg = JSON.parse(event.data);
         if (msg.type === 'ready') {
-          console.log(`[Mobile WS Ready Frame]: Session cap = ${msg.capSeconds}s`);
+          console.log(`[Mobile WS Ready Frame]: Session cap = ${msg.capSeconds}s, TurnId=#${msg.turnId || this.currentTurnId}`);
           callbacks.onReady(msg.capSeconds);
         } else if (msg.type === 'cap_reached') {
           console.log('[Mobile WS Cap Reached Frame]: Server sent cap_reached signal.');
           this.isSessionActive = false;
           this.stopSpeechRecognition();
           this.stopAudioPlayback();
+          this.setSessionState('IDLE');
           callbacks.onCapReached();
         } else if (msg.type === 'error') {
           console.error('[Mobile WS Error Frame]: Server error =', msg.reason);
           callbacks.onError(msg.reason);
         } else if (msg.type === 'audio') {
+          const inboundTurnId = msg.turnId ?? this.currentTurnId;
+          if (inboundTurnId !== this.currentTurnId) {
+            console.log(`[Audio] Discarding stale audio chunk for dead Turn #${inboundTurnId} (Active Turn is #${this.currentTurnId})`);
+            return;
+          }
+
+          if (this.sessionState !== 'SPEAKING') {
+            console.log(`[Turn] Gemini response started: Turn #${this.currentTurnId}`);
+            this.setSessionState('SPEAKING');
+          }
+
           this.receivedChunkCount++;
           if (this.receivedChunkCount === 1) {
             this.firstChunkTime = Date.now();
             const latencyToFirstChunk = this.promptSentTime > 0 ? this.firstChunkTime - this.promptSentTime : 0;
-            console.log(`[Mobile Audio] First chunk received: +${latencyToFirstChunk} ms after prompt sent`);
+            console.log(`[Mobile Audio] First chunk received: +${latencyToFirstChunk} ms after prompt sent (Turn #${this.currentTurnId})`);
           }
-          console.log(`[Mobile Inbound Audio Chunk #${this.receivedChunkCount}]: base64 len = ${msg.data.length}`);
+          console.log(`[Mobile Inbound Audio Chunk #${this.receivedChunkCount}]: TurnId=#${inboundTurnId}, base64 len = ${msg.data.length}`);
 
           // Append incoming chunk to binary PCM accumulator
           this.accumulatedPcmBinary += atob(msg.data);
@@ -205,9 +241,15 @@ export class VoiceSession {
             }
           }
         } else if (msg.type === 'turn_complete') {
+          const inboundTurnId = msg.turnId ?? this.currentTurnId;
+          if (inboundTurnId !== this.currentTurnId) {
+            console.log(`[Turn] Ignoring turn_complete for dead Turn #${inboundTurnId} (Active Turn is #${this.currentTurnId})`);
+            return;
+          }
+
           const turnCompleteTime = Date.now();
           const latencyToTurnComplete = this.promptSentTime > 0 ? turnCompleteTime - this.promptSentTime : 0;
-          console.log(`[Mobile Audio] Turn complete: +${latencyToTurnComplete} ms after prompt sent. Total chunks collected = ${this.receivedChunkCount}`);
+          console.log(`[Mobile Audio] Turn complete: +${latencyToTurnComplete} ms after prompt sent (Turn #${this.currentTurnId}). Total chunks collected = ${this.receivedChunkCount}`);
 
           this.isTurnComplete = true;
 
@@ -243,6 +285,7 @@ export class VoiceSession {
       this.isSessionActive = false;
       this.stopSpeechRecognition();
       this.stopAudioPlayback();
+      this.setSessionState('IDLE');
       callbacks.onClose(e.reason || e.code);
     };
 
@@ -256,10 +299,11 @@ export class VoiceSession {
 
   sendImageCapture(base64Jpeg: string, caption?: string) {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      console.log('[Mobile Sending Image Capture]:', base64Jpeg.length, 'base64 chars, caption:', caption || '(none)');
+      console.log(`[Mobile Sending Image Capture]: TurnId=#${this.currentTurnId}`, base64Jpeg.length, 'base64 chars, caption:', caption || '(none)');
       this.resetTurnState();
       this.promptSentTime = Date.now();
-      this.ws.send(JSON.stringify({ type: 'image_capture', data: base64Jpeg, caption }));
+      this.setSessionState('THINKING');
+      this.ws.send(JSON.stringify({ type: 'image_capture', data: base64Jpeg, caption, turnId: this.currentTurnId }));
     }
   }
 
@@ -281,7 +325,8 @@ export class VoiceSession {
 
   private stopAudioPlayback() {
     if (this.activePlayer || this.preloadedNextPlayer || this.audioQueue.length > 0 || this.isPlayingQueue) {
-      console.log('[Mobile Turn Interrupted]: Discarding queued audio and stopping active/preloaded players.');
+      console.log(`[Audio] Discarding queued audio for Turn #${this.currentTurnId}`);
+      console.log(`[Audio] Stopping active player for Turn #${this.currentTurnId}`);
     }
     this.clearPendingDebounce();
     this.audioQueue = [];
@@ -353,15 +398,26 @@ export class VoiceSession {
 
         const currentCycleId = this.speechCycleId;
 
-        // ⚡ IMMEDIATE BARGE-IN DETECTION: If Kidsko is speaking, stop AI playback instantly!
-        if (this.isKidskoSpeaking()) {
-          console.log(`[Mobile Barge-In] Speech detected while Kidsko is speaking ("${normalized}").`);
-          console.log(`[Mobile Barge-In] Stopping Kidsko playback immediately`);
+        // ⚡ REAL BARGE-IN: If Kidsko is currently speaking, invalidate old turn immediately!
+        if (this.isKidskoSpeaking() || this.sessionState === 'SPEAKING') {
+          console.log(`[Turn] Barge-in detected during Turn #${this.currentTurnId}`);
+          console.log(`[Turn] Invalidating Gemini Turn #${this.currentTurnId}`);
+
+          const deadTurnId = this.currentTurnId;
+          this.currentTurnId++;
+
+          console.log(`[Audio] Discarding queued audio for Turn #${deadTurnId}`);
+          console.log(`[Audio] Stopping active player for Turn #${deadTurnId}`);
           this.stopAudioPlayback();
+
+          console.log('[Turn] Listening for replacement user turn');
+          this.setSessionState('LISTENING');
+        } else if (this.sessionState === 'IDLE' || this.sessionState === 'THINKING') {
+          this.setSessionState('LISTENING');
+          console.log(`[Turn] User turn started: #${this.currentTurnId}`);
         }
 
-        console.log(`[SpeechRec #${currentCycleId}] Candidate updated: "${normalized}"`);
-        console.log(`[SpeechRec #${currentCycleId}] Debounce reset: ${SPEECH_SEND_DEBOUNCE_MS}ms`);
+        console.log(`[Turn] Candidate: "${normalized}"`);
         this.pendingTranscript = normalized;
 
         if (this.transcriptDebounceTimer) {
@@ -370,7 +426,7 @@ export class VoiceSession {
         }
 
         this.transcriptDebounceTimer = setTimeout(() => {
-          this.commitPendingTranscript(currentCycleId);
+          this.commitPendingTranscript(currentCycleId, this.currentTurnId);
         }, SPEECH_SEND_DEBOUNCE_MS);
       });
 
@@ -525,7 +581,8 @@ export class VoiceSession {
       if (this.isTurnComplete) {
         const playbackEndTime = Date.now();
         const totalTurnTime = this.promptSentTime > 0 ? playbackEndTime - this.promptSentTime : 0;
-        console.log(`[Mobile Audio] Playback finished: +${totalTurnTime} ms after prompt sent. Session remains WAITING FOR NEXT USER TURN.`);
+        console.log(`[Mobile Audio] Playback finished for Turn #${this.currentTurnId}: +${totalTurnTime} ms after prompt sent. Session remains WAITING FOR NEXT USER TURN.`);
+        this.setSessionState('LISTENING');
       } else {
         console.log('[Mobile Audio Stream]: Queue emptied mid-stream, awaiting next audio chunk...');
       }
@@ -538,7 +595,7 @@ export class VoiceSession {
       this.hasLoggedPlaybackStart = true;
       const playbackStartTime = Date.now();
       const timeToFirstAudio = this.promptSentTime > 0 ? playbackStartTime - this.promptSentTime : 0;
-      console.log(`[Mobile Audio] Playback started: +${timeToFirstAudio} ms after prompt sent`);
+      console.log(`[Mobile Audio] Playback started for Turn #${this.currentTurnId}: +${timeToFirstAudio} ms after prompt sent`);
       console.log(`[Mobile Audio] Time to first audio: ${timeToFirstAudio} ms`);
     }
 
@@ -579,6 +636,7 @@ export class VoiceSession {
     this.speechCycleId++;
     this.stopSpeechRecognition();
     this.stopAudioPlayback();
+    this.setSessionState('IDLE');
     if (this.ws) {
       this.ws.close();
     }

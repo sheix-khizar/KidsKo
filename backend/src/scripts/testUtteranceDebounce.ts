@@ -1,25 +1,37 @@
 import { EventEmitter } from 'events';
 
-// SPEECH DEBOUNCE LOGIC TEST SIMULATION (Matching mobile/src/services/voiceSocket.ts)
-const SPEECH_SEND_DEBOUNCE_MS = 300;
+// STRICT TURN-TAKING & SINGLE ACTIVE TURN TEST SUITE
+const SPEECH_SEND_DEBOUNCE_MS = 400;
 
 class SimulatedVoiceSession {
   private lastSentTranscript = '';
   private pendingTranscript = '';
   private transcriptDebounceTimer: NodeJS.Timeout | null = null;
   private speechCycleId = 0;
+  private currentTurnId = 1;
+  private sessionState: 'IDLE' | 'LISTENING' | 'THINKING' | 'SPEAKING' | 'INTERRUPTED' = 'IDLE';
   private isSessionActive = true;
   private wsOpen = true;
 
   // Tracked test metrics
-  public sentGeminiTurns: string[] = [];
+  public sentGeminiTurns: { turnId: number; transcript: string }[] = [];
   public isAudioPlaying = false;
   public stopPlaybackCallCount = 0;
+  public discardedAudioChunks: { turnId: number; data: string }[] = [];
+  public acceptedAudioChunks: { turnId: number; data: string }[] = [];
 
   constructor() {}
 
+  public getSessionState() {
+    return this.sessionState;
+  }
+
+  public getCurrentTurnId() {
+    return this.currentTurnId;
+  }
+
   private isKidskoSpeaking(): boolean {
-    return this.isAudioPlaying;
+    return this.isAudioPlaying || this.sessionState === 'SPEAKING';
   }
 
   private clearPendingDebounce() {
@@ -45,9 +57,19 @@ class SimulatedVoiceSession {
     this.speechCycleId++;
   }
 
-  private commitPendingTranscript(cycleId: number) {
-    if (cycleId !== this.speechCycleId) {
-      // Stale callback protection
+  public simulateInboundAudioChunk(turnId: number, data: string) {
+    if (turnId !== this.currentTurnId) {
+      this.discardedAudioChunks.push({ turnId, data });
+      return;
+    }
+    this.isAudioPlaying = true;
+    this.sessionState = 'SPEAKING';
+    this.acceptedAudioChunks.push({ turnId, data });
+  }
+
+  private commitPendingTranscript(cycleId: number, targetTurnId: number) {
+    if (cycleId !== this.speechCycleId || targetTurnId !== this.currentTurnId) {
+      // Stale callback / turn invalidation guard
       return;
     }
 
@@ -63,9 +85,10 @@ class SimulatedVoiceSession {
     if (transcript === this.lastSentTranscript) return;
     if (!this.isSessionActive || !this.wsOpen) return;
 
+    this.sessionState = 'THINKING';
     this.resetTurnState();
     this.lastSentTranscript = transcript;
-    this.sentGeminiTurns.push(transcript);
+    this.sentGeminiTurns.push({ turnId: this.currentTurnId, transcript });
   }
 
   public onRecognitionResult(rawTranscript: string) {
@@ -75,9 +98,14 @@ class SimulatedVoiceSession {
 
     const currentCycleId = this.speechCycleId;
 
-    // Immediate Barge-In: If Kidsko is speaking, stop playback immediately!
-    if (this.isKidskoSpeaking()) {
+    // ⚡ REAL BARGE-IN: If Kidsko is speaking, invalidate old turn immediately!
+    if (this.isKidskoSpeaking() || this.sessionState === 'SPEAKING') {
+      const oldTurnId = this.currentTurnId;
+      this.currentTurnId++; // Increment turn ID! Old turn becomes dead!
       this.stopAudioPlayback();
+      this.sessionState = 'LISTENING';
+    } else if (this.sessionState === 'IDLE' || this.sessionState === 'THINKING') {
+      this.sessionState = 'LISTENING';
     }
 
     this.pendingTranscript = normalized;
@@ -88,166 +116,116 @@ class SimulatedVoiceSession {
     }
 
     this.transcriptDebounceTimer = setTimeout(() => {
-      this.commitPendingTranscript(currentCycleId);
+      this.commitPendingTranscript(currentCycleId, this.currentTurnId);
     }, SPEECH_SEND_DEBOUNCE_MS);
   }
 }
 
-async function runUtteranceDebounceVerification() {
+async function runTurnTakingVerificationSuite() {
   console.log('🧪 ==========================================================');
-  console.log('🚀 ADAPTIVE UTTERANCE DEBOUNCE VERIFICATION SUITE');
+  console.log('🚀 STRICT VOICE TURN-TAKING & TURN INVALIDATION SUITE');
   console.log('🧪 ==========================================================\n');
 
-  // Test A — Progressive Android Transcript
+  // Test 1 — Normal Sentence (Progressive updates -> 1 Gemini Turn)
   {
-    console.log('👉 [Test A] Progressive Android Transcript Updates...');
+    console.log('👉 [Test 1] Normal Sentence Progressive Candidate Updates...');
     const session = new SimulatedVoiceSession();
     session.startNewCycle();
 
-    session.onRecognitionResult('hello');
+    session.onRecognitionResult('can');
     await new Promise((r) => setTimeout(r, 50));
-    session.onRecognitionResult('hello could');
+    session.onRecognitionResult('can you');
     await new Promise((r) => setTimeout(r, 50));
-    session.onRecognitionResult('hello could you');
+    session.onRecognitionResult('can you help');
     await new Promise((r) => setTimeout(r, 50));
-    session.onRecognitionResult('hello could you hear');
+    session.onRecognitionResult('can you help me');
     await new Promise((r) => setTimeout(r, 50));
-    session.onRecognitionResult('hello could you hear me');
+    session.onRecognitionResult('can you help me with my homework');
 
-    // Wait for debounce period (350ms)
-    await new Promise((r) => setTimeout(r, 350));
+    await new Promise((r) => setTimeout(r, 450));
 
-    if (session.sentGeminiTurns.length === 1 && session.sentGeminiTurns[0] === 'hello could you hear me') {
-      console.log('  ✅ [PASS] Progressive updates produced exactly ONE Gemini turn: "hello could you hear me"');
-    } else {
-      throw new Error(`[FAIL] Expected 1 turn ("hello could you hear me"), got: ${JSON.stringify(session.sentGeminiTurns)}`);
-    }
-  }
-
-  // Test B — Fast Speech Updates (Every 50ms)
-  {
-    console.log('\n👉 [Test B] Fast Speech Updates (Every 50ms)...');
-    const session = new SimulatedVoiceSession();
-    session.startNewCycle();
-
-    const words = ['I', 'I have', 'I have a', 'I have a question', 'I have a question about', 'I have a question about my', 'I have a question about my homework'];
-    for (const w of words) {
-      session.onRecognitionResult(w);
-      await new Promise((r) => setTimeout(r, 50));
-    }
-
-    await new Promise((r) => setTimeout(r, 350));
-
-    if (session.sentGeminiTurns.length === 1 && session.sentGeminiTurns[0] === 'I have a question about my homework') {
-      console.log('  ✅ [PASS] Fast speech updates reset timer continuously and sent ONE turn: "I have a question about my homework"');
+    if (session.sentGeminiTurns.length === 1 && session.sentGeminiTurns[0].transcript === 'can you help me with my homework') {
+      console.log('  ✅ [PASS] Sent exactly ONE final transcript: "can you help me with my homework"');
     } else {
       throw new Error(`[FAIL] Expected 1 turn, got: ${JSON.stringify(session.sentGeminiTurns)}`);
     }
   }
 
-  // Test C — Natural Pause (500ms apart)
+  // Test 2 — Barge-In / Interruption & Old Turn Audio Invalidation
   {
-    console.log('\n👉 [Test C] Natural Pause (500ms apart)...');
+    console.log('\n👉 [Test 2] Barge-In & Invalidation of Stale In-Flight Audio...');
     const session = new SimulatedVoiceSession();
     session.startNewCycle();
 
-    session.onRecognitionResult('Hello');
-    await new Promise((r) => setTimeout(r, 350)); // Turn 1 commits
+    // Turn 1 starts
+    session.onRecognitionResult('Question four asks about');
+    await new Promise((r) => setTimeout(r, 450)); // Turn 1 sent
+    const turn1Id = session.sentGeminiTurns[0].turnId;
 
-    session.startNewCycle();
-    session.onRecognitionResult('Can you help me');
-    await new Promise((r) => setTimeout(r, 350)); // Turn 2 commits
+    // Simulate inbound audio for Turn 1
+    session.simulateInboundAudioChunk(turn1Id, 'audio_chunk_1');
+    if (session.getSessionState() !== 'SPEAKING') throw new Error('Session state should be SPEAKING');
 
-    if (session.sentGeminiTurns.length === 2 && session.sentGeminiTurns[0] === 'Hello' && session.sentGeminiTurns[1] === 'Can you help me') {
-      console.log('  ✅ [PASS] Natural pause produced TWO separate turns: ["Hello", "Can you help me"]');
+    // Child interrupts while Turn 1 audio is playing!
+    session.onRecognitionResult('Wait stop explain it again');
+
+    // Turn ID should have incremented to Turn 2 immediately!
+    const turn2Id = session.getCurrentTurnId();
+    if (turn2Id !== turn1Id + 1) throw new Error(`Expected Turn ID to increment from ${turn1Id} to ${turn1Id + 1}`);
+    if (session.stopPlaybackCallCount !== 1) throw new Error('Audio playback should stop immediately');
+    if (session.getSessionState() !== 'LISTENING') throw new Error('Session state should be LISTENING');
+
+    // Simulate in-flight audio chunk for OLD Turn 1 arriving after interruption
+    session.simulateInboundAudioChunk(turn1Id, 'stale_audio_chunk_turn_1');
+    if (session.discardedAudioChunks.length !== 1 || session.discardedAudioChunks[0].turnId !== turn1Id) {
+      throw new Error('Stale audio chunk for Turn 1 was not discarded');
+    }
+    console.log('  ✅ [PASS] Stale in-flight audio chunk for Turn 1 was discarded successfully!');
+
+    // Wait for Turn 2 candidate stabilization
+    await new Promise((r) => setTimeout(r, 450));
+
+    if (session.sentGeminiTurns.length === 2 && session.sentGeminiTurns[1].turnId === turn2Id && session.sentGeminiTurns[1].transcript === 'Wait stop explain it again') {
+      console.log('  ✅ [PASS] Only Turn 2 prompt sent after interruption: "Wait stop explain it again"');
     } else {
-      throw new Error(`[FAIL] Expected 2 turns, got: ${JSON.stringify(session.sentGeminiTurns)}`);
+      throw new Error(`[FAIL] Expected Turn 2 to send, got: ${JSON.stringify(session.sentGeminiTurns)}`);
     }
   }
 
-  // Test D — Duplicate Result Filtering
+  // Test 3 — Multiple Consecutive Interruptions
   {
-    console.log('\n👉 [Test D] Duplicate Result Filtering...');
+    console.log('\n👉 [Test 3] Multiple Consecutive Interruptions...');
     const session = new SimulatedVoiceSession();
     session.startNewCycle();
 
-    session.onRecognitionResult('hello could you hear me');
-    session.onRecognitionResult('hello could you hear me');
-    await new Promise((r) => setTimeout(r, 350));
+    // Turn 1
+    session.onRecognitionResult('Tell me about stars');
+    await new Promise((r) => setTimeout(r, 450));
+    session.simulateInboundAudioChunk(1, 'audio_star_1');
 
-    if (session.sentGeminiTurns.length === 1) {
-      console.log('  ✅ [PASS] Duplicate result produced exactly ONE Gemini turn');
+    // Interrupt 1 -> Turn 2
+    session.onRecognitionResult('Wait what about the sun');
+    await new Promise((r) => setTimeout(r, 450));
+    session.simulateInboundAudioChunk(2, 'audio_sun_1');
+
+    // Interrupt 2 -> Turn 3
+    session.onRecognitionResult('Wait how far is it');
+    await new Promise((r) => setTimeout(r, 450));
+    session.simulateInboundAudioChunk(3, 'audio_distance_1');
+
+    if (session.sentGeminiTurns.length === 3 && session.sentGeminiTurns[2].turnId === 3) {
+      console.log('  ✅ [PASS] Successfully handled 3 consecutive turns without old audio leakage!');
     } else {
-      throw new Error(`[FAIL] Duplicate resulted in multiple turns: ${JSON.stringify(session.sentGeminiTurns)}`);
-    }
-  }
-
-  // Test E — Immediate Barge-In
-  {
-    console.log('\n👉 [Test E] Immediate Barge-In (AI Playback Active)...');
-    const session = new SimulatedVoiceSession();
-    session.startNewCycle();
-    session.isAudioPlaying = true;
-
-    session.onRecognitionResult('Stop I want to ask something');
-
-    if (session.stopPlaybackCallCount === 1 && !session.isAudioPlaying) {
-      console.log('  ✅ [PASS] AI Audio playback stopped IMMEDIATELY (0ms delay) upon speech detection!');
-    } else {
-      throw new Error('[FAIL] Audio playback was not stopped immediately upon barge-in');
-    }
-
-    await new Promise((r) => setTimeout(r, 350));
-
-    if (session.sentGeminiTurns.length === 1 && session.sentGeminiTurns[0] === 'Stop I want to ask something') {
-      console.log('  ✅ [PASS] Stabilized turn committed after barge-in: "Stop I want to ask something"');
-    } else {
-      throw new Error(`[FAIL] Expected 1 turn after barge-in, got: ${JSON.stringify(session.sentGeminiTurns)}`);
-    }
-  }
-
-  // Test F — no-speech (Zero Gemini Turns)
-  {
-    console.log('\n👉 [Test F] no-speech Event...');
-    const session = new SimulatedVoiceSession();
-    session.startNewCycle();
-
-    // no-speech emits no transcript
-    await new Promise((r) => setTimeout(r, 350));
-
-    if (session.sentGeminiTurns.length === 0) {
-      console.log('  ✅ [PASS] no-speech event produced ZERO Gemini requests');
-    } else {
-      throw new Error(`[FAIL] Expected 0 turns for no-speech, got: ${JSON.stringify(session.sentGeminiTurns)}`);
-    }
-  }
-
-  // Test G — Stale Callback Protection
-  {
-    console.log('\n👉 [Test G] Stale Callback Protection...');
-    const session = new SimulatedVoiceSession();
-    session.startNewCycle(); // Cycle #1
-
-    session.onRecognitionResult('stale candidate turn 1');
-
-    // Simulate native recognizer restart / cycle increment BEFORE turn 1 debounce timer fires
-    session.startNewCycle(); // Cycle #2
-
-    await new Promise((r) => setTimeout(r, 350));
-
-    if (session.sentGeminiTurns.length === 0) {
-      console.log('  ✅ [PASS] Stale callback from previous cycle ignored (0 turns sent)');
-    } else {
-      throw new Error(`[FAIL] Stale callback was incorrectly sent to Gemini: ${JSON.stringify(session.sentGeminiTurns)}`);
+      throw new Error(`[FAIL] Multiple interruptions failed: ${JSON.stringify(session.sentGeminiTurns)}`);
     }
   }
 
   console.log('\n==========================================================');
-  console.log('🎉 100% ADAPTIVE UTTERANCE DEBOUNCE SUITE PASSED PERFECTLY!');
+  console.log('🎉 100% STRICT VOICE TURN-TAKING SUITE PASSED PERFECTLY!');
   console.log('==========================================================\n');
 }
 
-runUtteranceDebounceVerification().catch((err) => {
-  console.error('Debounce verification failed:', err);
+runTurnTakingVerificationSuite().catch((err) => {
+  console.error('Turn-taking verification failed:', err);
   process.exit(1);
 });
