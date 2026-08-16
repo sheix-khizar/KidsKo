@@ -17,6 +17,7 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
   const [showOptionModal, setShowOptionModal] = useState(false);
   const [isSendingSnapshot, setIsSendingSnapshot] = useState(false);
   const [snapshotsRemaining, setSnapshotsRemaining] = useState<number | null>(null);
+  const [lastSpokenTranscript, setLastSpokenTranscript] = useState<string>('');
 
   const sessionRef = useRef<VoiceSession | null>(null);
   const timerRef = useRef<any>(null);
@@ -47,6 +48,12 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
         onClose: (reason) => {
           if (reason) setErrorReason(reason.toString());
           setStatus('ended');
+        },
+        onTranscript: (text) => {
+          if (text && text.trim().length > 0) {
+            console.log('[LiveVoiceScreen] Captured student spoken transcript:', text);
+            setLastSpokenTranscript(text.trim());
+          }
         },
         onSnapshotAck: (remaining) => {
           setSnapshotsRemaining(remaining);
@@ -102,7 +109,9 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
   const sendHomeworkPhoto = (base64: string) => {
     setIsSendingSnapshot(true);
     setErrorReason(null);
-    sessionRef.current?.sendImageCapture(base64, 'Please look at this and help me with my homework.');
+    const activeCaption = lastSpokenTranscript.trim() || sessionRef.current?.getLastTranscript() || 'Please look at this and help me with my homework.';
+    console.log('[LiveVoiceScreen] Sending captured homework photo with caption:', activeCaption);
+    sessionRef.current?.sendImageCapture(base64, activeCaption);
   };
 
   return (

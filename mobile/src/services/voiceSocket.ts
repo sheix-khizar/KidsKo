@@ -16,8 +16,8 @@ type VoiceCallbacks = {
 // 24000 Hz, 16-bit mono PCM = 48000 bytes/sec
 // ~400ms initial buffer = 19200 bytes (~4 chunks) -> preserves fast first-chunk latency (~900ms-1150ms)
 const INITIAL_BUFFER_BYTES = 19200;
-// ~800ms chunk buffer = 38400 bytes per queued segment -> cuts segment boundaries in half
-const CHUNK_BUFFER_BYTES = 38400;
+// ~1200ms chunk buffer = 57600 bytes per queued segment -> Step 3 tuning pass experiment (drastically reduces segment boundaries)
+const CHUNK_BUFFER_BYTES = 57600;
 
 function createWavBase64(pcmBinary: string): string {
   const pcmBytesLength = pcmBinary.length;
@@ -57,6 +57,7 @@ export class VoiceSession {
   private ws: WebSocket | null = null;
   private activePlayer: any = null;
   private preloadedNextPlayer: any = null;
+  private callbacks: VoiceCallbacks | null = null;
   private speechSubscriptions: any[] = [];
   private lastSentTranscript = '';
   private isSessionActive = false;
@@ -72,9 +73,15 @@ export class VoiceSession {
   private isTurnComplete = false;
   private hasLoggedPlaybackStart = false;
 
-  // Diagnostic Timers
+  // Diagnostic Timers & Handoff Metrics
   private promptSentTime = 0;
   private firstChunkTime = 0;
+  private lastSegmentFinishTime = 0;
+  private currentSegmentPreloadTime = 0;
+
+  getLastTranscript(): string {
+    return this.lastSentTranscript;
+  }
 
   private isKidskoSpeaking(): boolean {
     return (
@@ -93,6 +100,7 @@ export class VoiceSession {
       return;
     }
 
+    this.callbacks = callbacks;
     this.isSessionActive = true;
     const studentParam = studentId ? `&studentId=${studentId}` : '';
     const socketUrl = `${WS_URL}/ws/voice?token=${token}${studentParam}`;
@@ -133,7 +141,7 @@ export class VoiceSession {
               this.startAudioQueuePlayback();
             }
           } else {
-            // Once streaming has started, flush chunks whenever chunk threshold (~800ms) is reached
+            // Once streaming has started, flush chunks whenever chunk threshold (~1200ms) is reached
             if (this.accumulatedPcmBinary.length >= CHUNK_BUFFER_BYTES) {
               this.flushBufferedPcmToQueue();
               if (!this.isPlayingQueue) {
@@ -207,6 +215,8 @@ export class VoiceSession {
     this.pendingSpeechRestart = false;
     this.promptSentTime = 0;
     this.firstChunkTime = 0;
+    this.lastSegmentFinishTime = 0;
+    this.currentSegmentPreloadTime = 0;
     this.receivedChunkCount = 0;
     this.accumulatedPcmBinary = '';
     this.audioQueue = [];
@@ -224,6 +234,8 @@ export class VoiceSession {
     this.accumulatedPcmBinary = '';
     this.hasStartedPlayback = false;
     this.isPlayingQueue = false;
+    this.lastSegmentFinishTime = 0;
+    this.currentSegmentPreloadTime = 0;
 
     if (this.activePlayer) {
       try {
@@ -281,6 +293,7 @@ export class VoiceSession {
           console.log('[Mobile Voice Input] Sending final spoken turn to Gemini Live:', transcript);
           this.lastSentTranscript = transcript;
           this.ws.send(JSON.stringify({ type: 'text_prompt', data: transcript }));
+          this.callbacks?.onTranscript?.(transcript);
         }
       });
 
@@ -360,7 +373,11 @@ export class VoiceSession {
       const pcmSegmentBinary = this.accumulatedPcmBinary.slice(0, pcmSegmentLength);
       this.accumulatedPcmBinary = this.accumulatedPcmBinary.slice(pcmSegmentLength);
 
+      const t0 = Date.now();
       const wavBase64 = createWavBase64(pcmSegmentBinary);
+      const t1 = Date.now();
+      console.log(`[Mobile Audio Overhead]: createWavBase64 took ${t1 - t0} ms for ${pcmSegmentLength} bytes PCM.`);
+
       this.audioQueue.push(`data:audio/wav;base64,${wavBase64}`);
     }
   }
@@ -375,9 +392,13 @@ export class VoiceSession {
     if (this.preloadedNextPlayer || this.audioQueue.length === 0) return;
 
     const nextSegmentUri = this.audioQueue.shift()!;
+    const t0 = Date.now();
     try {
       console.log(`[Mobile Audio Preload]: Pre-creating background audio player for next segment (${nextSegmentUri.length} chars URI)...`);
       this.preloadedNextPlayer = createAudioPlayer({ uri: nextSegmentUri });
+      const t1 = Date.now();
+      this.currentSegmentPreloadTime = t1;
+      console.log(`[Mobile Audio Overhead]: Preload createAudioPlayer took ${t1 - t0} ms.`);
     } catch (err) {
       console.error('[Mobile Audio Preload Error]: Could not pre-create audio player:', err);
       this.audioQueue.unshift(nextSegmentUri);
@@ -385,19 +406,32 @@ export class VoiceSession {
   }
 
   private playNextAudioSegment() {
-    let playerToPlay: any = null;
+    const segmentStartTime = Date.now();
 
-    if (this.preloadedNextPlayer) {
+    if (this.lastSegmentFinishTime > 0) {
+      const handoffGap = segmentStartTime - this.lastSegmentFinishTime;
+      console.log(`[Mobile Audio Gap]: Handoff gap between segments = ${handoffGap} ms`);
+    }
+
+    let playerToPlay: any = null;
+    const isPreloaded = !!this.preloadedNextPlayer;
+
+    if (isPreloaded) {
       playerToPlay = this.preloadedNextPlayer;
       this.preloadedNextPlayer = null;
-      console.log('[Mobile Audio Preload]: Utilizing preloaded background audio player for instant zero-gap playback.');
+      const leadTime = this.currentSegmentPreloadTime > 0 ? segmentStartTime - this.currentSegmentPreloadTime : 0;
+      console.log(`[Mobile Audio Preload Race]: Preloaded player WIN (Ready ${leadTime} ms before handoff). Utilizing for zero-gap playback.`);
     } else if (this.audioQueue.length > 0) {
+      console.log('[Mobile Audio Preload Race]: Preload MISS (Queue was empty at preload time). Creating player on-demand...');
       const nextSegmentUri = this.audioQueue.shift()!;
+      const t0 = Date.now();
       try {
         playerToPlay = createAudioPlayer({ uri: nextSegmentUri });
       } catch (err) {
         console.error('[Mobile Playback Error]: Exception playing WAV segment:', err);
       }
+      const t1 = Date.now();
+      console.log(`[Mobile Audio Overhead]: On-demand createAudioPlayer took ${t1 - t0} ms.`);
     }
 
     if (!playerToPlay) {
@@ -407,7 +441,7 @@ export class VoiceSession {
         const totalTurnTime = this.promptSentTime > 0 ? playbackEndTime - this.promptSentTime : 0;
         console.log(`[Mobile Audio] Playback finished: +${totalTurnTime} ms after prompt sent. Session remains WAITING FOR NEXT USER TURN.`);
 
-        // 🚀 Trigger deferred speech recognition restart after Kidsko has finished speaking!
+        // Trigger deferred speech recognition restart after Kidsko has finished speaking
         if (this.pendingSpeechRestart || (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN)) {
           this.pendingSpeechRestart = false;
           console.log('[SpeechRec Lifecycle]: Playback finished -> Triggering speech recognition restart for next user turn...');
@@ -441,6 +475,7 @@ export class VoiceSession {
 
     playerToPlay.addListener('playbackStatusUpdate', (status: any) => {
       if (status.didJustFinish) {
+        this.lastSegmentFinishTime = Date.now();
         try {
           playerToPlay.remove();
         } catch {}
