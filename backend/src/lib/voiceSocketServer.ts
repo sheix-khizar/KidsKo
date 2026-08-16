@@ -70,7 +70,26 @@ export function attachVoiceSocketServer(httpServer: Server) {
       let liveSession: any;
       let elapsedMs = 0;
       let accountingTimer: NodeJS.Timeout;
+      let warningTimer: NodeJS.Timeout;
       let hardCapTimer: NodeJS.Timeout;
+      let serverWatchdogTimer: NodeJS.Timeout | null = null;
+
+      const clearServerWatchdog = () => {
+        if (serverWatchdogTimer) {
+          clearTimeout(serverWatchdogTimer);
+          serverWatchdogTimer = null;
+        }
+      };
+
+      const startServerWatchdog = () => {
+        clearServerWatchdog();
+        serverWatchdogTimer = setTimeout(() => {
+          console.warn('[Backend Watchdog]: Gemini Live unresponsive for 20s. Sending recovery error to client.');
+          if (clientSocket.readyState === WebSocket.OPEN) {
+            clientSocket.send(JSON.stringify({ type: 'error', reason: 'Gemini server response timeout' }));
+          }
+        }, 20000);
+      };
 
       try {
         liveSession = await startLiveSession({
@@ -80,19 +99,22 @@ export function attachVoiceSocketServer(httpServer: Server) {
             }
           },
           onAudioChunk: (base64Audio) => {
+            clearServerWatchdog();
             if (clientSocket.readyState === WebSocket.OPEN) {
               console.log(`[Backend Outbound Audio Chunk to Mobile]: bytes=${base64Audio.length}`);
               clientSocket.send(JSON.stringify({ type: 'audio', data: base64Audio }));
             }
           },
           onTurnComplete: () => {
+            clearServerWatchdog();
             if (clientSocket.readyState === WebSocket.OPEN) {
               const elapsedSec = Math.floor((Date.now() - sessionStartTime) / 1000);
-              console.log(`[Backend Outbound turn_complete Frame]: Gemini turn complete. Session active for ${elapsedSec}s / ${capSeconds}s max. Client WS state=${clientSocket.readyState}, Gemini WS state=${liveSession?.readyState}`);
+              console.log(`[Backend Outbound turn_complete Frame]: Gemini turn complete. Session active for ${elapsedSec}s / ${capSeconds}s max.`);
               clientSocket.send(JSON.stringify({ type: 'turn_complete' }));
             }
           },
           onClose: (reason) => {
+            clearServerWatchdog();
             console.log(`[Gemini Live WS Session Closed]: Reason=${reason || 'Normal close'}`);
             if (clientSocket.readyState === WebSocket.OPEN) {
               console.log('[Voice Socket Close]: Forwarding Gemini session close to client with Code 1000');
@@ -100,6 +122,7 @@ export function attachVoiceSocketServer(httpServer: Server) {
             }
           },
           onError: (err) => {
+            clearServerWatchdog();
             console.error('[Voice Socket] Gemini Live error:', err);
             if (clientSocket.readyState === WebSocket.OPEN) {
               clientSocket.send(JSON.stringify({ type: 'error', reason: typeof err === 'string' ? err : 'Voice session error' }));
@@ -117,6 +140,7 @@ export function attachVoiceSocketServer(httpServer: Server) {
       // STEP 3: Trigger Kidsko initial spoken greeting turn by student name
       const greetingPrompt = `Greet ${studentName} warmly and briefly by name, introduce yourself as Kidsko, and ask how you can help them today. Keep it to one short, friendly sentence.`;
       console.log(`[Voice Server Initial Greeting Triggered]: Greeting student "${studentName}"...`);
+      startServerWatchdog();
       sendTextPrompt(liveSession, greetingPrompt);
 
       accountingTimer = setInterval(async () => {
@@ -131,9 +155,30 @@ export function attachVoiceSocketServer(httpServer: Server) {
         }
       }, ACCOUNTING_INTERVAL_MS);
 
+      // PRIORITY 3: Advance Warning 25 seconds before cap cutoff
+      const warningLeadTimeMs = capMs > 30000 ? 25000 : Math.floor(capMs * 0.5);
+      const warningDelayMs = Math.max(1000, capMs - warningLeadTimeMs);
+      const warningSeconds = Math.floor(warningLeadTimeMs / 1000);
+
+      warningTimer = setTimeout(() => {
+        if (clientSocket.readyState === WebSocket.OPEN) {
+          console.log(`[Voice Session Cap Warning]: ${warningSeconds}s remaining before session cap cutoff.`);
+          clientSocket.send(JSON.stringify({ type: 'session_ending_soon', secondsRemaining: warningSeconds }));
+
+          // Trigger natural warm AI sign-off sentence
+          const signoffPrompt = "Let the student know your voice session time is almost up for today in one short, friendly sign-off sentence.";
+          console.log('[Voice Session Cap Warning]: Triggering Kidsko sign-off sentence...');
+          startServerWatchdog();
+          sendTextPrompt(liveSession, signoffPrompt);
+        }
+      }, warningDelayMs);
+
+      // Hard Cap Timer (+5s grace period to let sign-off sentence finish playing cleanly)
+      const hardCapGraceMs = capMs + 5000;
       hardCapTimer = setTimeout(() => {
         const totalDurationSec = Math.floor((Date.now() - sessionStartTime) / 1000);
         console.log(`[HARD CAP TIMER FIRED]: Reached maximum allowed cap (${totalDurationSec}s). Closing session with Code 4003.`);
+        clearServerWatchdog();
         if (clientSocket.readyState === WebSocket.OPEN) {
           clientSocket.send(JSON.stringify({ type: 'cap_reached' }));
         }
@@ -141,7 +186,7 @@ export function attachVoiceSocketServer(httpServer: Server) {
         if (clientSocket.readyState === WebSocket.OPEN) {
           clientSocket.close(4003, 'Session time limit reached');
         }
-      }, capMs);
+      }, hardCapGraceMs);
 
       clientSocket.on('message', (raw) => {
         (async () => {
@@ -155,6 +200,7 @@ export function attachVoiceSocketServer(httpServer: Server) {
             } else if (msg.type === 'text_prompt') {
               const currentElapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
               console.log(`[Voice Server User Turn Received]: Prompt="${msg.data}", Elapsed=${currentElapsed}s / ${capSeconds}s, Gemini WS state=${liveSession?.readyState}`);
+              startServerWatchdog();
               sendTextPrompt(liveSession, msg.data);
             } else if (msg.type === 'image_capture') {
               const snapshotEligibility = await checkSnapshotEligibility(dbClient, parentId, eligibility.isPremium);
@@ -172,6 +218,7 @@ export function attachVoiceSocketServer(httpServer: Server) {
               const compressedBase64 = compressedBuffer.toString('base64');
 
               console.log('[Voice Server] Injecting captured photo into live session, caption:', msg.caption || '(none)');
+              startServerWatchdog();
               sendImagePrompt(liveSession, compressedBase64, msg.caption);
               await recordSnapshotUsed(dbClient, parentId);
               if (studentId) await logUsageEvent(dbClient, parentId, studentId, 'live_snapshot');
@@ -189,7 +236,9 @@ export function attachVoiceSocketServer(httpServer: Server) {
         const totalSessionDurationSec = Math.floor((Date.now() - sessionStartTime) / 1000);
         console.log(`[Client WebSocket Closed]: Code=${code}, Reason="${reason || 'Client disconnected'}", Total Session Duration=${totalSessionDurationSec}s`);
         clearInterval(accountingTimer);
+        clearTimeout(warningTimer);
         clearTimeout(hardCapTimer);
+        clearServerWatchdog();
         const remainderMs = elapsedMs % ACCOUNTING_INTERVAL_MS;
         if (remainderMs > 0) {
           try {

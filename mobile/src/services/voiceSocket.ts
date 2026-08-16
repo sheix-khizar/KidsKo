@@ -12,6 +12,8 @@ type VoiceCallbacks = {
   onTranscript?: (text: string) => void;
   onSnapshotAck?: (remaining: number) => void;
   onSnapshotError?: (reason: string) => void;
+  onResponseTimeout?: () => void;
+  onSessionEndingSoon?: (secondsRemaining: number) => void;
 };
 
 // 24000 Hz, 16-bit mono PCM = 48000 bytes/sec
@@ -65,6 +67,10 @@ export class VoiceSession {
   private isStartingSpeech = false;
   private speechSessionConfigured = false;
 
+  // PRIORITY 2: Response Watchdog State
+  private watchdogTimer: any = null;
+  private static RESPONSE_TIMEOUT_MS = 14000; // 14s timeout
+
   // Streaming Audio Queue State
   private audioQueue: string[] = [];
   private accumulatedPcmBinary = '';
@@ -94,6 +100,22 @@ export class VoiceSession {
     );
   }
 
+  private startResponseWatchdog() {
+    this.clearResponseWatchdog();
+    this.watchdogTimer = setTimeout(() => {
+      console.warn(`[Voice Watchdog]: No response within ${VoiceSession.RESPONSE_TIMEOUT_MS / 1000}s, recovering state...`);
+      this.resetTurnState();
+      this.callbacks?.onResponseTimeout?.();
+    }, VoiceSession.RESPONSE_TIMEOUT_MS);
+  }
+
+  private clearResponseWatchdog() {
+    if (this.watchdogTimer) {
+      clearTimeout(this.watchdogTimer);
+      this.watchdogTimer = null;
+    }
+  }
+
   async start(callbacks: VoiceCallbacks, studentId?: string) {
     const token = await getToken();
     if (!token) {
@@ -120,10 +142,15 @@ export class VoiceSession {
           this.stopSpeechRecognition();
           this.stopAudioPlayback();
           callbacks.onCapReached();
+        } else if (msg.type === 'session_ending_soon') {
+          console.log(`[Mobile WS Warning Frame]: ${msg.secondsRemaining}s remaining before cap cutoff.`);
+          callbacks.onSessionEndingSoon?.(msg.secondsRemaining);
         } else if (msg.type === 'error') {
           console.error('[Mobile WS Error Frame]: Server error =', msg.reason);
+          this.clearResponseWatchdog();
           callbacks.onError(msg.reason);
         } else if (msg.type === 'audio') {
+          this.clearResponseWatchdog();
           this.receivedChunkCount++;
           if (this.receivedChunkCount === 1) {
             this.firstChunkTime = Date.now();
@@ -153,6 +180,7 @@ export class VoiceSession {
             }
           }
         } else if (msg.type === 'turn_complete') {
+          this.clearResponseWatchdog();
           const turnCompleteTime = Date.now();
           const latencyToTurnComplete = this.promptSentTime > 0 ? turnCompleteTime - this.promptSentTime : 0;
           console.log(`[Mobile Audio] Turn complete: +${latencyToTurnComplete} ms after prompt sent. Total chunks collected = ${this.receivedChunkCount}`);
@@ -179,6 +207,7 @@ export class VoiceSession {
           callbacks.onSnapshotAck?.(msg.remaining);
         } else if (msg.type === 'snapshot_error') {
           console.warn('[Mobile Snapshot Error]:', msg.reason);
+          this.clearResponseWatchdog();
           callbacks.onSnapshotError?.(msg.reason);
         }
       } catch (err) {
@@ -189,6 +218,7 @@ export class VoiceSession {
     this.ws.onclose = (e) => {
       console.log(`[Mobile WebSocket Closed Event]: Code=${e.code}, Reason="${e.reason || 'None'}"`);
       this.isSessionActive = false;
+      this.clearResponseWatchdog();
       this.stopSpeechRecognition();
       this.stopAudioPlayback();
       callbacks.onClose(e.reason || e.code);
@@ -196,6 +226,7 @@ export class VoiceSession {
 
     this.ws.onerror = (e: any) => {
       console.error('[Mobile WebSocket Error Event]:', e?.message || e);
+      this.clearResponseWatchdog();
       callbacks.onError(e?.message || 'Connection error');
     };
 
@@ -207,12 +238,14 @@ export class VoiceSession {
       console.log('[Mobile Sending Image Capture]:', base64Jpeg.length, 'base64 chars, caption:', caption || '(none)');
       this.resetTurnState();
       this.promptSentTime = Date.now();
+      this.startResponseWatchdog();
       this.ws.send(JSON.stringify({ type: 'image_capture', data: base64Jpeg, caption }));
     }
   }
 
   private resetTurnState() {
     this.stopAudioPlayback();
+    this.clearResponseWatchdog();
     this.promptSentTime = 0;
     this.firstChunkTime = 0;
     this.lastSegmentFinishTime = 0;
@@ -258,7 +291,6 @@ export class VoiceSession {
       if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN) {
         try {
           console.log(`[SpeechRec Lifecycle] [${new Date().toISOString()}]: Restarting continuous speech recognition (interimResults: true)...`);
-          // STEP 1 & 2: Restart continuously regardless of isKidskoSpeaking(), passing interimResults: true
           ExpoSpeechRecognitionModule.start({
             lang: 'en-US',
             interimResults: true,
@@ -295,6 +327,7 @@ export class VoiceSession {
           // Interrupt active AI playback if user speaks (Barge-In)
           this.resetTurnState();
           this.promptSentTime = Date.now();
+          this.startResponseWatchdog();
           console.log('[Mobile Voice Input] Sending final spoken turn to Gemini Live:', transcript);
           this.lastSentTranscript = transcript;
           this.ws.send(JSON.stringify({ type: 'text_prompt', data: transcript }));
@@ -501,6 +534,7 @@ export class VoiceSession {
     console.log('[Mobile Session End Call]: User manually ending voice session...');
     this.isSessionActive = false;
     this.speechSessionConfigured = false;
+    this.clearResponseWatchdog();
     this.stopSpeechRecognition();
     this.stopAudioPlayback();
     if (this.ws) {
