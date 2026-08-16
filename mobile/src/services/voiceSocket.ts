@@ -20,6 +20,9 @@ const INITIAL_BUFFER_BYTES = 19200;
 // ~1200ms chunk buffer = 57600 bytes per queued segment -> drastically reduces segment boundaries
 const CHUNK_BUFFER_BYTES = 57600;
 
+// ~300ms adaptive utterance debounce to convert progressive speech recognition updates into ONE Gemini turn
+const SPEECH_SEND_DEBOUNCE_MS = 300;
+
 function createWavBase64(pcmBinary: string): string {
   const pcmBytesLength = pcmBinary.length;
   const header = new ArrayBuffer(44);
@@ -62,13 +65,13 @@ export class VoiceSession {
   private speechSubscriptions: any[] = [];
   private lastSentTranscript = '';
   private isSessionActive = false;
+  private isStartingSpeech = false;
   private speechSessionConfigured = false;
 
-  // Speech Recognition State Machine
+  // Utterance Stabilization & Debounce State
+  private pendingTranscript = '';
+  private transcriptDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private speechCycleId = 0;
-  private recognitionState: 'IDLE' | 'STARTING' | 'RUNNING' = 'IDLE';
-  private restartTimer: any = null;
-  private cycleSentTranscript = '';
 
   // Streaming Audio Queue State
   private audioQueue: string[] = [];
@@ -97,6 +100,50 @@ export class VoiceSession {
       this.activePlayer !== null ||
       (this.hasStartedPlayback && !this.isTurnComplete)
     );
+  }
+
+  private clearPendingDebounce() {
+    if (this.transcriptDebounceTimer) {
+      clearTimeout(this.transcriptDebounceTimer);
+      this.transcriptDebounceTimer = null;
+    }
+    this.pendingTranscript = '';
+  }
+
+  private commitPendingTranscript(cycleId: number) {
+    if (cycleId !== this.speechCycleId) {
+      console.log(`[SpeechRec #${cycleId}] Ignoring stale commit attempt (current cycle #${this.speechCycleId}).`);
+      return;
+    }
+
+    const transcript = this.pendingTranscript.trim();
+    this.pendingTranscript = '';
+
+    if (this.transcriptDebounceTimer) {
+      clearTimeout(this.transcriptDebounceTimer);
+      this.transcriptDebounceTimer = null;
+    }
+
+    if (!transcript || transcript.length === 0) return;
+
+    if (transcript === this.lastSentTranscript) {
+      console.log(`[SpeechRec #${cycleId}] Suppressing duplicate transcript for turn: "${transcript}"`);
+      return;
+    }
+
+    if (!this.isSessionActive || this.ws?.readyState !== WebSocket.OPEN) {
+      console.warn(`[SpeechRec #${cycleId}] Cannot send transcript: WebSocket not open.`);
+      return;
+    }
+
+    this.resetTurnState();
+    this.promptSentTime = Date.now();
+    this.lastSentTranscript = transcript;
+
+    console.log(`[SpeechRec #${cycleId}] Candidate stabilized: "${transcript}"`);
+    console.log(`[SpeechRec #${cycleId}] Sending ONE Gemini turn: "${transcript}"`);
+    this.ws.send(JSON.stringify({ type: 'text_prompt', data: transcript }));
+    this.callbacks?.onTranscript?.(transcript);
   }
 
   async start(callbacks: VoiceCallbacks, studentId?: string) {
@@ -217,6 +264,7 @@ export class VoiceSession {
   }
 
   private resetTurnState() {
+    this.clearPendingDebounce();
     this.stopAudioPlayback();
     this.promptSentTime = 0;
     this.firstChunkTime = 0;
@@ -235,6 +283,7 @@ export class VoiceSession {
     if (this.activePlayer || this.preloadedNextPlayer || this.audioQueue.length > 0 || this.isPlayingQueue) {
       console.log('[Mobile Turn Interrupted]: Discarding queued audio and stopping active/preloaded players.');
     }
+    this.clearPendingDebounce();
     this.audioQueue = [];
     this.accumulatedPcmBinary = '';
     this.hasStartedPlayback = false;
@@ -257,147 +306,116 @@ export class VoiceSession {
     }
   }
 
-  private scheduleRestart(delayMs = 300) {
-    if (!this.isSessionActive || this.ws?.readyState !== WebSocket.OPEN) {
-      return;
-    }
-
-    if (this.recognitionState !== 'IDLE') {
-      console.log(`[SpeechRec]: Restart skipped: recognition already ${this.recognitionState} (cycle #${this.speechCycleId})`);
-      return;
-    }
-
-    if (this.restartTimer !== null) {
-      console.log(`[SpeechRec]: Restart skipped: timer already scheduled for cycle #${this.speechCycleId}`);
-      return;
-    }
-
-    console.log(`[SpeechRec]: Scheduling restart in ${delayMs}ms for cycle #${this.speechCycleId + 1}...`);
-    this.restartTimer = setTimeout(() => {
-      this.restartTimer = null;
-      if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN && this.recognitionState === 'IDLE') {
-        this.startSpeechRecognition();
+  private restartSpeechRecognition() {
+    if (!this.isSessionActive || this.ws?.readyState !== WebSocket.OPEN) return;
+    this.speechCycleId++;
+    setTimeout(() => {
+      if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN) {
+        try {
+          console.log(`[SpeechRec #${this.speechCycleId}] [${new Date().toISOString()}]: Restarting continuous speech recognition (interimResults: true)...`);
+          ExpoSpeechRecognitionModule.start({
+            lang: 'en-US',
+            interimResults: true,
+            continuous: true,
+          });
+        } catch (err: any) {
+          console.error('[SpeechRec Lifecycle]: Error restarting speech recognition:', err?.message || err);
+        }
       }
-    }, delayMs);
+    }, 300);
   }
 
   private async startSpeechRecognition() {
-    if (!this.isSessionActive || this.ws?.readyState !== WebSocket.OPEN) return;
-
-    if (this.recognitionState !== 'IDLE') {
-      console.log(`[SpeechRec]: Start skipped: recognition already ${this.recognitionState} (cycle #${this.speechCycleId})`);
-      return;
-    }
-
-    this.recognitionState = 'STARTING';
+    if (!this.isSessionActive || this.isStartingSpeech) return;
+    this.isStartingSpeech = true;
     this.speechCycleId++;
-    const activeCycleId = this.speechCycleId;
-    this.cycleSentTranscript = '';
-
-    console.log(`[SpeechRec #${activeCycleId}]: Starting recognition cycle...`);
 
     try {
       const perm = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
       if (!perm.granted) {
-        console.warn(`[SpeechRec #${activeCycleId}]: Permission not granted`);
-        this.recognitionState = 'IDLE';
+        console.warn('[SpeechRec Lifecycle]: Permission not granted');
+        this.isStartingSpeech = false;
         return;
       }
 
       this.clearSpeechSubscriptions();
 
       const subStart = ExpoSpeechRecognitionModule.addListener('start', () => {
-        if (activeCycleId !== this.speechCycleId) {
-          console.log(`[SpeechRec]: Ignoring stale start callback from cycle #${activeCycleId} (current cycle is #${this.speechCycleId})`);
-          return;
-        }
-        this.recognitionState = 'RUNNING';
-        console.log(`[SpeechRec #${activeCycleId}]: Recognition cycle started (RUNNING)`);
+        console.log(`[SpeechRec #${this.speechCycleId}] [${new Date().toISOString()}]: Started listening for spoken user turns...`);
       });
 
       const subResult = ExpoSpeechRecognitionModule.addListener('result', (event: any) => {
-        if (activeCycleId !== this.speechCycleId) {
-          console.log(`[SpeechRec]: Ignoring stale result callback from cycle #${activeCycleId} (current cycle is #${this.speechCycleId})`);
-          return;
+        const rawTranscript = event.results?.[0]?.transcript?.trim();
+        if (!rawTranscript || rawTranscript.length === 0) return;
+
+        const normalized = rawTranscript.replace(/\s+/g, ' ').trim();
+        if (normalized === this.lastSentTranscript) return;
+
+        const currentCycleId = this.speechCycleId;
+
+        // ⚡ IMMEDIATE BARGE-IN DETECTION: If Kidsko is speaking, stop AI playback instantly!
+        if (this.isKidskoSpeaking()) {
+          console.log(`[Mobile Barge-In] Speech detected while Kidsko is speaking ("${normalized}").`);
+          console.log(`[Mobile Barge-In] Stopping Kidsko playback immediately`);
+          this.stopAudioPlayback();
         }
 
-        const transcript = event.results?.[0]?.transcript?.trim();
-        const isFinal = !!event.isFinal;
+        console.log(`[SpeechRec #${currentCycleId}] Candidate updated: "${normalized}"`);
+        console.log(`[SpeechRec #${currentCycleId}] Debounce reset: ${SPEECH_SEND_DEBOUNCE_MS}ms`);
+        this.pendingTranscript = normalized;
 
-        if (!transcript || transcript.length === 0) return;
-
-        if (!isFinal) {
-          console.log(`[SpeechRec #${activeCycleId}] Interim: "${transcript}"`);
-          return; // 🛑 DO NOT SEND INTERIM TRANSCRIPTS TO GEMINI
+        if (this.transcriptDebounceTimer) {
+          clearTimeout(this.transcriptDebounceTimer);
+          this.transcriptDebounceTimer = null;
         }
 
-        console.log(`[SpeechRec #${activeCycleId}] Final: "${transcript}"`);
-
-        // Deduplicate final transcript within the current cycle
-        if (transcript === this.cycleSentTranscript) {
-          console.log(`[SpeechRec #${activeCycleId}]: Ignoring duplicate final transcript: "${transcript}"`);
-          return;
-        }
-
-        if (this.ws?.readyState === WebSocket.OPEN) {
-          this.cycleSentTranscript = transcript;
-          this.lastSentTranscript = transcript;
-          this.resetTurnState();
-          this.promptSentTime = Date.now();
-          console.log(`[SpeechRec #${activeCycleId}] Sent to Gemini: "${transcript}"`);
-          this.ws.send(JSON.stringify({ type: 'text_prompt', data: transcript }));
-          this.callbacks?.onTranscript?.(transcript);
-        }
+        this.transcriptDebounceTimer = setTimeout(() => {
+          this.commitPendingTranscript(currentCycleId);
+        }, SPEECH_SEND_DEBOUNCE_MS);
       });
 
       const subEnd = ExpoSpeechRecognitionModule.addListener('end', () => {
-        if (activeCycleId !== this.speechCycleId) {
-          console.log(`[SpeechRec]: Ignoring stale end callback from cycle #${activeCycleId} (current cycle is #${this.speechCycleId})`);
-          return;
+        console.log(`[SpeechRec #${this.speechCycleId}] [${new Date().toISOString()}]: Recognition cycle ended natively.`);
+        if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN) {
+          console.log('[SpeechRec Lifecycle]: Auto-restarting continuous speech recognition for next user turn...');
+          this.restartSpeechRecognition();
         }
-        console.log(`[SpeechRec #${activeCycleId}]: Recognition cycle ended natively.`);
-        this.recognitionState = 'IDLE';
-        this.scheduleRestart(300);
       });
 
       const subError = ExpoSpeechRecognitionModule.addListener('error', (event: any) => {
-        if (activeCycleId !== this.speechCycleId) {
-          console.log(`[SpeechRec]: Ignoring stale error callback from cycle #${activeCycleId} (current cycle is #${this.speechCycleId})`);
-          return;
-        }
-        console.log(`[SpeechRec #${activeCycleId}]: Error event = ${event.error} (${event.message})`);
-        this.recognitionState = 'IDLE';
-        if (event.error !== 'no-match') {
-          this.scheduleRestart(300);
+        console.log('[SpeechRec Lifecycle]: Error event =', event.error, event.message);
+        if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN && event.error !== 'no-match') {
+          this.restartSpeechRecognition();
         }
       });
 
       this.speechSubscriptions = [subStart, subResult, subEnd, subError];
 
-      const options: any = {
+      const initialOptions: any = {
         lang: 'en-US',
         interimResults: true,
         continuous: true,
       };
 
-      if (!this.speechSessionConfigured && Platform.OS === 'ios') {
-        options.iosCategory = {
+      if (Platform.OS === 'ios') {
+        initialOptions.iosCategory = {
           category: 'playAndRecord',
           categoryOptions: ['defaultToSpeaker', 'allowBluetooth', 'mixWithOthers'],
           mode: 'voiceChat',
         };
-        options.iosVoiceProcessingEnabled = true;
+        initialOptions.iosVoiceProcessingEnabled = true;
         console.log('[Mobile Audio Session]: AEC & VoiceProcessing enabled = true (iOS)');
-        this.speechSessionConfigured = true;
-      } else if (!this.speechSessionConfigured && Platform.OS === 'android') {
-        console.log('[Mobile Audio Session]: Android speech-recognition AEC: unavailable through current speech-recognition module');
-        this.speechSessionConfigured = true;
+      } else {
+        console.log('[Mobile Audio Session]: AEC not available via speech rec module (Android)');
       }
 
-      ExpoSpeechRecognitionModule.start(options);
+      console.log(`[SpeechRec #${this.speechCycleId}] [${new Date().toISOString()}]: Initializing speech session (interimResults: true)...`);
+      ExpoSpeechRecognitionModule.start(initialOptions);
+      this.speechSessionConfigured = true;
     } catch (err: any) {
-      console.error(`[SpeechRec #${activeCycleId}]: Start exception =`, err?.message || err);
-      this.recognitionState = 'IDLE';
+      console.error('[SpeechRec Lifecycle]: Start exception =', err?.message || err);
+    } finally {
+      this.isStartingSpeech = false;
     }
   }
 
@@ -412,13 +430,10 @@ export class VoiceSession {
 
   private stopSpeechRecognition() {
     console.log('[SpeechRec Lifecycle]: Stopping speech recognition and cleaning listeners...');
-    if (this.restartTimer !== null) {
-      clearTimeout(this.restartTimer);
-      this.restartTimer = null;
-    }
-    this.recognitionState = 'IDLE';
+    this.clearPendingDebounce();
     this.clearSpeechSubscriptions();
     this.speechSessionConfigured = false;
+    this.speechCycleId++;
     try {
       ExpoSpeechRecognitionModule.stop();
     } catch {}
@@ -559,7 +574,9 @@ export class VoiceSession {
   async end() {
     console.log('[Mobile Session End Call]: User manually ending voice session...');
     this.isSessionActive = false;
+    this.clearPendingDebounce();
     this.speechSessionConfigured = false;
+    this.speechCycleId++;
     this.stopSpeechRecognition();
     this.stopAudioPlayback();
     if (this.ws) {
