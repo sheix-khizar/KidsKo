@@ -327,13 +327,20 @@ export class VoiceSession {
         const transcript = event.results?.[0]?.transcript?.trim();
         if (!transcript || transcript.length === 0) return;
 
+        const lower = transcript.toLowerCase();
+        const words = transcript.split(/\s+/).filter((w: string) => w.length > 0);
+
         if (this.isKidskoSpeaking()) {
           const interruptTime = Date.now();
-          const speechDuration = this.lastVadDetectedTime > 0 ? interruptTime - this.lastVadDetectedTime : 200;
+          const speechDuration = this.lastVadDetectedTime > 0 ? interruptTime - this.lastVadDetectedTime : 0;
 
-          // Sustained speech threshold (~150ms) to ignore transient noise while AEC suppresses speaker audio
-          if (speechDuration >= 150) {
-            console.log(`[Mobile Interruption]: Confirmed barge-in! Child spoke "${transcript}" while Kidsko was playing.`);
+          // 🛡️ Prevent Premature Barge-in:
+          // Check for explicit barge-in keywords OR sustained speech duration (>= 600ms) with multiple words / significant length
+          const isBargeInKeyword = /\b(stop|wait|hold|kidsko|pause|listen|no|cancel|question)\b/i.test(lower);
+          const isSustainedUtterance = speechDuration >= 600 && (words.length >= 2 || transcript.length >= 7);
+
+          if (isBargeInKeyword || isSustainedUtterance) {
+            console.log(`[Mobile Interruption]: Confirmed barge-in! Child spoke "${transcript}" (${words.length} words, ${speechDuration}ms) while Kidsko was playing.`);
             this.resetTurnState();
             this.promptSentTime = Date.now();
             this.lastSentTranscript = transcript;
@@ -343,11 +350,12 @@ export class VoiceSession {
               this.callbacks?.onTranscript?.(transcript);
             }
           } else {
-            console.log(`[Mobile Interruption]: Ignored transient noise/speech (<150ms duration).`);
+            console.log(`[Mobile Interruption Ignored]: Premature/partial speech "${transcript}" (${words.length} words, ${speechDuration}ms) ignored to prevent cutting off Kidsko.`);
           }
         } else {
           // Standard user turn when Kidsko is not speaking
-          if (transcript !== this.lastSentTranscript && this.ws?.readyState === WebSocket.OPEN) {
+          // Require at least 2 characters to filter out single-letter transient noise
+          if (transcript.length >= 2 && transcript !== this.lastSentTranscript && this.ws?.readyState === WebSocket.OPEN) {
             this.resetTurnState();
             this.promptSentTime = Date.now();
             console.log('[Mobile Voice Input]: Sending user turn to Gemini Live:', transcript);
