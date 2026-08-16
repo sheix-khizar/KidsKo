@@ -41,13 +41,31 @@ export function attachVoiceSocketServer(httpServer: Server) {
         return;
       }
 
+      // Fetch student's display name from Supabase students table at session start
+      let studentName = 'friend';
+      if (studentId) {
+        try {
+          const { data: studentRow } = await dbClient
+            .from('students')
+            .select('name')
+            .eq('id', studentId)
+            .maybeSingle();
+
+          if (studentRow?.name && studentRow.name.trim().length > 0) {
+            studentName = studentRow.name.trim();
+          }
+        } catch (err: any) {
+          console.warn('[Voice Server]: Could not fetch student name:', err.message);
+        }
+      }
+
       const capMinutes = eligibility.isPremium
         ? eligibility.minutesRemaining
         : Math.min(5, eligibility.minutesRemaining);
       const capMs = Math.max(1000, capMinutes * 60 * 1000);
       const capSeconds = Math.floor(capMs / 1000);
 
-      console.log(`[Voice Session Started]: ParentId=${parentId}, StudentId=${studentId || '(none)'}, CapMinutes=${capMinutes.toFixed(2)}, CapSeconds=${capSeconds}s, StartTime=${new Date(sessionStartTime).toISOString()}`);
+      console.log(`[Voice Session Started]: ParentId=${parentId}, StudentId=${studentId || '(none)'}, StudentName="${studentName}", CapMinutes=${capMinutes.toFixed(2)}, CapSeconds=${capSeconds}s, StartTime=${new Date(sessionStartTime).toISOString()}`);
 
       let liveSession: any;
       let elapsedMs = 0;
@@ -95,6 +113,11 @@ export function attachVoiceSocketServer(httpServer: Server) {
       }
 
       clientSocket.send(JSON.stringify({ type: 'ready', capSeconds }));
+
+      // STEP 3: Trigger Kidsko initial spoken greeting turn by student name
+      const greetingPrompt = `Greet ${studentName} warmly and briefly by name, introduce yourself as Kidsko, and ask how you can help them today. Keep it to one short, friendly sentence.`;
+      console.log(`[Voice Server Initial Greeting Triggered]: Greeting student "${studentName}"...`);
+      sendTextPrompt(liveSession, greetingPrompt);
 
       accountingTimer = setInterval(async () => {
         try {
