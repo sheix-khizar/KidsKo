@@ -61,6 +61,7 @@ export class VoiceSession {
   private lastSentTranscript = '';
   private isSessionActive = false;
   private isStartingSpeech = false;
+  private pendingSpeechRestart = false;
 
   // Streaming Audio Queue State
   private audioQueue: string[] = [];
@@ -74,6 +75,16 @@ export class VoiceSession {
   // Diagnostic Timers
   private promptSentTime = 0;
   private firstChunkTime = 0;
+
+  private isKidskoSpeaking(): boolean {
+    return (
+      this.isPlayingQueue ||
+      this.audioQueue.length > 0 ||
+      this.preloadedNextPlayer !== null ||
+      this.activePlayer !== null ||
+      (this.hasStartedPlayback && !this.isTurnComplete)
+    );
+  }
 
   async start(callbacks: VoiceCallbacks, studentId?: string) {
     const token = await getToken();
@@ -193,6 +204,7 @@ export class VoiceSession {
 
   private resetTurnState() {
     this.stopAudioPlayback();
+    this.pendingSpeechRestart = false;
     this.promptSentTime = 0;
     this.firstChunkTime = 0;
     this.receivedChunkCount = 0;
@@ -228,6 +240,20 @@ export class VoiceSession {
     }
   }
 
+  private restartSpeechRecognition() {
+    if (!this.isSessionActive || this.ws?.readyState !== WebSocket.OPEN) return;
+    setTimeout(() => {
+      if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN && !this.isKidskoSpeaking()) {
+        try {
+          console.log('[SpeechRec Lifecycle]: Started listening for spoken user turns...');
+          ExpoSpeechRecognitionModule.start({ lang: 'en-US', interimResults: false, continuous: true });
+        } catch (err: any) {
+          console.error('[SpeechRec Lifecycle]: Error restarting speech recognition:', err?.message || err);
+        }
+      }
+    }, 300);
+  }
+
   private async startSpeechRecognition() {
     if (!this.isSessionActive || this.isStartingSpeech) return;
     this.isStartingSpeech = true;
@@ -261,29 +287,25 @@ export class VoiceSession {
       const subEnd = ExpoSpeechRecognitionModule.addListener('end', () => {
         console.log('[SpeechRec Lifecycle]: Recognition cycle ended natively.');
         if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN) {
-          console.log('[SpeechRec Lifecycle]: Session still active -> Auto-restarting speech recognition for next user turn...');
-          setTimeout(() => {
-            if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN) {
-              try {
-                ExpoSpeechRecognitionModule.start({ lang: 'en-US', interimResults: false, continuous: true });
-              } catch (err: any) {
-                console.error('[SpeechRec Lifecycle]: Error auto-restarting:', err?.message || err);
-              }
-            }
-          }, 300);
+          if (this.isKidskoSpeaking()) {
+            console.log('[SpeechRec Lifecycle]: Kidsko is still speaking -> Deferring speech recognition restart until playback finishes.');
+            this.pendingSpeechRestart = true;
+          } else {
+            console.log('[SpeechRec Lifecycle]: Kidsko is not speaking -> Auto-restarting speech recognition for next user turn...');
+            this.restartSpeechRecognition();
+          }
         }
       });
 
       const subError = ExpoSpeechRecognitionModule.addListener('error', (event: any) => {
         console.error('[SpeechRec Lifecycle]: Error event =', event.error, event.message);
         if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN && event.error !== 'no-match') {
-          setTimeout(() => {
-            if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN) {
-              try {
-                ExpoSpeechRecognitionModule.start({ lang: 'en-US', interimResults: false, continuous: true });
-              } catch {}
-            }
-          }, 500);
+          if (this.isKidskoSpeaking()) {
+            console.log('[SpeechRec Lifecycle]: Error event during playback -> Deferring speech recognition restart.');
+            this.pendingSpeechRestart = true;
+          } else {
+            this.restartSpeechRecognition();
+          }
         }
       });
 
@@ -384,6 +406,13 @@ export class VoiceSession {
         const playbackEndTime = Date.now();
         const totalTurnTime = this.promptSentTime > 0 ? playbackEndTime - this.promptSentTime : 0;
         console.log(`[Mobile Audio] Playback finished: +${totalTurnTime} ms after prompt sent. Session remains WAITING FOR NEXT USER TURN.`);
+
+        // 🚀 Trigger deferred speech recognition restart after Kidsko has finished speaking!
+        if (this.pendingSpeechRestart || (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN)) {
+          this.pendingSpeechRestart = false;
+          console.log('[SpeechRec Lifecycle]: Playback finished -> Triggering speech recognition restart for next user turn...');
+          this.restartSpeechRecognition();
+        }
       } else {
         console.log('[Mobile Audio Stream]: Queue emptied mid-stream, awaiting next audio chunk...');
       }
@@ -431,6 +460,7 @@ export class VoiceSession {
   async end() {
     console.log('[Mobile Session End Call]: User manually ending voice session...');
     this.isSessionActive = false;
+    this.pendingSpeechRestart = false;
     this.stopSpeechRecognition();
     this.stopAudioPlayback();
     if (this.ws) {
