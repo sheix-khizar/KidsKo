@@ -15,10 +15,10 @@ type VoiceCallbacks = {
 };
 
 // 24000 Hz, 16-bit mono PCM = 48000 bytes/sec
-// ~300ms initial buffer = 14400 bytes -> instant response start (~750ms-900ms)
-const INITIAL_BUFFER_BYTES = 14400;
-// ~400ms chunk buffer = 19200 bytes per queued segment -> prevents mid-sentence queue starvation and eliminates audio lag
-const CHUNK_BUFFER_BYTES = 19200;
+// ~400ms initial buffer = 19200 bytes (~4 chunks) -> preserves fast first-chunk latency (~900ms-1150ms)
+const INITIAL_BUFFER_BYTES = 19200;
+// ~1200ms chunk buffer = 57600 bytes per queued segment -> Step 3 tuning pass experiment (drastically reduces segment boundaries)
+const CHUNK_BUFFER_BYTES = 57600;
 
 function createWavBase64(pcmBinary: string): string {
   const pcmBytesLength = pcmBinary.length;
@@ -96,7 +96,7 @@ export class VoiceSession {
     );
   }
 
-  async start(callbacks: VoiceCallbacks, studentId?: string) {
+  async start(callbacks: VoiceCallbacks, studentId?: string, voice?: string) {
     const token = await getToken();
     if (!token) {
       callbacks.onError('Not authenticated');
@@ -106,7 +106,8 @@ export class VoiceSession {
     this.callbacks = callbacks;
     this.isSessionActive = true;
     const studentParam = studentId ? `&studentId=${studentId}` : '';
-    const socketUrl = `${WS_URL}/ws/voice?token=${token}${studentParam}`;
+    const voiceParam = voice ? `&voice=${voice}` : '';
+    const socketUrl = `${WS_URL}/ws/voice?token=${token}${studentParam}${voiceParam}`;
     console.log('Connecting Voice WebSocket to:', socketUrl);
     this.ws = new WebSocket(socketUrl);
 
@@ -137,14 +138,14 @@ export class VoiceSession {
           // Append incoming chunk to binary PCM accumulator
           this.accumulatedPcmBinary += atob(msg.data);
 
-          // Check if initial buffer threshold (~300ms) reached to start streaming playback
+          // Check if initial buffer threshold (~400ms) reached to start streaming playback
           if (!this.hasStartedPlayback) {
             if (this.accumulatedPcmBinary.length >= INITIAL_BUFFER_BYTES) {
               this.flushBufferedPcmToQueue();
               this.startAudioQueuePlayback();
             }
           } else {
-            // Once streaming has started, flush chunks whenever chunk threshold (~400ms) is reached
+            // Once streaming has started, flush chunks whenever chunk threshold (~1200ms) is reached
             if (this.accumulatedPcmBinary.length >= CHUNK_BUFFER_BYTES) {
               this.flushBufferedPcmToQueue();
               if (!this.isPlayingQueue) {
@@ -449,7 +450,13 @@ export class VoiceSession {
 
     const nextSegmentUri = this.audioQueue.shift()!;
     try {
-      this.preloadedNextPlayer = createAudioPlayer({ uri: nextSegmentUri });
+      const player = createAudioPlayer({ uri: nextSegmentUri });
+      try {
+        if (typeof (player as any).setPlaybackRate === 'function') (player as any).setPlaybackRate(1.15);
+        else if (typeof (player as any).setRate === 'function') (player as any).setRate(1.15);
+        else (player as any).playbackRate = 1.15;
+      } catch {}
+      this.preloadedNextPlayer = player;
       this.currentSegmentPreloadTime = Date.now();
     } catch (err) {
       console.error('[Mobile Audio Preload Error]: Could not pre-create audio player:', err);
@@ -468,6 +475,11 @@ export class VoiceSession {
       const nextSegmentUri = this.audioQueue.shift()!;
       try {
         playerToPlay = createAudioPlayer({ uri: nextSegmentUri });
+        try {
+          if (typeof (playerToPlay as any).setPlaybackRate === 'function') (playerToPlay as any).setPlaybackRate(1.15);
+          else if (typeof (playerToPlay as any).setRate === 'function') (playerToPlay as any).setRate(1.15);
+          else (playerToPlay as any).playbackRate = 1.15;
+        } catch {}
       } catch (err) {
         console.error('[Mobile Playback Error]: Exception playing WAV segment:', err);
       }
