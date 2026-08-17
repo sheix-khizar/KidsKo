@@ -310,6 +310,12 @@ export class VoiceSession {
       });
 
       const subResult = ExpoSpeechRecognitionModule.addListener('result', (event: any) => {
+        // If Kidsko is currently speaking or audio playback is active, ignore mic input
+        if (this.isKidskoSpeaking()) {
+          console.log('[SpeechRec Lifecycle]: Suppressing speech recognition input while Kidsko is speaking.');
+          return;
+        }
+
         const transcript = event.results?.[0]?.transcript?.trim();
         const isFinal = event.isFinal || event.results?.[0]?.isFinal;
 
@@ -320,12 +326,12 @@ export class VoiceSession {
           if (isFinal) {
             this.finalizeSpokenTurn(transcript);
           } else {
-            // Reset 1.2s silence timer on each new interim word to finalize automatically when speaking pauses
+            // 🚀 Kid-friendly 2.5s (2500ms) silence timer: Allows kids 2.5 seconds to pause ("umm...", "aahh...", thinking)
             if (this.speechSilenceTimer) clearTimeout(this.speechSilenceTimer);
             this.speechSilenceTimer = setTimeout(() => {
-              console.log('[Mobile Voice Input] 1.2s silence pause detected -> Finalizing spoken turn:', transcript);
+              console.log('[Mobile Voice Input] 2.5s child pause detected -> Finalizing spoken turn:', transcript);
               this.finalizeSpokenTurn(transcript);
-            }, 1200);
+            }, 2500);
           }
         }
       });
