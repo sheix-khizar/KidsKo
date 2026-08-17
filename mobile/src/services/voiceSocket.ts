@@ -65,6 +65,7 @@ export class VoiceSession {
   private isStartingSpeech = false;
   private pendingSpeechRestart = false;
   private speechSilenceTimer: any = null;
+  private currentTurnId = 0;
 
   // Streaming Audio Queue State
   private audioQueue: string[] = [];
@@ -126,6 +127,7 @@ export class VoiceSession {
           console.error('[Mobile WS Error Frame]: Server error =', msg.reason);
           callbacks.onError(msg.reason);
         } else if (msg.type === 'audio') {
+          const turnId = this.currentTurnId;
           this.receivedChunkCount++;
           if (this.receivedChunkCount === 1) {
             this.firstChunkTime = Date.now();
@@ -157,6 +159,12 @@ export class VoiceSession {
           const turnCompleteTime = Date.now();
           const latencyToTurnComplete = this.promptSentTime > 0 ? turnCompleteTime - this.promptSentTime : 0;
           console.log(`[Mobile Audio] Turn complete: +${latencyToTurnComplete} ms after prompt sent. Total chunks collected = ${this.receivedChunkCount}`);
+
+          // Ignore stray turn_complete frames from cancelled turns with 0 chunks
+          if (this.receivedChunkCount === 0 && !this.hasStartedPlayback) {
+            console.log('[Mobile Audio] Ignoring turn_complete frame from cancelled turn (0 chunks collected).');
+            return;
+          }
 
           this.isTurnComplete = true;
 
@@ -214,6 +222,7 @@ export class VoiceSession {
   }
 
   private resetTurnState() {
+    this.currentTurnId++;
     if (this.speechSilenceTimer) {
       clearTimeout(this.speechSilenceTimer);
       this.speechSilenceTimer = null;
@@ -314,9 +323,16 @@ export class VoiceSession {
         const isFinal = event.isFinal || event.results?.[0]?.isFinal;
 
         if (transcript && transcript.length > 1) {
-          // ⚡ REAL-TIME BARGE-IN: If student speaks while Kidsko is talking, immediately stop audio playback and switch turn!
+          const words = transcript.split(/\s+/).filter(Boolean);
+          const isSubstantialSpeech = words.length >= 2 || transcript.length >= 6;
+
+          // ⚡ REAL-TIME BARGE-IN: Ignore 1-word fillers during playback. Require at least 2 words or 6+ chars to interrupt Kidsko.
           if (this.isKidskoSpeaking()) {
-            console.log('[SpeechRec Lifecycle] ⚡ User interrupted Kidsko! Stopping active playback & listening to user:', transcript);
+            if (!isSubstantialSpeech) {
+              console.log('[SpeechRec Lifecycle]: Suppressing 1-word filler speech during Kidsko playback:', transcript);
+              return;
+            }
+            console.log('[SpeechRec Lifecycle] ⚡ Real user interruption detected! Stopping active playback & listening to user:', transcript);
             this.resetTurnState();
             this.callbacks?.onStateChange?.('listening');
           }
