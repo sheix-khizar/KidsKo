@@ -1,10 +1,7 @@
 import { createAudioPlayer } from 'expo-audio';
 import { ExpoSpeechRecognitionModule } from 'expo-speech-recognition';
-import { Platform } from 'react-native';
 import { getToken } from './api';
 import { WS_URL } from './config';
-
-export type VoiceSessionState = 'IDLE' | 'LISTENING' | 'THINKING' | 'SPEAKING' | 'INTERRUPTED';
 
 type VoiceCallbacks = {
   onReady: (capSeconds: number) => void;
@@ -14,17 +11,15 @@ type VoiceCallbacks = {
   onTranscript?: (text: string) => void;
   onSnapshotAck?: (remaining: number) => void;
   onSnapshotError?: (reason: string) => void;
-  onStateChange?: (state: VoiceSessionState) => void;
 };
+
+export type VoiceState = 'IDLE' | 'LISTENING' | 'THINKING' | 'SPEAKING' | 'ENDED';
 
 // 24000 Hz, 16-bit mono PCM = 48000 bytes/sec
 // ~400ms initial buffer = 19200 bytes (~4 chunks) -> preserves fast first-chunk latency (~900ms-1150ms)
 const INITIAL_BUFFER_BYTES = 19200;
 // ~1200ms chunk buffer = 57600 bytes per queued segment -> drastically reduces segment boundaries
 const CHUNK_BUFFER_BYTES = 57600;
-
-// Configurable adaptive utterance debounce to convert progressive speech recognition updates into ONE Gemini turn
-const SPEECH_SEND_DEBOUNCE_MS = 400;
 
 function createWavBase64(pcmBinary: string): string {
   const pcmBytesLength = pcmBinary.length;
@@ -69,24 +64,21 @@ export class VoiceSession {
   private lastSentTranscript = '';
   private isSessionActive = false;
   private isStartingSpeech = false;
-  private speechSessionConfigured = false;
 
-  // Turn-Taking State Machine & Monotonic Turn Tracking
-  private sessionState: VoiceSessionState = 'IDLE';
-  private currentTurnId = 1;
+  // Single Source of Truth State Machine
+  private state: VoiceState = 'IDLE';
 
-  // Utterance Stabilization & Debounce State
-  private pendingTranscript = '';
-  private transcriptDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-  private speechCycleId = 0;
+  // Response Generation ID (Turn Invalidation Guard)
+  private activeResponseId = 0;
+
+  // Speech Recognition Idempotency Guard
+  private isSpeechRecRunning = false;
 
   // Streaming Audio Queue State
   private audioQueue: string[] = [];
   private accumulatedPcmBinary = '';
-  private hasStartedPlayback = false;
-  private isPlayingQueue = false;
   private receivedChunkCount = 0;
-  private isTurnComplete = false;
+  private isServerTurnComplete = false;
   private hasLoggedPlaybackStart = false;
 
   // Diagnostic Timers & Handoff Metrics
@@ -95,78 +87,27 @@ export class VoiceSession {
   private lastSegmentFinishTime = 0;
   private currentSegmentPreloadTime = 0;
 
+  getState(): VoiceState {
+    return this.state;
+  }
+
   getLastTranscript(): string {
     return this.lastSentTranscript;
   }
 
-  getCurrentTurnId(): number {
-    return this.currentTurnId;
-  }
+  private transitionTo(newState: VoiceState) {
+    if (this.state === newState) return;
+    console.log(`[Voice State Transition]: ${this.state} -> ${newState}`);
+    this.state = newState;
 
-  getSessionState(): VoiceSessionState {
-    return this.sessionState;
-  }
-
-  private setSessionState(newState: VoiceSessionState) {
-    if (this.sessionState !== newState) {
-      this.sessionState = newState;
-      this.callbacks?.onStateChange?.(newState);
+    if (newState === 'LISTENING') {
+      this.startListeningIdempotent();
+    } else if (newState === 'THINKING' || newState === 'SPEAKING') {
+      this.stopSpeechRecognition();
+    } else if (newState === 'ENDED') {
+      this.stopSpeechRecognition();
+      this.stopAudioPlayback();
     }
-  }
-
-  private isKidskoSpeaking(): boolean {
-    return (
-      this.isPlayingQueue ||
-      this.audioQueue.length > 0 ||
-      this.preloadedNextPlayer !== null ||
-      this.activePlayer !== null ||
-      (this.hasStartedPlayback && !this.isTurnComplete)
-    );
-  }
-
-  private clearPendingDebounce() {
-    if (this.transcriptDebounceTimer) {
-      clearTimeout(this.transcriptDebounceTimer);
-      this.transcriptDebounceTimer = null;
-    }
-    this.pendingTranscript = '';
-  }
-
-  private commitPendingTranscript(cycleId: number, targetTurnId: number) {
-    if (cycleId !== this.speechCycleId || targetTurnId !== this.currentTurnId) {
-      console.log(`[Turn] Ignoring stale commit attempt for Turn #${targetTurnId} / Cycle #${cycleId} (Active Turn is #${this.currentTurnId})`);
-      return;
-    }
-
-    const transcript = this.pendingTranscript.trim();
-    this.pendingTranscript = '';
-
-    if (this.transcriptDebounceTimer) {
-      clearTimeout(this.transcriptDebounceTimer);
-      this.transcriptDebounceTimer = null;
-    }
-
-    if (!transcript || transcript.length === 0) return;
-
-    if (transcript === this.lastSentTranscript) {
-      console.log(`[Turn] Suppressing duplicate transcript for turn: "${transcript}"`);
-      return;
-    }
-
-    if (!this.isSessionActive || this.ws?.readyState !== WebSocket.OPEN) {
-      console.warn(`[Turn] Cannot send transcript: WebSocket not open.`);
-      return;
-    }
-
-    this.setSessionState('THINKING');
-    this.resetTurnState();
-    this.promptSentTime = Date.now();
-    this.lastSentTranscript = transcript;
-
-    console.log(`[Turn] User turn finalized: #${this.currentTurnId} "${transcript}"`);
-    console.log(`[Turn] Sending Gemini Turn #${this.currentTurnId}`);
-    this.ws.send(JSON.stringify({ type: 'text_prompt', data: transcript, turnId: this.currentTurnId }));
-    this.callbacks?.onTranscript?.(transcript);
   }
 
   async start(callbacks: VoiceCallbacks, studentId?: string) {
@@ -178,7 +119,6 @@ export class VoiceSession {
 
     this.callbacks = callbacks;
     this.isSessionActive = true;
-    this.setSessionState('LISTENING');
     const studentParam = studentId ? `&studentId=${studentId}` : '';
     const socketUrl = `${WS_URL}/ws/voice?token=${token}${studentParam}`;
     console.log('Connecting Voice WebSocket to:', socketUrl);
@@ -188,82 +128,66 @@ export class VoiceSession {
       try {
         const msg = JSON.parse(event.data);
         if (msg.type === 'ready') {
-          console.log(`[Mobile WS Ready Frame]: Session cap = ${msg.capSeconds}s, TurnId=#${msg.turnId || this.currentTurnId}`);
+          console.log(`[Mobile WS Ready Frame]: Session cap = ${msg.capSeconds}s`);
           callbacks.onReady(msg.capSeconds);
+          this.transitionTo('LISTENING');
         } else if (msg.type === 'cap_reached') {
           console.log('[Mobile WS Cap Reached Frame]: Server sent cap_reached signal.');
           this.isSessionActive = false;
-          this.stopSpeechRecognition();
-          this.stopAudioPlayback();
-          this.setSessionState('IDLE');
+          this.transitionTo('ENDED');
           callbacks.onCapReached();
         } else if (msg.type === 'error') {
           console.error('[Mobile WS Error Frame]: Server error =', msg.reason);
           callbacks.onError(msg.reason);
         } else if (msg.type === 'audio') {
-          const inboundTurnId = msg.turnId ?? this.currentTurnId;
-          if (inboundTurnId !== this.currentTurnId) {
-            console.log(`[Audio] Discarding stale audio chunk for dead Turn #${inboundTurnId} (Active Turn is #${this.currentTurnId})`);
+          // Stale Chunk Guard: Ignore audio chunks if state isn't THINKING or SPEAKING
+          if (this.state !== 'THINKING' && this.state !== 'SPEAKING') {
+            console.log('[Mobile Stale Chunk Guard]: Rejecting late-arriving audio chunk received outside THINKING/SPEAKING state.');
             return;
-          }
-
-          if (this.sessionState !== 'SPEAKING') {
-            console.log(`[Turn] Gemini response started: Turn #${this.currentTurnId}`);
-            this.setSessionState('SPEAKING');
           }
 
           this.receivedChunkCount++;
           if (this.receivedChunkCount === 1) {
             this.firstChunkTime = Date.now();
             const latencyToFirstChunk = this.promptSentTime > 0 ? this.firstChunkTime - this.promptSentTime : 0;
-            console.log(`[Mobile Audio] First chunk received: +${latencyToFirstChunk} ms after prompt sent (Turn #${this.currentTurnId})`);
+            console.log(`[Mobile Audio] First chunk received: +${latencyToFirstChunk} ms after prompt sent`);
           }
-          console.log(`[Mobile Inbound Audio Chunk #${this.receivedChunkCount}]: TurnId=#${inboundTurnId}, base64 len = ${msg.data.length}`);
+          console.log(`[Mobile Inbound Audio Chunk #${this.receivedChunkCount}]: base64 len = ${msg.data.length}`);
 
           // Append incoming chunk to binary PCM accumulator
           this.accumulatedPcmBinary += atob(msg.data);
 
           // Check if initial buffer threshold (~400ms) reached to start streaming playback
-          if (!this.hasStartedPlayback) {
+          if (this.state === 'THINKING') {
             if (this.accumulatedPcmBinary.length >= INITIAL_BUFFER_BYTES) {
               this.flushBufferedPcmToQueue();
               this.startAudioQueuePlayback();
             }
-          } else {
+          } else if (this.state === 'SPEAKING') {
             // Once streaming has started, flush chunks whenever chunk threshold (~1200ms) is reached
             if (this.accumulatedPcmBinary.length >= CHUNK_BUFFER_BYTES) {
               this.flushBufferedPcmToQueue();
-              if (!this.isPlayingQueue) {
-                this.playNextAudioSegment();
-              } else if (!this.preloadedNextPlayer) {
+              if (!this.preloadedNextPlayer) {
                 this.preloadNextSegment();
               }
             }
           }
         } else if (msg.type === 'turn_complete') {
-          const inboundTurnId = msg.turnId ?? this.currentTurnId;
-          if (inboundTurnId !== this.currentTurnId) {
-            console.log(`[Turn] Ignoring turn_complete for dead Turn #${inboundTurnId} (Active Turn is #${this.currentTurnId})`);
-            return;
-          }
-
           const turnCompleteTime = Date.now();
           const latencyToTurnComplete = this.promptSentTime > 0 ? turnCompleteTime - this.promptSentTime : 0;
-          console.log(`[Mobile Audio] Turn complete: +${latencyToTurnComplete} ms after prompt sent (Turn #${this.currentTurnId}). Total chunks collected = ${this.receivedChunkCount}`);
+          console.log(`[Mobile WS]: Gemini response generation complete (+${latencyToTurnComplete} ms). Total chunks = ${this.receivedChunkCount}`);
 
-          this.isTurnComplete = true;
+          this.isServerTurnComplete = true;
 
           // Flush any remaining accumulated PCM bytes
           if (this.accumulatedPcmBinary.length > 0) {
             this.flushBufferedPcmToQueue(true);
           }
 
-          // If playback hasn't started yet (e.g. short 1-chunk reply), start it now
-          if (!this.hasStartedPlayback) {
+          // If still THINKING (e.g. short 1-chunk reply), start playback now
+          if (this.state === 'THINKING') {
             this.startAudioQueuePlayback();
-          } else if (!this.isPlayingQueue) {
-            this.playNextAudioSegment();
-          } else if (!this.preloadedNextPlayer) {
+          } else if (this.state === 'SPEAKING' && !this.preloadedNextPlayer) {
             this.preloadNextSegment();
           }
         } else if (msg.type === 'text') {
@@ -283,9 +207,7 @@ export class VoiceSession {
     this.ws.onclose = (e) => {
       console.log(`[Mobile WebSocket Closed Event]: Code=${e.code}, Reason="${e.reason || 'None'}"`);
       this.isSessionActive = false;
-      this.stopSpeechRecognition();
-      this.stopAudioPlayback();
-      this.setSessionState('IDLE');
+      this.transitionTo('ENDED');
       callbacks.onClose(e.reason || e.code);
     };
 
@@ -293,22 +215,29 @@ export class VoiceSession {
       console.error('[Mobile WebSocket Error Event]:', e?.message || e);
       callbacks.onError(e?.message || 'Connection error');
     };
-
-    await this.startSpeechRecognition();
   }
 
   sendImageCapture(base64Jpeg: string, caption?: string) {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      console.log(`[Mobile Sending Image Capture]: TurnId=#${this.currentTurnId}`, base64Jpeg.length, 'base64 chars, caption:', caption || '(none)');
-      this.resetTurnState();
-      this.promptSentTime = Date.now();
-      this.setSessionState('THINKING');
-      this.ws.send(JSON.stringify({ type: 'image_capture', data: base64Jpeg, caption, turnId: this.currentTurnId }));
+      console.log('[Mobile Sending Image Capture]:', base64Jpeg.length, 'base64 chars, caption:', caption || '(none)');
+      this.startNewTurn('image_capture', { data: base64Jpeg, caption });
     }
   }
 
+  private startNewTurn(type: 'text_prompt' | 'image_capture', payload: any) {
+    // 🚀 Turn Generation ID Increment: Instantly invalidates all stale chunks from previous turn!
+    this.activeResponseId++;
+    const currentTurnResponseId = this.activeResponseId;
+    console.log(`[Mobile Turn Manager]: Starting Turn #${currentTurnResponseId} (${type})`);
+
+    this.resetTurnState();
+    this.promptSentTime = Date.now();
+    this.transitionTo('THINKING');
+
+    this.ws?.send(JSON.stringify({ type, ...payload }));
+  }
+
   private resetTurnState() {
-    this.clearPendingDebounce();
     this.stopAudioPlayback();
     this.promptSentTime = 0;
     this.firstChunkTime = 0;
@@ -317,22 +246,16 @@ export class VoiceSession {
     this.receivedChunkCount = 0;
     this.accumulatedPcmBinary = '';
     this.audioQueue = [];
-    this.hasStartedPlayback = false;
-    this.isPlayingQueue = false;
-    this.isTurnComplete = false;
+    this.isServerTurnComplete = false;
     this.hasLoggedPlaybackStart = false;
   }
 
   private stopAudioPlayback() {
-    if (this.activePlayer || this.preloadedNextPlayer || this.audioQueue.length > 0 || this.isPlayingQueue) {
-      console.log(`[Audio] Discarding queued audio for Turn #${this.currentTurnId}`);
-      console.log(`[Audio] Stopping active player for Turn #${this.currentTurnId}`);
+    if (this.activePlayer || this.preloadedNextPlayer || this.audioQueue.length > 0) {
+      console.log('[Mobile Turn Interrupted]: Discarding queued audio and disposing active/preloaded players.');
     }
-    this.clearPendingDebounce();
     this.audioQueue = [];
     this.accumulatedPcmBinary = '';
-    this.hasStartedPlayback = false;
-    this.isPlayingQueue = false;
     this.lastSegmentFinishTime = 0;
     this.currentSegmentPreloadTime = 0;
 
@@ -351,29 +274,14 @@ export class VoiceSession {
     }
   }
 
-  private restartSpeechRecognition() {
+  private async startListeningIdempotent() {
     if (!this.isSessionActive || this.ws?.readyState !== WebSocket.OPEN) return;
-    this.speechCycleId++;
-    setTimeout(() => {
-      if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN) {
-        try {
-          console.log(`[SpeechRec #${this.speechCycleId}] [${new Date().toISOString()}]: Restarting continuous speech recognition (interimResults: true)...`);
-          ExpoSpeechRecognitionModule.start({
-            lang: 'en-US',
-            interimResults: true,
-            continuous: true,
-          });
-        } catch (err: any) {
-          console.error('[SpeechRec Lifecycle]: Error restarting speech recognition:', err?.message || err);
-        }
-      }
-    }, 300);
-  }
+    if (this.state !== 'LISTENING') return;
+    if (this.isSpeechRecRunning || this.isStartingSpeech) {
+      return; // Already listening cleanly — prevent duplicate sessions & duplicate logs!
+    }
 
-  private async startSpeechRecognition() {
-    if (!this.isSessionActive || this.isStartingSpeech) return;
     this.isStartingSpeech = true;
-    this.speechCycleId++;
 
     try {
       const perm = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
@@ -386,90 +294,53 @@ export class VoiceSession {
       this.clearSpeechSubscriptions();
 
       const subStart = ExpoSpeechRecognitionModule.addListener('start', () => {
-        console.log(`[SpeechRec #${this.speechCycleId}] [${new Date().toISOString()}]: Started listening for spoken user turns...`);
+        this.isSpeechRecRunning = true;
+        console.log('[SpeechRec Lifecycle]: Started listening for spoken user turns...');
       });
 
       const subResult = ExpoSpeechRecognitionModule.addListener('result', (event: any) => {
-        const rawTranscript = event.results?.[0]?.transcript?.trim();
-        if (!rawTranscript || rawTranscript.length === 0) return;
-
-        const normalized = rawTranscript.replace(/\s+/g, ' ').trim();
-        if (normalized === this.lastSentTranscript) return;
-
-        const currentCycleId = this.speechCycleId;
-
-        // ⚡ REAL BARGE-IN: If Kidsko is currently speaking, invalidate old turn immediately!
-        if (this.isKidskoSpeaking() || this.sessionState === 'SPEAKING') {
-          console.log(`[Turn] Barge-in detected during Turn #${this.currentTurnId}`);
-          console.log(`[Turn] Invalidating Gemini Turn #${this.currentTurnId}`);
-
-          const deadTurnId = this.currentTurnId;
-          this.currentTurnId++;
-
-          console.log(`[Audio] Discarding queued audio for Turn #${deadTurnId}`);
-          console.log(`[Audio] Stopping active player for Turn #${deadTurnId}`);
-          this.stopAudioPlayback();
-
-          console.log('[Turn] Listening for replacement user turn');
-          this.setSessionState('LISTENING');
-        } else if (this.sessionState === 'IDLE' || this.sessionState === 'THINKING') {
-          this.setSessionState('LISTENING');
-          console.log(`[Turn] User turn started: #${this.currentTurnId}`);
+        const transcript = event.results?.[0]?.transcript?.trim();
+        if (transcript && transcript.length > 0 && transcript !== this.lastSentTranscript && this.ws?.readyState === WebSocket.OPEN) {
+          console.log('[Mobile Voice Input] Sending final spoken turn to Gemini Live:', transcript);
+          this.lastSentTranscript = transcript;
+          this.callbacks?.onTranscript?.(transcript);
+          this.startNewTurn('text_prompt', { data: transcript });
         }
-
-        console.log(`[Turn] Candidate: "${normalized}"`);
-        this.pendingTranscript = normalized;
-
-        if (this.transcriptDebounceTimer) {
-          clearTimeout(this.transcriptDebounceTimer);
-          this.transcriptDebounceTimer = null;
-        }
-
-        this.transcriptDebounceTimer = setTimeout(() => {
-          this.commitPendingTranscript(currentCycleId, this.currentTurnId);
-        }, SPEECH_SEND_DEBOUNCE_MS);
       });
 
       const subEnd = ExpoSpeechRecognitionModule.addListener('end', () => {
-        console.log(`[SpeechRec #${this.speechCycleId}] [${new Date().toISOString()}]: Recognition cycle ended natively.`);
+        this.isSpeechRecRunning = false;
+        console.log('[SpeechRec Lifecycle]: Recognition cycle ended natively.');
         if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN) {
-          console.log('[SpeechRec Lifecycle]: Auto-restarting continuous speech recognition for next user turn...');
-          this.restartSpeechRecognition();
+          if (this.state === 'LISTENING') {
+            console.log('[SpeechRec Lifecycle]: Still in LISTENING state -> Restarting recognition loop...');
+            setTimeout(() => this.startListeningIdempotent(), 300);
+          } else {
+            console.log(`[SpeechRec Lifecycle]: Native end event fired while in state '${this.state}' -> Remaining dormant.`);
+          }
         }
       });
 
       const subError = ExpoSpeechRecognitionModule.addListener('error', (event: any) => {
-        console.log('[SpeechRec Lifecycle]: Error event =', event.error, event.message);
+        this.isSpeechRecRunning = false;
+        console.error('[SpeechRec Lifecycle]: Error event =', event.error, event.message);
         if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN && event.error !== 'no-match') {
-          this.restartSpeechRecognition();
+          if (this.state === 'LISTENING') {
+            setTimeout(() => this.startListeningIdempotent(), 500);
+          }
         }
       });
 
       this.speechSubscriptions = [subStart, subResult, subEnd, subError];
 
-      const initialOptions: any = {
+      ExpoSpeechRecognitionModule.start({
         lang: 'en-US',
-        interimResults: true,
+        interimResults: false,
         continuous: true,
-      };
-
-      if (Platform.OS === 'ios') {
-        initialOptions.iosCategory = {
-          category: 'playAndRecord',
-          categoryOptions: ['defaultToSpeaker', 'allowBluetooth', 'mixWithOthers'],
-          mode: 'voiceChat',
-        };
-        initialOptions.iosVoiceProcessingEnabled = true;
-        console.log('[Mobile Audio Session]: AEC & VoiceProcessing enabled = true (iOS)');
-      } else {
-        console.log('[Mobile Audio Session]: AEC not available via speech rec module (Android)');
-      }
-
-      console.log(`[SpeechRec #${this.speechCycleId}] [${new Date().toISOString()}]: Initializing speech session (interimResults: true)...`);
-      ExpoSpeechRecognitionModule.start(initialOptions);
-      this.speechSessionConfigured = true;
+      });
     } catch (err: any) {
       console.error('[SpeechRec Lifecycle]: Start exception =', err?.message || err);
+      this.isSpeechRecRunning = false;
     } finally {
       this.isStartingSpeech = false;
     }
@@ -485,11 +356,11 @@ export class VoiceSession {
   }
 
   private stopSpeechRecognition() {
-    console.log('[SpeechRec Lifecycle]: Stopping speech recognition and cleaning listeners...');
-    this.clearPendingDebounce();
+    if (this.isSpeechRecRunning) {
+      console.log('[SpeechRec Lifecycle]: Pausing speech recognition during THINKING/SPEAKING state...');
+    }
+    this.isSpeechRecRunning = false;
     this.clearSpeechSubscriptions();
-    this.speechSessionConfigured = false;
-    this.speechCycleId++;
     try {
       ExpoSpeechRecognitionModule.stop();
     } catch {}
@@ -499,7 +370,7 @@ export class VoiceSession {
     if (this.accumulatedPcmBinary.length === 0) return;
 
     let bytesPerSegment = CHUNK_BUFFER_BYTES;
-    if (!this.hasStartedPlayback) {
+    if (this.state === 'THINKING') {
       bytesPerSegment = INITIAL_BUFFER_BYTES;
     }
 
@@ -525,8 +396,7 @@ export class VoiceSession {
   }
 
   private startAudioQueuePlayback() {
-    if (this.isPlayingQueue) return;
-    this.hasStartedPlayback = true;
+    this.transitionTo('SPEAKING');
     this.playNextAudioSegment();
   }
 
@@ -536,7 +406,7 @@ export class VoiceSession {
     const nextSegmentUri = this.audioQueue.shift()!;
     const t0 = Date.now();
     try {
-      console.log(`[Mobile Audio Preload]: Pre-creating background audio player for next segment (${nextSegmentUri.length} chars URI)...`);
+      console.log(`[Mobile Audio Preload]: Pre-creating background audio player for next segment...`);
       this.preloadedNextPlayer = createAudioPlayer({ uri: nextSegmentUri });
       const t1 = Date.now();
       this.currentSegmentPreloadTime = t1;
@@ -577,25 +447,24 @@ export class VoiceSession {
     }
 
     if (!playerToPlay) {
-      this.isPlayingQueue = false;
-      if (this.isTurnComplete) {
+      if (this.isServerTurnComplete) {
         const playbackEndTime = Date.now();
         const totalTurnTime = this.promptSentTime > 0 ? playbackEndTime - this.promptSentTime : 0;
-        console.log(`[Mobile Audio] Playback finished for Turn #${this.currentTurnId}: +${totalTurnTime} ms after prompt sent. Session remains WAITING FOR NEXT USER TURN.`);
-        this.setSessionState('LISTENING');
+        console.log(`[Mobile Audio] Playback finished: +${totalTurnTime} ms after prompt sent. Transitioning state to LISTENING.`);
+
+        // 🚀 Transition state to LISTENING: Speech recognition reopens cleanly for next user turn!
+        this.transitionTo('LISTENING');
       } else {
         console.log('[Mobile Audio Stream]: Queue emptied mid-stream, awaiting next audio chunk...');
       }
       return;
     }
 
-    this.isPlayingQueue = true;
-
     if (!this.hasLoggedPlaybackStart) {
       this.hasLoggedPlaybackStart = true;
       const playbackStartTime = Date.now();
       const timeToFirstAudio = this.promptSentTime > 0 ? playbackStartTime - this.promptSentTime : 0;
-      console.log(`[Mobile Audio] Playback started for Turn #${this.currentTurnId}: +${timeToFirstAudio} ms after prompt sent`);
+      console.log(`[Mobile Audio] Playback started: +${timeToFirstAudio} ms after prompt sent`);
       console.log(`[Mobile Audio] Time to first audio: ${timeToFirstAudio} ms`);
     }
 
@@ -624,19 +493,14 @@ export class VoiceSession {
 
     playerToPlay.play();
 
-    // ⚡ Immediately preload the NEXT segment player in background while current segment plays
+    // ⚡ Immediately preload NEXT segment player in background while current segment plays
     this.preloadNextSegment();
   }
 
   async end() {
     console.log('[Mobile Session End Call]: User manually ending voice session...');
     this.isSessionActive = false;
-    this.clearPendingDebounce();
-    this.speechSessionConfigured = false;
-    this.speechCycleId++;
-    this.stopSpeechRecognition();
-    this.stopAudioPlayback();
-    this.setSessionState('IDLE');
+    this.transitionTo('ENDED');
     if (this.ws) {
       this.ws.close();
     }
