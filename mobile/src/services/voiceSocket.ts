@@ -65,7 +65,6 @@ export class VoiceSession {
   private isStartingSpeech = false;
   private pendingSpeechRestart = false;
   private speechSilenceTimer: any = null;
-  private isAwaitingAiTurn = false;
 
   // Streaming Audio Queue State
   private audioQueue: string[] = [];
@@ -88,7 +87,6 @@ export class VoiceSession {
 
   private isKidskoSpeaking(): boolean {
     return (
-      this.isAwaitingAiTurn ||
       this.isPlayingQueue ||
       this.audioQueue.length > 0 ||
       this.preloadedNextPlayer !== null ||
@@ -209,7 +207,6 @@ export class VoiceSession {
     if (this.ws?.readyState === WebSocket.OPEN) {
       console.log('[Mobile Sending Image Capture]:', base64Jpeg.length, 'base64 chars, caption:', caption || '(none)');
       this.resetTurnState();
-      this.isAwaitingAiTurn = true;
       this.callbacks?.onStateChange?.('thinking');
       this.promptSentTime = Date.now();
       this.ws.send(JSON.stringify({ type: 'image_capture', data: base64Jpeg, caption }));
@@ -223,7 +220,6 @@ export class VoiceSession {
     }
     this.stopAudioPlayback();
     this.pendingSpeechRestart = false;
-    this.isAwaitingAiTurn = false;
     this.promptSentTime = 0;
     this.firstChunkTime = 0;
     this.lastSegmentFinishTime = 0;
@@ -284,24 +280,13 @@ export class VoiceSession {
       this.speechSilenceTimer = null;
     }
 
-    const clean = transcript?.trim();
-    if (!clean || clean.length === 0 || clean === this.lastSentTranscript) return;
-
-    // Ignore single-word hesitation sounds like "main", "umm", "ahh" unless explicit final signal
-    const wordCount = clean.split(/\s+/).length;
-    if (wordCount < 2 && clean.length <= 4) {
-      console.log('[Mobile Voice Input] Ignoring single hesitation word fragment:', clean);
-      return;
-    }
-
-    if (this.ws?.readyState === WebSocket.OPEN) {
+    if (transcript && transcript.length > 0 && transcript !== this.lastSentTranscript && this.ws?.readyState === WebSocket.OPEN) {
       this.resetTurnState();
-      this.isAwaitingAiTurn = true;
       this.callbacks?.onStateChange?.('thinking');
       this.promptSentTime = Date.now();
-      console.log('[Mobile Voice Input] Finalized spoken turn -> Sending prompt to Gemini Live:', clean);
-      this.lastSentTranscript = clean;
-      this.ws.send(JSON.stringify({ type: 'text_prompt', data: clean }));
+      console.log('[Mobile Voice Input] Finalized spoken turn -> Sending prompt to Gemini Live:', transcript);
+      this.lastSentTranscript = transcript;
+      this.ws.send(JSON.stringify({ type: 'text_prompt', data: transcript }));
     }
   }
 
@@ -321,22 +306,21 @@ export class VoiceSession {
 
       const subStart = ExpoSpeechRecognitionModule.addListener('start', () => {
         console.log('[SpeechRec Lifecycle]: Started listening for spoken user turns...');
-        if (!this.isAwaitingAiTurn && !this.isPlayingQueue) {
-          this.callbacks?.onStateChange?.('listening');
-        }
+        this.callbacks?.onStateChange?.('listening');
       });
 
       const subResult = ExpoSpeechRecognitionModule.addListener('result', (event: any) => {
-        // If Kidsko is currently speaking or awaiting AI turn, suppress new turn creation
-        if (this.isKidskoSpeaking()) {
-          console.log('[SpeechRec Lifecycle]: Suppressing speech recognition input while Kidsko is speaking or awaiting AI response.');
-          return;
-        }
-
         const transcript = event.results?.[0]?.transcript?.trim();
         const isFinal = event.isFinal || event.results?.[0]?.isFinal;
 
-        if (transcript && transcript.length > 0) {
+        if (transcript && transcript.length > 1) {
+          // ⚡ REAL-TIME BARGE-IN: If student speaks while Kidsko is talking, immediately stop audio playback and switch turn!
+          if (this.isKidskoSpeaking()) {
+            console.log('[SpeechRec Lifecycle] ⚡ User interrupted Kidsko! Stopping active playback & listening to user:', transcript);
+            this.resetTurnState();
+            this.callbacks?.onStateChange?.('listening');
+          }
+
           // Real-time live transcript streaming to UI screen
           this.callbacks?.onTranscript?.(transcript);
 
@@ -480,8 +464,6 @@ export class VoiceSession {
         const playbackEndTime = Date.now();
         const totalTurnTime = this.promptSentTime > 0 ? playbackEndTime - this.promptSentTime : 0;
         console.log(`[Mobile Audio] Playback finished: +${totalTurnTime} ms after prompt sent. Session remains WAITING FOR NEXT USER TURN.`);
-        this.isAwaitingAiTurn = false;
-        this.lastSentTranscript = '';
         this.callbacks?.onStateChange?.('listening');
 
         // Trigger deferred speech recognition restart after Kidsko has finished speaking
@@ -540,7 +522,6 @@ export class VoiceSession {
     console.log('[Mobile Session End Call]: User manually ending voice session...');
     this.isSessionActive = false;
     this.pendingSpeechRestart = false;
-    this.isAwaitingAiTurn = false;
     this.clearSpeechSubscriptions();
     this.stopAudioPlayback();
     if (this.ws) {
