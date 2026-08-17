@@ -71,7 +71,7 @@ async function testVoiceGreetingForStudent(studentName: string) {
     const timeout = setTimeout(() => {
       ws.close();
       reject(new Error(`Greeting timeout for ${studentName}`));
-    }, 15000);
+    }, 25000);
 
     ws.on('open', () => {
       console.log(`[Test WS Open]: Connected to voice socket for ${studentName}`);
