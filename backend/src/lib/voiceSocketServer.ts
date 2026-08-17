@@ -41,56 +41,37 @@ export function attachVoiceSocketServer(httpServer: Server) {
         return;
       }
 
-      // Fetch student's display name from Supabase students table at session start
-      let studentName = 'friend';
-      if (studentId) {
-        try {
-          const { data: studentRow } = await dbClient
-            .from('students')
-            .select('name')
-            .eq('id', studentId)
-            .maybeSingle();
-
-          if (studentRow?.name && studentRow.name.trim().length > 0) {
-            studentName = studentRow.name.trim();
-          }
-        } catch (err: any) {
-          console.warn('[Voice Server]: Could not fetch student name:', err.message);
-        }
-      }
-
       const capMinutes = eligibility.isPremium
         ? eligibility.minutesRemaining
         : Math.min(5, eligibility.minutesRemaining);
       const capMs = Math.max(1000, capMinutes * 60 * 1000);
       const capSeconds = Math.floor(capMs / 1000);
 
-      console.log(`[Voice Session Started]: ParentId=${parentId}, StudentId=${studentId || '(none)'}, StudentName="${studentName}", CapMinutes=${capMinutes.toFixed(2)}, CapSeconds=${capSeconds}s, StartTime=${new Date(sessionStartTime).toISOString()}`);
+      console.log(`[Voice Session Started]: ParentId=${parentId}, StudentId=${studentId || '(none)'}, CapMinutes=${capMinutes.toFixed(2)}, CapSeconds=${capSeconds}s, StartTime=${new Date(sessionStartTime).toISOString()}`);
 
       let liveSession: any;
       let elapsedMs = 0;
       let accountingTimer: NodeJS.Timeout;
       let hardCapTimer: NodeJS.Timeout;
-      let activeTurnId = 1;
 
       try {
         liveSession = await startLiveSession({
           onTextChunk: (text) => {
             if (clientSocket.readyState === WebSocket.OPEN) {
-              clientSocket.send(JSON.stringify({ type: 'text', data: text, turnId: activeTurnId }));
+              clientSocket.send(JSON.stringify({ type: 'text', data: text }));
             }
           },
           onAudioChunk: (base64Audio) => {
             if (clientSocket.readyState === WebSocket.OPEN) {
-              console.log(`[Backend Outbound Audio Chunk to Mobile]: TurnId=#${activeTurnId}, bytes=${base64Audio.length}`);
-              clientSocket.send(JSON.stringify({ type: 'audio', data: base64Audio, turnId: activeTurnId }));
+              console.log(`[Backend Outbound Audio Chunk to Mobile]: bytes=${base64Audio.length}`);
+              clientSocket.send(JSON.stringify({ type: 'audio', data: base64Audio }));
             }
           },
           onTurnComplete: () => {
             if (clientSocket.readyState === WebSocket.OPEN) {
               const elapsedSec = Math.floor((Date.now() - sessionStartTime) / 1000);
-              console.log(`[Backend Outbound turn_complete Frame]: Gemini TurnId=#${activeTurnId} complete. Session active for ${elapsedSec}s / ${capSeconds}s max.`);
-              clientSocket.send(JSON.stringify({ type: 'turn_complete', turnId: activeTurnId }));
+              console.log(`[Backend Outbound turn_complete Frame]: Gemini turn complete. Session active for ${elapsedSec}s / ${capSeconds}s max. Client WS state=${clientSocket.readyState}, Gemini WS state=${liveSession?.readyState}`);
+              clientSocket.send(JSON.stringify({ type: 'turn_complete' }));
             }
           },
           onClose: (reason) => {
@@ -113,11 +94,23 @@ export function attachVoiceSocketServer(httpServer: Server) {
         return;
       }
 
-      clientSocket.send(JSON.stringify({ type: 'ready', capSeconds, turnId: activeTurnId }));
+      clientSocket.send(JSON.stringify({ type: 'ready', capSeconds }));
 
-      // STEP 3: Trigger Kidsko initial spoken greeting turn by student name
-      const greetingPrompt = `Greet ${studentName} warmly and briefly by name, introduce yourself as Kidsko, and ask how you can help them today. Keep it to one short, friendly sentence.`;
-      console.log(`[Voice Server Initial Greeting Triggered]: TurnId=#${activeTurnId}, Greeting student "${studentName}"...`);
+      // 🎙️ Send initial personalized AI voice greeting upon call start
+      let studentName = 'there';
+      if (studentId) {
+        try {
+          const { data: s } = await dbClient.from('students').select('name').eq('id', studentId).maybeSingle();
+          if (s && s.name) {
+            studentName = s.name.trim();
+          }
+        } catch (err: any) {
+          console.warn('[Voice Socket] Could not fetch student name for greeting:', err?.message);
+        }
+      }
+
+      const greetingPrompt = `Hi ${studentName}, I am Kidsko. How can I help you today?`;
+      console.log(`[Voice Server] Triggering initial AI voice greeting for ${studentName}: "${greetingPrompt}"`);
       sendTextPrompt(liveSession, greetingPrompt);
 
       accountingTimer = setInterval(async () => {
@@ -154,20 +147,10 @@ export function attachVoiceSocketServer(httpServer: Server) {
                 sendAudioChunk(liveSession, msg.data);
               }
             } else if (msg.type === 'text_prompt') {
-              if (msg.turnId) {
-                activeTurnId = msg.turnId;
-              } else {
-                activeTurnId++;
-              }
               const currentElapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
-              console.log(`[Voice Server User Turn Received]: TurnId=#${activeTurnId}, Prompt="${msg.data}", Elapsed=${currentElapsed}s / ${capSeconds}s`);
+              console.log(`[Voice Server User Turn Received]: Prompt="${msg.data}", Elapsed=${currentElapsed}s / ${capSeconds}s, Gemini WS state=${liveSession?.readyState}`);
               sendTextPrompt(liveSession, msg.data);
             } else if (msg.type === 'image_capture') {
-              if (msg.turnId) {
-                activeTurnId = msg.turnId;
-              } else {
-                activeTurnId++;
-              }
               const snapshotEligibility = await checkSnapshotEligibility(dbClient, parentId, eligibility.isPremium);
               if (!snapshotEligibility.allowed) {
                 console.log(`[Voice Server Snapshot Blocked]: ${snapshotEligibility.reason}`);
@@ -182,12 +165,12 @@ export function attachVoiceSocketServer(httpServer: Server) {
                 .toBuffer();
               const compressedBase64 = compressedBuffer.toString('base64');
 
-              console.log(`[Voice Server] Injecting captured photo into live session (TurnId=#${activeTurnId}), caption:`, msg.caption || '(none)');
+              console.log('[Voice Server] Injecting captured photo into live session, caption:', msg.caption || '(none)');
               sendImagePrompt(liveSession, compressedBase64, msg.caption);
               await recordSnapshotUsed(dbClient, parentId);
               if (studentId) await logUsageEvent(dbClient, parentId, studentId, 'live_snapshot');
 
-              clientSocket.send(JSON.stringify({ type: 'snapshot_ack', remaining: snapshotEligibility.remaining - 1, turnId: activeTurnId }));
+              clientSocket.send(JSON.stringify({ type: 'snapshot_ack', remaining: snapshotEligibility.remaining - 1 }));
             }
           } catch (err: any) {
             console.error('[Voice Socket] Bad client message or snapshot processing error:', err.message);
