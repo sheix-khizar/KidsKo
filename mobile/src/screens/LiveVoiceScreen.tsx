@@ -14,7 +14,6 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
   const [status, setStatus] = useState<'connecting' | 'live' | 'ended'>('connecting');
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [errorReason, setErrorReason] = useState<string | null>(null);
-  const [warningNotice, setWarningNotice] = useState<string | null>(null);
   const [showOptionModal, setShowOptionModal] = useState(false);
   const [isSendingSnapshot, setIsSendingSnapshot] = useState(false);
   const [snapshotsRemaining, setSnapshotsRemaining] = useState<number | null>(null);
@@ -55,15 +54,6 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
             console.log('[LiveVoiceScreen] Captured student spoken transcript:', text);
             setLastSpokenTranscript(text.trim());
           }
-        },
-        onResponseTimeout: () => {
-          console.warn('[LiveVoiceScreen]: Response timeout - displaying recovery toast to child.');
-          setErrorReason("Hmm, I didn't quite catch that. Can you try asking again?");
-          setTimeout(() => setErrorReason(null), 5000);
-        },
-        onSessionEndingSoon: (secondsRemaining) => {
-          console.log(`[LiveVoiceScreen]: Session ending soon warning (${secondsRemaining}s remaining).`);
-          setWarningNotice(`⏰ Voice call ending in ${secondsRemaining}s!`);
         },
         onSnapshotAck: (remaining) => {
           setSnapshotsRemaining(remaining);
@@ -138,8 +128,6 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
         <Text style={styles.timer}>{secondsLeft}s remaining</Text>
       )}
 
-      {warningNotice && <Text style={styles.warningNotice}>{warningNotice}</Text>}
-
       {isSendingSnapshot ? (
         <View style={styles.analyzingBox}>
           <ActivityIndicator size="large" color="#FFD54F" />
@@ -191,8 +179,7 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1a1a2e', padding: 24 },
   title: { fontSize: 20, fontWeight: '800', color: '#fff', marginBottom: 12, textAlign: 'center' },
-  timer: { fontSize: 16, color: '#FFD54F', fontWeight: '700', marginBottom: 12 },
-  warningNotice: { fontSize: 15, color: '#FFB74D', fontWeight: '700', marginBottom: 16, textAlign: 'center' },
+  timer: { fontSize: 16, color: '#FFD54F', fontWeight: '700', marginBottom: 20 },
   errorSub: { fontSize: 14, color: '#FF8A80', fontWeight: '600', marginBottom: 30, textAlign: 'center' },
   endButton: { backgroundColor: '#EA4335', borderRadius: 30, paddingVertical: 14, paddingHorizontal: 40, marginTop: 10 },
   endButtonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
