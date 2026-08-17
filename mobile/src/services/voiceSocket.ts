@@ -96,7 +96,14 @@ export class VoiceSession {
     );
   }
 
-  async start(callbacks: VoiceCallbacks, studentId?: string, voice?: string, isVoiceChange?: boolean) {
+  setVoice(voiceName: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      console.log('[Mobile Voice Change]: Sending transparent change_voice frame to backend:', voiceName);
+      this.ws.send(JSON.stringify({ type: 'change_voice', voice: voiceName }));
+    }
+  }
+
+  async start(callbacks: VoiceCallbacks, studentId?: string, voice?: string) {
     const token = await getToken();
     if (!token) {
       callbacks.onError('Not authenticated');
@@ -107,8 +114,7 @@ export class VoiceSession {
     this.isSessionActive = true;
     const studentParam = studentId ? `&studentId=${studentId}` : '';
     const voiceParam = voice ? `&voice=${voice}` : '';
-    const voiceChangeParam = isVoiceChange ? `&isVoiceChange=true` : '';
-    const socketUrl = `${WS_URL}/ws/voice?token=${token}${studentParam}${voiceParam}${voiceChangeParam}`;
+    const socketUrl = `${WS_URL}/ws/voice?token=${token}${studentParam}${voiceParam}`;
     console.log('Connecting Voice WebSocket to:', socketUrl);
     this.ws = new WebSocket(socketUrl);
 

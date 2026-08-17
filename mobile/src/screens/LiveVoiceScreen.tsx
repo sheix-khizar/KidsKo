@@ -34,21 +34,18 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
   const sessionRef = useRef<VoiceSession | null>(null);
   const timerRef = useRef<any>(null);
 
-  const startSession = (voiceId: string, isVoiceChange = false) => {
+  const startSession = (voiceId: string) => {
     if (sessionRef.current) {
       sessionRef.current.end();
       sessionRef.current = null;
     }
 
-    if (!isVoiceChange && timerRef.current) {
+    if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
 
-    if (!isVoiceChange) {
-      setStatus('connecting');
-    }
-
+    setStatus('connecting');
     const session = new VoiceSession();
     sessionRef.current = session;
 
@@ -56,14 +53,11 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
       {
         onReady: (capSeconds) => {
           setStatus('live');
-          if (!isVoiceChange) {
-            setSecondsLeft(capSeconds);
-          }
-          if (!timerRef.current) {
-            timerRef.current = setInterval(() => {
-              setSecondsLeft((s) => (s !== null && s > 0 ? s - 1 : 0));
-            }, 1000);
-          }
+          setSecondsLeft(capSeconds);
+          if (timerRef.current) clearInterval(timerRef.current);
+          timerRef.current = setInterval(() => {
+            setSecondsLeft((s) => (s !== null && s > 0 ? s - 1 : 0));
+          }, 1000);
         },
         onCapReached: () => {
           setStatus('ended');
@@ -103,8 +97,7 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
         },
       },
       studentId,
-      voiceId,
-      isVoiceChange
+      voiceId
     );
   };
 
@@ -112,7 +105,7 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
     SecureStore.getItemAsync('kidsko_preferred_voice').then((savedVoice: string | null) => {
       const activeVoice = savedVoice || 'Kore';
       setSelectedVoice(activeVoice);
-      startSession(activeVoice, false);
+      startSession(activeVoice);
     });
 
     return () => {
@@ -127,7 +120,10 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
     try {
       await SecureStore.setItemAsync('kidsko_preferred_voice', voiceId);
     } catch {}
-    startSession(voiceId, true);
+
+    // 🎙️ Send transparent change_voice frame over existing WebSocket connection (0 disconnect, 0 timer reset, 0 session end)
+    console.log('[LiveVoiceScreen] Selected new voice:', voiceId, '-> Sending transparent voice change request...');
+    sessionRef.current?.setVoice(voiceId);
   };
 
   const handleEnd = async () => {
