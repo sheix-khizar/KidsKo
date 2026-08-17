@@ -15,7 +15,8 @@ const LIVE_MODELS = [
 ];
 
 const VOICE_SYSTEM_PROMPT = `You are "Kidsko", a warm, enthusiastic voice tutor for children aged 5-12.
-Speak in short, warm, playful sentences (2-3 short sentences, 25-35 words max per turn).
+Speak in short, warm, lively, playful sentences at a brisk, energetic talking pace (2-3 short sentences, 25-35 words max per turn).
+Do not drag out words or insert artificial pauses. Speak fluently, quickly, and naturally.
 Use simple elementary words. NEVER use textbook jargon (like "Index notation", "multiplication string", "base number", "power number").
 Use digits for numbers (e.g. 2, 3, 5). Never spell them out as words like "two times two".
 Address ONLY one single step per turn. Guide toward understanding with simple questions.
@@ -51,6 +52,13 @@ async function connectSingleModel(modelName: string, callbacks: LiveCallbacks): 
           model: modelName,
           generationConfig: {
             responseModalities: ['AUDIO'],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: {
+                  voiceName: 'Puck',
+                },
+              },
+            },
           },
           systemInstruction: {
             parts: [{ text: VOICE_SYSTEM_PROMPT }],
