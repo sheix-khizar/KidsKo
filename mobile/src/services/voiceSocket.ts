@@ -64,6 +64,7 @@ export class VoiceSession {
   private isSessionActive = false;
   private isStartingSpeech = false;
   private pendingSpeechRestart = false;
+  private speechSilenceTimer: any = null;
 
   // Streaming Audio Queue State
   private audioQueue: string[] = [];
@@ -213,6 +214,10 @@ export class VoiceSession {
   }
 
   private resetTurnState() {
+    if (this.speechSilenceTimer) {
+      clearTimeout(this.speechSilenceTimer);
+      this.speechSilenceTimer = null;
+    }
     this.stopAudioPlayback();
     this.pendingSpeechRestart = false;
     this.promptSentTime = 0;
@@ -261,12 +266,28 @@ export class VoiceSession {
       if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN && !this.isKidskoSpeaking()) {
         try {
           console.log('[SpeechRec Lifecycle]: Started listening for spoken user turns...');
-          ExpoSpeechRecognitionModule.start({ lang: 'en-US', interimResults: false, continuous: true });
+          ExpoSpeechRecognitionModule.start({ lang: 'en-US', interimResults: true, continuous: true });
         } catch (err: any) {
           console.error('[SpeechRec Lifecycle]: Error restarting speech recognition:', err?.message || err);
         }
       }
     }, 300);
+  }
+
+  private finalizeSpokenTurn(transcript: string) {
+    if (this.speechSilenceTimer) {
+      clearTimeout(this.speechSilenceTimer);
+      this.speechSilenceTimer = null;
+    }
+
+    if (transcript && transcript.length > 0 && transcript !== this.lastSentTranscript && this.ws?.readyState === WebSocket.OPEN) {
+      this.resetTurnState();
+      this.callbacks?.onStateChange?.('thinking');
+      this.promptSentTime = Date.now();
+      console.log('[Mobile Voice Input] Finalized spoken turn -> Sending prompt to Gemini Live:', transcript);
+      this.lastSentTranscript = transcript;
+      this.ws.send(JSON.stringify({ type: 'text_prompt', data: transcript }));
+    }
   }
 
   private async startSpeechRecognition() {
@@ -290,15 +311,22 @@ export class VoiceSession {
 
       const subResult = ExpoSpeechRecognitionModule.addListener('result', (event: any) => {
         const transcript = event.results?.[0]?.transcript?.trim();
-        if (transcript && transcript.length > 0 && transcript !== this.lastSentTranscript && this.ws?.readyState === WebSocket.OPEN) {
-          // Interrupt active AI playback if user speaks
-          this.resetTurnState();
-          this.callbacks?.onStateChange?.('thinking');
-          this.promptSentTime = Date.now();
-          console.log('[Mobile Voice Input] Sending final spoken turn to Gemini Live:', transcript);
-          this.lastSentTranscript = transcript;
-          this.ws.send(JSON.stringify({ type: 'text_prompt', data: transcript }));
+        const isFinal = event.isFinal || event.results?.[0]?.isFinal;
+
+        if (transcript && transcript.length > 0) {
+          // Real-time live transcript streaming to UI screen
           this.callbacks?.onTranscript?.(transcript);
+
+          if (isFinal) {
+            this.finalizeSpokenTurn(transcript);
+          } else {
+            // Reset 1.2s silence timer on each new interim word to finalize automatically when speaking pauses
+            if (this.speechSilenceTimer) clearTimeout(this.speechSilenceTimer);
+            this.speechSilenceTimer = setTimeout(() => {
+              console.log('[Mobile Voice Input] 1.2s silence pause detected -> Finalizing spoken turn:', transcript);
+              this.finalizeSpokenTurn(transcript);
+            }, 1200);
+          }
         }
       });
 
@@ -331,7 +359,7 @@ export class VoiceSession {
 
       ExpoSpeechRecognitionModule.start({
         lang: 'en-US',
-        interimResults: false,
+        interimResults: true,
         continuous: true,
       });
     } catch (err: any) {
@@ -342,6 +370,10 @@ export class VoiceSession {
   }
 
   private clearSpeechSubscriptions() {
+    if (this.speechSilenceTimer) {
+      clearTimeout(this.speechSilenceTimer);
+      this.speechSilenceTimer = null;
+    }
     for (const sub of this.speechSubscriptions) {
       try {
         sub.remove();
@@ -378,10 +410,7 @@ export class VoiceSession {
       const pcmSegmentBinary = this.accumulatedPcmBinary.slice(0, pcmSegmentLength);
       this.accumulatedPcmBinary = this.accumulatedPcmBinary.slice(pcmSegmentLength);
 
-      const t0 = Date.now();
       const wavBase64 = createWavBase64(pcmSegmentBinary);
-      const t1 = Date.now();
-
       this.audioQueue.push(`data:audio/wav;base64,${wavBase64}`);
     }
   }
@@ -397,11 +426,9 @@ export class VoiceSession {
     if (this.preloadedNextPlayer || this.audioQueue.length === 0) return;
 
     const nextSegmentUri = this.audioQueue.shift()!;
-    const t0 = Date.now();
     try {
       this.preloadedNextPlayer = createAudioPlayer({ uri: nextSegmentUri });
-      const t1 = Date.now();
-      this.currentSegmentPreloadTime = t1;
+      this.currentSegmentPreloadTime = Date.now();
     } catch (err) {
       console.error('[Mobile Audio Preload Error]: Could not pre-create audio player:', err);
       this.audioQueue.unshift(nextSegmentUri);
@@ -409,8 +436,6 @@ export class VoiceSession {
   }
 
   private playNextAudioSegment() {
-    const segmentStartTime = Date.now();
-
     let playerToPlay: any = null;
     const isPreloaded = !!this.preloadedNextPlayer;
 
@@ -490,7 +515,7 @@ export class VoiceSession {
     console.log('[Mobile Session End Call]: User manually ending voice session...');
     this.isSessionActive = false;
     this.pendingSpeechRestart = false;
-    this.stopSpeechRecognition();
+    this.clearSpeechSubscriptions();
     this.stopAudioPlayback();
     if (this.ws) {
       this.ws.close();
