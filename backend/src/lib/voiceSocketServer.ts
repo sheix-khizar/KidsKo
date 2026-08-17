@@ -17,6 +17,8 @@ export function attachVoiceSocketServer(httpServer: Server) {
       const url = new URL(req.url || '', 'http://localhost');
       const token = url.searchParams.get('token');
       const studentId = url.searchParams.get('studentId');
+      const requestedVoice = url.searchParams.get('voice') || 'Kore';
+      const isVoiceChange = url.searchParams.get('isVoiceChange') === 'true';
 
       if (!token) {
         console.log('[Voice Socket Close]: Code 4001 - Missing auth token');
@@ -47,7 +49,7 @@ export function attachVoiceSocketServer(httpServer: Server) {
       const capMs = Math.max(1000, capMinutes * 60 * 1000);
       const capSeconds = Math.floor(capMs / 1000);
 
-      console.log(`[Voice Session Started]: ParentId=${parentId}, StudentId=${studentId || '(none)'}, CapMinutes=${capMinutes.toFixed(2)}, CapSeconds=${capSeconds}s, StartTime=${new Date(sessionStartTime).toISOString()}`);
+      console.log(`[Voice Session Started]: ParentId=${parentId}, StudentId=${studentId || '(none)'}, Voice=${requestedVoice}, IsVoiceChange=${isVoiceChange}, CapMinutes=${capMinutes.toFixed(2)}, CapSeconds=${capSeconds}s, StartTime=${new Date(sessionStartTime).toISOString()}`);
 
       let liveSession: any;
       let elapsedMs = 0;
@@ -87,7 +89,7 @@ export function attachVoiceSocketServer(httpServer: Server) {
               clientSocket.send(JSON.stringify({ type: 'error', reason: typeof err === 'string' ? err : 'Voice session error' }));
             }
           },
-        });
+        }, requestedVoice);
       } catch (err: any) {
         console.error('[Voice Socket] Failed to start Gemini Live session:', err.message);
         clientSocket.close(1011, 'Could not start voice session');
@@ -96,22 +98,26 @@ export function attachVoiceSocketServer(httpServer: Server) {
 
       clientSocket.send(JSON.stringify({ type: 'ready', capSeconds }));
 
-      // 🎙️ Send initial personalized AI voice greeting upon call start
-      let studentName = 'there';
-      if (studentId) {
-        try {
-          const { data: s } = await dbClient.from('students').select('name').eq('id', studentId).maybeSingle();
-          if (s && s.name) {
-            studentName = s.name.trim();
+      // 🎙️ Send initial personalized AI voice greeting ONLY on brand new call entry (skip on mid-call voice changes)
+      if (!isVoiceChange) {
+        let studentName = 'there';
+        if (studentId) {
+          try {
+            const { data: s } = await dbClient.from('students').select('name').eq('id', studentId).maybeSingle();
+            if (s && s.name) {
+              studentName = s.name.trim();
+            }
+          } catch (err: any) {
+            console.warn('[Voice Socket] Could not fetch student name for greeting:', err?.message);
           }
-        } catch (err: any) {
-          console.warn('[Voice Socket] Could not fetch student name for greeting:', err?.message);
         }
-      }
 
-      const greetingPrompt = `Hi ${studentName}, I am Kidsko. How can I help you today?`;
-      console.log(`[Voice Server] Triggering initial AI voice greeting for ${studentName}: "${greetingPrompt}"`);
-      sendTextPrompt(liveSession, greetingPrompt);
+        const greetingPrompt = `Hi ${studentName}, I am Kidsko. How can I help you today?`;
+        console.log(`[Voice Server] Triggering initial AI voice greeting for ${studentName}: "${greetingPrompt}"`);
+        sendTextPrompt(liveSession, greetingPrompt);
+      } else {
+        console.log(`[Voice Server] Voice changed mid-call to "${requestedVoice}" -> Continuing existing conversation without repeating greeting.`);
+      }
 
       accountingTimer = setInterval(async () => {
         try {

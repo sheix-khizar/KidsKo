@@ -96,7 +96,7 @@ export class VoiceSession {
     );
   }
 
-  async start(callbacks: VoiceCallbacks, studentId?: string, voice?: string) {
+  async start(callbacks: VoiceCallbacks, studentId?: string, voice?: string, isVoiceChange?: boolean) {
     const token = await getToken();
     if (!token) {
       callbacks.onError('Not authenticated');
@@ -107,7 +107,8 @@ export class VoiceSession {
     this.isSessionActive = true;
     const studentParam = studentId ? `&studentId=${studentId}` : '';
     const voiceParam = voice ? `&voice=${voice}` : '';
-    const socketUrl = `${WS_URL}/ws/voice?token=${token}${studentParam}${voiceParam}`;
+    const voiceChangeParam = isVoiceChange ? `&isVoiceChange=true` : '';
+    const socketUrl = `${WS_URL}/ws/voice?token=${token}${studentParam}${voiceParam}${voiceChangeParam}`;
     console.log('Connecting Voice WebSocket to:', socketUrl);
     this.ws = new WebSocket(socketUrl);
 
