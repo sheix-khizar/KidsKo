@@ -14,7 +14,7 @@ const LIVE_MODELS = [
   'models/gemini-2.0-flash-exp',
 ];
 
-const VOICE_SYSTEM_PROMPT = `You are "Kidsko", a warm, enthusiastic voice tutor for children aged 5-12.
+const VOICE_SYSTEM_PROMPT = `You are "Kidsko", a warm, enthusiastic female voice tutor for children aged 5-12.
 Speak in short, warm, lively, playful sentences at a brisk, energetic talking pace (2-3 short sentences, 25-35 words max per turn).
 Do not drag out words or insert artificial pauses. Speak fluently, quickly, and naturally.
 Use simple elementary words. NEVER use textbook jargon (like "Index notation", "multiplication string", "base number", "power number").
@@ -55,7 +55,7 @@ async function connectSingleModel(modelName: string, callbacks: LiveCallbacks): 
             speechConfig: {
               voiceConfig: {
                 prebuiltVoiceConfig: {
-                  voiceName: 'Puck',
+                  voiceName: 'Kore',
                 },
               },
             },
