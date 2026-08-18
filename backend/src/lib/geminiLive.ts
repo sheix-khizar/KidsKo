@@ -51,7 +51,7 @@ async function connectSingleModel(modelName: string, callbacks: LiveCallbacks): 
         setup: {
           model: modelName,
           generationConfig: {
-            responseModalities: ['AUDIO'],
+            responseModalities: ['AUDIO', 'TEXT'],
             speechConfig: {
               voiceConfig: {
                 prebuiltVoiceConfig: {
