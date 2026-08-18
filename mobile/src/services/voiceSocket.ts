@@ -9,6 +9,7 @@ type VoiceCallbacks = {
   onError: (reason: string) => void;
   onClose: (reason?: string | number) => void;
   onTranscript?: (text: string) => void;
+  onAiTranscript?: (text: string) => void;
   onSnapshotAck?: (remaining: number) => void;
   onSnapshotError?: (reason: string) => void;
   onStateChange?: (state: 'listening' | 'thinking' | 'speaking') => void;
@@ -182,7 +183,8 @@ export class VoiceSession {
             this.preloadNextSegment();
           }
         } else if (msg.type === 'text') {
-          callbacks.onTranscript?.(msg.data);
+          console.log('[Mobile WS Received AI Text Chunk]:', msg.data);
+          callbacks.onAiTranscript?.(msg.data);
         } else if (msg.type === 'snapshot_ack') {
           console.log(`[Mobile Snapshot Ack]: ${msg.remaining} remaining this week`);
           callbacks.onSnapshotAck?.(msg.remaining);
