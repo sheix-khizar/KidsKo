@@ -96,14 +96,7 @@ export class VoiceSession {
     );
   }
 
-  setVoice(voiceName: string) {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      console.log('[Mobile Voice Change]: Sending transparent change_voice frame to backend:', voiceName);
-      this.ws.send(JSON.stringify({ type: 'change_voice', voice: voiceName }));
-    }
-  }
-
-  async start(callbacks: VoiceCallbacks, studentId?: string, voice?: string) {
+  async start(callbacks: VoiceCallbacks, studentId?: string) {
     const token = await getToken();
     if (!token) {
       callbacks.onError('Not authenticated');
@@ -113,8 +106,7 @@ export class VoiceSession {
     this.callbacks = callbacks;
     this.isSessionActive = true;
     const studentParam = studentId ? `&studentId=${studentId}` : '';
-    const voiceParam = voice ? `&voice=${voice}` : '';
-    const socketUrl = `${WS_URL}/ws/voice?token=${token}${studentParam}${voiceParam}`;
+    const socketUrl = `${WS_URL}/ws/voice?token=${token}${studentParam}`;
     console.log('Connecting Voice WebSocket to:', socketUrl);
     this.ws = new WebSocket(socketUrl);
 
@@ -135,6 +127,7 @@ export class VoiceSession {
           console.error('[Mobile WS Error Frame]: Server error =', msg.reason);
           callbacks.onError(msg.reason);
         } else if (msg.type === 'audio') {
+          const turnId = this.currentTurnId;
           this.receivedChunkCount++;
           if (this.receivedChunkCount === 1) {
             this.firstChunkTime = Date.now();

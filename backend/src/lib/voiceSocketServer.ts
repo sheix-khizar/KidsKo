@@ -17,7 +17,6 @@ export function attachVoiceSocketServer(httpServer: Server) {
       const url = new URL(req.url || '', 'http://localhost');
       const token = url.searchParams.get('token');
       const studentId = url.searchParams.get('studentId');
-      let requestedVoice = url.searchParams.get('voice') || 'Kore';
 
       if (!token) {
         console.log('[Voice Socket Close]: Code 4001 - Missing auth token');
@@ -48,42 +47,47 @@ export function attachVoiceSocketServer(httpServer: Server) {
       const capMs = Math.max(1000, capMinutes * 60 * 1000);
       const capSeconds = Math.floor(capMs / 1000);
 
-      console.log(`[Voice Session Started]: ParentId=${parentId}, StudentId=${studentId || '(none)'}, Voice=${requestedVoice}, CapMinutes=${capMinutes.toFixed(2)}, CapSeconds=${capSeconds}s, StartTime=${new Date(sessionStartTime).toISOString()}`);
+      console.log(`[Voice Session Started]: ParentId=${parentId}, StudentId=${studentId || '(none)'}, CapMinutes=${capMinutes.toFixed(2)}, CapSeconds=${capSeconds}s, StartTime=${new Date(sessionStartTime).toISOString()}`);
 
       let liveSession: any;
       let elapsedMs = 0;
       let accountingTimer: NodeJS.Timeout;
       let hardCapTimer: NodeJS.Timeout;
 
-      const createCallbacks = () => ({
-        onTextChunk: (text: string) => {
-          if (clientSocket.readyState === WebSocket.OPEN) {
-            clientSocket.send(JSON.stringify({ type: 'text', data: text }));
-          }
-        },
-        onAudioChunk: (base64Audio: string) => {
-          if (clientSocket.readyState === WebSocket.OPEN) {
-            console.log(`[Backend Outbound Audio Chunk to Mobile]: bytes=${base64Audio.length}`);
-            clientSocket.send(JSON.stringify({ type: 'audio', data: base64Audio }));
-          }
-        },
-        onTurnComplete: () => {
-          if (clientSocket.readyState === WebSocket.OPEN) {
-            const elapsedSec = Math.floor((Date.now() - sessionStartTime) / 1000);
-            console.log(`[Backend Outbound turn_complete Frame]: Gemini turn complete. Session active for ${elapsedSec}s / ${capSeconds}s max. Client WS state=${clientSocket.readyState}, Gemini WS state=${liveSession?.readyState}`);
-            clientSocket.send(JSON.stringify({ type: 'turn_complete' }));
-          }
-        },
-        onClose: (reason?: string) => {
-          console.log(`[Gemini Live WS Session Closed]: Reason=${reason || 'Normal close'}`);
-        },
-        onError: (err: any) => {
-          console.error('[Voice Socket] Gemini Live error:', err);
-        },
-      });
-
       try {
-        liveSession = await startLiveSession(createCallbacks(), requestedVoice);
+        liveSession = await startLiveSession({
+          onTextChunk: (text) => {
+            if (clientSocket.readyState === WebSocket.OPEN) {
+              clientSocket.send(JSON.stringify({ type: 'text', data: text }));
+            }
+          },
+          onAudioChunk: (base64Audio) => {
+            if (clientSocket.readyState === WebSocket.OPEN) {
+              console.log(`[Backend Outbound Audio Chunk to Mobile]: bytes=${base64Audio.length}`);
+              clientSocket.send(JSON.stringify({ type: 'audio', data: base64Audio }));
+            }
+          },
+          onTurnComplete: () => {
+            if (clientSocket.readyState === WebSocket.OPEN) {
+              const elapsedSec = Math.floor((Date.now() - sessionStartTime) / 1000);
+              console.log(`[Backend Outbound turn_complete Frame]: Gemini turn complete. Session active for ${elapsedSec}s / ${capSeconds}s max. Client WS state=${clientSocket.readyState}, Gemini WS state=${liveSession?.readyState}`);
+              clientSocket.send(JSON.stringify({ type: 'turn_complete' }));
+            }
+          },
+          onClose: (reason) => {
+            console.log(`[Gemini Live WS Session Closed]: Reason=${reason || 'Normal close'}`);
+            if (clientSocket.readyState === WebSocket.OPEN) {
+              console.log('[Voice Socket Close]: Forwarding Gemini session close to client with Code 1000');
+              clientSocket.close(1000, reason || 'Gemini session ended');
+            }
+          },
+          onError: (err) => {
+            console.error('[Voice Socket] Gemini Live error:', err);
+            if (clientSocket.readyState === WebSocket.OPEN) {
+              clientSocket.send(JSON.stringify({ type: 'error', reason: typeof err === 'string' ? err : 'Voice session error' }));
+            }
+          },
+        });
       } catch (err: any) {
         console.error('[Voice Socket] Failed to start Gemini Live session:', err.message);
         clientSocket.close(1011, 'Could not start voice session');
@@ -146,19 +150,6 @@ export function attachVoiceSocketServer(httpServer: Server) {
               const currentElapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
               console.log(`[Voice Server User Turn Received]: Prompt="${msg.data}", Elapsed=${currentElapsed}s / ${capSeconds}s, Gemini WS state=${liveSession?.readyState}`);
               sendTextPrompt(liveSession, msg.data);
-            } else if (msg.type === 'change_voice') {
-              const newVoice = msg.voice || 'Kore';
-              console.log(`[Voice Server] Client requested mid-call voice change to: "${newVoice}". Swapping Gemini Live voice socket transparently...`);
-              requestedVoice = newVoice;
-              if (liveSession) {
-                closeLiveSession(liveSession);
-              }
-              try {
-                liveSession = await startLiveSession(createCallbacks(), requestedVoice);
-                console.log(`[Voice Server] Gemini Live voice socket successfully swapped to "${requestedVoice}"! Client session continues untouched.`);
-              } catch (err: any) {
-                console.error('[Voice Server] Error swapping Gemini Live voice socket:', err?.message);
-              }
             } else if (msg.type === 'image_capture') {
               const snapshotEligibility = await checkSnapshotEligibility(dbClient, parentId, eligibility.isPremium);
               if (!snapshotEligibility.allowed) {

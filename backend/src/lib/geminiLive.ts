@@ -55,7 +55,7 @@ async function connectSingleModel(modelName: string, callbacks: LiveCallbacks): 
             speechConfig: {
               voiceConfig: {
                 prebuiltVoiceConfig: {
-                  voiceName: 'Kore',
+                  voiceName: 'Aoede',
                 },
               },
             },

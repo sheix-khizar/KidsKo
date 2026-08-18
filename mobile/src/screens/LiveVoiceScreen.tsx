@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Modal, ActivityIndicator, ScrollView } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
+import { View, Text, Pressable, StyleSheet, Modal, ActivityIndicator } from 'react-native';
 import { VoiceSession } from '../services/voiceSocket';
 import { pickImageFromGallery, captureImageFromCamera } from '../utils/imageHelper';
 
@@ -11,22 +10,12 @@ type Props = {
   onLimitReached: () => void;
 };
 
-export const VOICE_OPTIONS = [
-  { id: 'Kore', label: '🌸 Friendly Girl (Kore)', type: 'Female', desc: 'Warm & friendly tutor' },
-  { id: 'Aoede', label: '✨ Cheerful Girl (Aoede)', type: 'Female', desc: 'Energetic & cheerful' },
-  { id: 'Puck', label: '🎈 Playful Boy (Puck)', type: 'Male', desc: 'Playful & fun' },
-  { id: 'Fenrir', label: '⚡ Energetic Boy (Fenrir)', type: 'Male', desc: 'Confident & energetic' },
-  { id: 'Charon', label: '🌙 Calm Boy (Charon)', type: 'Male', desc: 'Calm & gentle' },
-];
-
 export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimitReached }: Props) {
   const [status, setStatus] = useState<'connecting' | 'live' | 'ended'>('connecting');
   const [voiceState, setVoiceState] = useState<'listening' | 'thinking' | 'speaking'>('listening');
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [errorReason, setErrorReason] = useState<string | null>(null);
   const [showOptionModal, setShowOptionModal] = useState(false);
-  const [showVoiceModal, setShowVoiceModal] = useState(false);
-  const [selectedVoice, setSelectedVoice] = useState<string>('Kore');
   const [isSendingSnapshot, setIsSendingSnapshot] = useState(false);
   const [snapshotsRemaining, setSnapshotsRemaining] = useState<number | null>(null);
   const [lastSpokenTranscript, setLastSpokenTranscript] = useState<string>('');
@@ -34,18 +23,7 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
   const sessionRef = useRef<VoiceSession | null>(null);
   const timerRef = useRef<any>(null);
 
-  const startSession = (voiceId: string) => {
-    if (sessionRef.current) {
-      sessionRef.current.end();
-      sessionRef.current = null;
-    }
-
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-
-    setStatus('connecting');
+  useEffect(() => {
     const session = new VoiceSession();
     sessionRef.current = session;
 
@@ -54,7 +32,6 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
         onReady: (capSeconds) => {
           setStatus('live');
           setSecondsLeft(capSeconds);
-          if (timerRef.current) clearInterval(timerRef.current);
           timerRef.current = setInterval(() => {
             setSecondsLeft((s) => (s !== null && s > 0 ? s - 1 : 0));
           }, 1000);
@@ -96,35 +73,14 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
           }
         },
       },
-      studentId,
-      voiceId
+      studentId
     );
-  };
-
-  useEffect(() => {
-    SecureStore.getItemAsync('kidsko_preferred_voice').then((savedVoice: string | null) => {
-      const activeVoice = savedVoice || 'Kore';
-      setSelectedVoice(activeVoice);
-      startSession(activeVoice);
-    });
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       sessionRef.current?.end();
     };
   }, []);
-
-  const handleSelectVoice = async (voiceId: string) => {
-    setShowVoiceModal(false);
-    setSelectedVoice(voiceId);
-    try {
-      await SecureStore.setItemAsync('kidsko_preferred_voice', voiceId);
-    } catch {}
-
-    // 🎙️ Send transparent change_voice frame over existing WebSocket connection (0 disconnect, 0 timer reset, 0 session end)
-    console.log('[LiveVoiceScreen] Selected new voice:', voiceId, '-> Sending transparent voice change request...');
-    sessionRef.current?.setVoice(voiceId);
-  };
 
   const handleEnd = async () => {
     await sessionRef.current?.end();
@@ -163,8 +119,6 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
     sessionRef.current?.sendImageCapture(base64, activeCaption);
   };
 
-  const currentVoiceObj = VOICE_OPTIONS.find((v) => v.id === selectedVoice) || VOICE_OPTIONS[0];
-
   return (
     <View style={styles.container}>
       <Text style={styles.title}>
@@ -177,12 +131,6 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
 
       {secondsLeft !== null && status === 'live' && (
         <Text style={styles.timer}>{secondsLeft}s remaining</Text>
-      )}
-
-      {status === 'live' && (
-        <Pressable style={styles.voiceBadgeButton} onPress={() => setShowVoiceModal(true)}>
-          <Text style={styles.voiceBadgeText}>🎭 Voice: {currentVoiceObj.label}</Text>
-        </Pressable>
       )}
 
       {status === 'live' && (
@@ -228,14 +176,9 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
         </View>
       ) : (
         status === 'live' && (
-          <View style={styles.actionRow}>
-            <Pressable style={styles.showButton} onPress={() => setShowOptionModal(true)}>
-              <Text style={styles.showButtonText}>📷 Show Homework</Text>
-            </Pressable>
-            <Pressable style={styles.changeVoiceButton} onPress={() => setShowVoiceModal(true)}>
-              <Text style={styles.changeVoiceButtonText}>🎙️ Change Voice</Text>
-            </Pressable>
-          </View>
+          <Pressable style={styles.showButton} onPress={() => setShowOptionModal(true)}>
+            <Text style={styles.showButtonText}>📷 Show Homework</Text>
+          </Pressable>
         )
       )}
 
@@ -248,41 +191,6 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
       <Pressable style={styles.endButton} onPress={handleEnd}>
         <Text style={styles.endButtonText}>{status === 'ended' ? 'Close' : 'End Call'}</Text>
       </Pressable>
-
-      {/* Voice Selection Modal */}
-      <Modal visible={showVoiceModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Choose Kidsko's Voice</Text>
-            <Text style={styles.modalSubtitle}>Select a voice personality for your AI tutor:</Text>
-
-            <ScrollView style={{ width: '100%', maxHeight: 300 }}>
-              {VOICE_OPTIONS.map((item) => {
-                const isSelected = item.id === selectedVoice;
-                return (
-                  <Pressable
-                    key={item.id}
-                    style={[styles.voiceItem, isSelected && styles.voiceItemSelected]}
-                    onPress={() => handleSelectVoice(item.id)}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.voiceItemTitle, isSelected && styles.voiceItemTitleSelected]}>
-                        {item.label}
-                      </Text>
-                      <Text style={styles.voiceItemDesc}>{item.desc}</Text>
-                    </View>
-                    {isSelected && <Text style={styles.checkMark}>✓</Text>}
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-
-            <Pressable style={styles.cancelModalButton} onPress={() => setShowVoiceModal(false)}>
-              <Text style={styles.cancelModalText}>Cancel</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
 
       {/* Option Sheet Modal */}
       <Modal visible={showOptionModal} transparent animationType="slide">
@@ -311,27 +219,14 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
 
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1a1a2e', padding: 24 },
-  title: { fontSize: 20, fontWeight: '800', color: '#fff', marginBottom: 6, textAlign: 'center' },
-  timer: { fontSize: 15, color: '#FFD54F', fontWeight: '700', marginBottom: 12 },
-  voiceBadgeButton: {
-    backgroundColor: '#2e2e4a',
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#4e4e7a',
-  },
-  voiceBadgeText: { color: '#FFD54F', fontSize: 13, fontWeight: '700' },
+  title: { fontSize: 20, fontWeight: '800', color: '#fff', marginBottom: 8, textAlign: 'center' },
+  timer: { fontSize: 16, color: '#FFD54F', fontWeight: '700', marginBottom: 16 },
   errorSub: { fontSize: 14, color: '#FF8A80', fontWeight: '600', marginBottom: 20, textAlign: 'center' },
   endButton: { backgroundColor: '#EA4335', borderRadius: 30, paddingVertical: 14, paddingHorizontal: 40, marginTop: 10 },
   endButtonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  actionRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
-  showButton: { backgroundColor: '#1a73e8', borderRadius: 24, paddingVertical: 12, paddingHorizontal: 20 },
-  showButtonText: { color: '#fff', fontWeight: '800', fontSize: 14 },
-  changeVoiceButton: { backgroundColor: '#3b3b5e', borderRadius: 24, paddingVertical: 12, paddingHorizontal: 20, borderWidth: 1, borderColor: '#5b5b8e' },
-  changeVoiceButtonText: { color: '#fff', fontWeight: '800', fontSize: 14 },
-  snapshotCount: { color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: '600', marginBottom: 16 },
+  showButton: { backgroundColor: '#1a73e8', borderRadius: 24, paddingVertical: 14, paddingHorizontal: 28, marginBottom: 12 },
+  showButtonText: { color: '#fff', fontWeight: '800', fontSize: 16 },
+  snapshotCount: { color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: '600', marginBottom: 20 },
   analyzingBox: { alignItems: 'center', marginVertical: 20, gap: 10 },
   analyzingText: { color: '#FFD54F', fontSize: 16, fontWeight: '700' },
 
@@ -342,14 +237,14 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     padding: 20,
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
   },
   avatarCircle: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
@@ -370,8 +265,8 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: '#FF9800',
   },
-  avatarEmoji: { fontSize: 40 },
-  thinkingText: { color: '#FFD54F', fontWeight: '700', fontSize: 12, marginTop: 6 },
+  avatarEmoji: { fontSize: 44 },
+  thinkingText: { color: '#FFD54F', fontWeight: '700', fontSize: 13, marginTop: 6 },
 
   listeningBadge: {
     position: 'absolute',
@@ -404,27 +299,6 @@ const styles = StyleSheet.create({
   transcriptLabel: { color: '#FFD54F', fontSize: 11, fontWeight: '700', marginBottom: 2 },
   transcriptText: { color: '#fff', fontSize: 13, fontWeight: '600', fontStyle: 'italic', textAlign: 'center' },
   promptHint: { color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: '600', textAlign: 'center' },
-
-  // Voice Modal Styles
-  voiceItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: '100%',
-    backgroundColor: '#2d2d48',
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  voiceItemSelected: {
-    backgroundColor: '#1b3a5a',
-    borderColor: '#1a73e8',
-  },
-  voiceItemTitle: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  voiceItemTitleSelected: { color: '#64B5F6' },
-  voiceItemDesc: { color: 'rgba(255,255,255,0.6)', fontSize: 12, marginTop: 2 },
-  checkMark: { color: '#64B5F6', fontSize: 18, fontWeight: '800', marginLeft: 8 },
 
   // Modal styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
