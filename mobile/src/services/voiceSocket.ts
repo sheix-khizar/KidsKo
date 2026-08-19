@@ -209,7 +209,7 @@ export class VoiceSession {
           console.error('[SpeechRec Lifecycle]: Error restarting speech recognition:', err?.message || err);
         }
       }
-    }, 200);
+    }, 150);
   }
 
   private finalizeSpokenTurn(transcript: string) {
@@ -264,12 +264,12 @@ export class VoiceSession {
           if (isFinal) {
             this.finalizeSpokenTurn(transcript);
           } else {
-            // 🚀 Fast 1.2s (1200ms) silence pause timer: Sends spoken turn to Gemini in 1.2s after child stops talking (reduced from 2.5s)
+            // ⚡ Ultra-fast 500ms (0.5s) silence pause timer: Sends spoken turn to Gemini in 500ms after user stops speaking
             if (this.speechSilenceTimer) clearTimeout(this.speechSilenceTimer);
             this.speechSilenceTimer = setTimeout(() => {
-              console.log('[Mobile Voice Input] 1.2s child pause detected -> Finalizing spoken turn:', transcript);
+              console.log('[Mobile Voice Input] 500ms pause detected -> Finalizing spoken turn:', transcript);
               this.finalizeSpokenTurn(transcript);
-            }, 1200);
+            }, 500);
           }
         }
       });
