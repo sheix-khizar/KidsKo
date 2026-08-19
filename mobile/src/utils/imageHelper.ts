@@ -19,8 +19,8 @@ export async function requestCameraPermissions(): Promise<boolean> {
 export async function processAndCompressImage(uri: string): Promise<ProcessedImage> {
   const manipResult = await manipulateAsync(
     uri,
-    [{ resize: { width: 1024 } }],
-    { compress: 0.75, format: SaveFormat.JPEG, base64: true }
+    [{ resize: { width: 768 } }],
+    { compress: 0.6, format: SaveFormat.JPEG, base64: true }
   );
 
   if (!manipResult.base64) {
@@ -42,7 +42,7 @@ export async function pickImageFromGallery(): Promise<ProcessedImage | null> {
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ['images'],
     allowsEditing: false,
-    quality: 0.8,
+    quality: 0.7,
   });
 
   if (result.canceled || !result.assets?.[0]?.uri) {
@@ -51,7 +51,6 @@ export async function pickImageFromGallery(): Promise<ProcessedImage | null> {
 
   const asset = result.assets[0];
 
-  // Optional size check (e.g. 10MB limit before compression)
   if (asset.fileSize && asset.fileSize > 10 * 1024 * 1024) {
     throw new Error('Image file is too large (max 10MB). Please select a smaller photo.');
   }
@@ -67,7 +66,7 @@ export async function captureImageFromCamera(): Promise<ProcessedImage | null> {
 
   const result = await ImagePicker.launchCameraAsync({
     allowsEditing: false,
-    quality: 0.8,
+    quality: 0.7,
   });
 
   if (result.canceled || !result.assets?.[0]?.uri) {

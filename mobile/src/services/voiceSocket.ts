@@ -9,17 +9,16 @@ type VoiceCallbacks = {
   onError: (reason: string) => void;
   onClose: (reason?: string | number) => void;
   onTranscript?: (text: string) => void;
-  onAiTranscript?: (text: string) => void;
   onSnapshotAck?: (remaining: number) => void;
   onSnapshotError?: (reason: string) => void;
   onStateChange?: (state: 'listening' | 'thinking' | 'speaking') => void;
 };
 
 // 24000 Hz, 16-bit mono PCM = 48000 bytes/sec
-// ~400ms initial buffer = 19200 bytes (~4 chunks) -> preserves fast first-chunk latency (~900ms-1150ms)
-const INITIAL_BUFFER_BYTES = 19200;
-// ~1200ms chunk buffer = 57600 bytes per queued segment -> Step 3 tuning pass experiment (drastically reduces segment boundaries)
-const CHUNK_BUFFER_BYTES = 57600;
+// ~300ms initial buffer = 14400 bytes (~3 chunks) -> fast first-chunk latency (~600ms-800ms)
+const INITIAL_BUFFER_BYTES = 14400;
+// ~600ms chunk buffer = 28800 bytes per queued segment -> smooth, low-latency playback
+const CHUNK_BUFFER_BYTES = 28800;
 
 function createWavBase64(pcmBinary: string): string {
   const pcmBytesLength = pcmBinary.length;
@@ -139,14 +138,14 @@ export class VoiceSession {
           // Append incoming chunk to binary PCM accumulator
           this.accumulatedPcmBinary += atob(msg.data);
 
-          // Check if initial buffer threshold (~400ms) reached to start streaming playback
+          // Check if initial buffer threshold (~300ms) reached to start streaming playback
           if (!this.hasStartedPlayback) {
             if (this.accumulatedPcmBinary.length >= INITIAL_BUFFER_BYTES) {
               this.flushBufferedPcmToQueue();
               this.startAudioQueuePlayback();
             }
           } else {
-            // Once streaming has started, flush chunks whenever chunk threshold (~1200ms) is reached
+            // Once streaming has started, flush chunks whenever chunk threshold (~600ms) is reached
             if (this.accumulatedPcmBinary.length >= CHUNK_BUFFER_BYTES) {
               this.flushBufferedPcmToQueue();
               if (!this.isPlayingQueue) {
@@ -183,8 +182,7 @@ export class VoiceSession {
             this.preloadNextSegment();
           }
         } else if (msg.type === 'text') {
-          console.log('[Mobile WS Received AI Text Chunk]:', msg.data);
-          callbacks.onAiTranscript?.(msg.data);
+          callbacks.onTranscript?.(msg.data);
         } else if (msg.type === 'snapshot_ack') {
           console.log(`[Mobile Snapshot Ack]: ${msg.remaining} remaining this week`);
           callbacks.onSnapshotAck?.(msg.remaining);

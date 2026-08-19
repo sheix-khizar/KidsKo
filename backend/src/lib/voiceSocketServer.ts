@@ -43,7 +43,7 @@ export function attachVoiceSocketServer(httpServer: Server) {
 
       const capMinutes = eligibility.isPremium
         ? eligibility.minutesRemaining
-        : Math.min(5, eligibility.minutesRemaining);
+        : Math.min(30, eligibility.minutesRemaining);
       const capMs = Math.max(1000, capMinutes * 60 * 1000);
       const capSeconds = Math.floor(capMs / 1000);
 
@@ -160,8 +160,8 @@ export function attachVoiceSocketServer(httpServer: Server) {
 
               const rawBuffer = Buffer.from(msg.data, 'base64');
               const compressedBuffer = await sharp(rawBuffer)
-                .resize({ width: 1024, height: 1024, fit: 'inside' })
-                .jpeg({ quality: 75 })
+                .resize({ width: 768, height: 768, fit: 'inside' })
+                .jpeg({ quality: 65, progressive: true })
                 .toBuffer();
               const compressedBase64 = compressedBuffer.toString('base64');
 
