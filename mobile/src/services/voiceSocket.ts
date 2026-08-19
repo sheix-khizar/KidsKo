@@ -17,8 +17,8 @@ type VoiceCallbacks = {
 // 24000 Hz, 16-bit mono PCM = 48000 bytes/sec
 // ~400ms initial buffer = 19200 bytes (~4 chunks) -> preserves fast first-chunk latency (~700ms-900ms)
 const INITIAL_BUFFER_BYTES = 19200;
-// ~1.6s chunk buffer = 76800 bytes per queued segment -> eliminates frequent segment boundaries and audio stutter
-const CHUNK_BUFFER_BYTES = 76800;
+// ~400ms chunk buffer = 19200 bytes per queued segment -> Phase A 400ms diagnostic test
+const CHUNK_BUFFER_BYTES = 19200;
 
 function createWavBase64(pcmBinary: string): string {
   const pcmBytesLength = pcmBinary.length;
@@ -145,7 +145,7 @@ export class VoiceSession {
               this.startAudioQueuePlayback();
             }
           } else {
-            // Once streaming has started, flush chunks whenever chunk threshold (~1.6s) is reached
+            // Once streaming has started, flush chunks whenever chunk threshold (~400ms) is reached
             if (this.accumulatedPcmBinary.length >= CHUNK_BUFFER_BYTES) {
               this.flushBufferedPcmToQueue();
               if (!this.isPlayingQueue) {
