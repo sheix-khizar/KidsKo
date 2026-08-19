@@ -56,7 +56,6 @@ export class VoiceSession {
   private lastSentTranscript = '';
   private isSessionActive = false;
   private isStartingSpeech = false;
-  private pendingSpeechRestart = false;
   private speechSilenceTimer: any = null;
   private currentTurnId = 0;
 
@@ -122,13 +121,12 @@ export class VoiceSession {
           const latencyToTurnComplete = this.promptSentTime > 0 ? turnCompleteTime - this.promptSentTime : 0;
           console.log(`[Mobile Audio] Turn complete: +${latencyToTurnComplete} ms after prompt sent. Total chunks collected = ${this.receivedChunkCount}`);
 
-          // Ignore stray turn_complete frames from cancelled turns with 0 chunks
           if (this.receivedChunkCount === 0 || this.accumulatedPcmBinary.length === 0) {
             console.log('[Mobile Audio] Ignoring turn_complete frame from cancelled turn (0 chunks collected).');
             return;
           }
 
-          // Play the entire turn as ONE unified WAV file for 100% continuous, gap-free speech!
+          // Play the entire turn as ONE unified WAV file for 100% continuous speech!
           this.playTurnAudio(this.accumulatedPcmBinary);
           this.accumulatedPcmBinary = '';
         } else if (msg.type === 'text') {
@@ -178,7 +176,6 @@ export class VoiceSession {
       this.speechSilenceTimer = null;
     }
     this.stopAudioPlayback();
-    this.pendingSpeechRestart = false;
     this.promptSentTime = 0;
     this.firstChunkTime = 0;
     this.receivedChunkCount = 0;
@@ -188,7 +185,7 @@ export class VoiceSession {
 
   private stopAudioPlayback() {
     if (this.activePlayer || this.isPlayingAudio) {
-      console.log('[Mobile Turn Interrupted]: Discarding turn audio and stopping active player.');
+      console.log('[Mobile Turn Interrupted]: Stopping playback immediately & clearing active audio player.');
     }
     this.accumulatedPcmBinary = '';
     this.isPlayingAudio = false;
@@ -203,9 +200,8 @@ export class VoiceSession {
 
   private restartSpeechRecognition() {
     if (!this.isSessionActive || this.ws?.readyState !== WebSocket.OPEN) return;
-    this.callbacks?.onStateChange?.('listening');
     setTimeout(() => {
-      if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN && !this.isKidskoSpeaking()) {
+      if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN) {
         try {
           console.log('[SpeechRec Lifecycle]: Started listening for spoken user turns...');
           ExpoSpeechRecognitionModule.start({ lang: 'en-US', interimResults: true, continuous: true });
@@ -213,7 +209,7 @@ export class VoiceSession {
           console.error('[SpeechRec Lifecycle]: Error restarting speech recognition:', err?.message || err);
         }
       }
-    }, 300);
+    }, 200);
   }
 
   private finalizeSpokenTurn(transcript: string) {
@@ -248,25 +244,17 @@ export class VoiceSession {
 
       const subStart = ExpoSpeechRecognitionModule.addListener('start', () => {
         console.log('[SpeechRec Lifecycle]: Started listening for spoken user turns...');
-        this.callbacks?.onStateChange?.('listening');
       });
 
       const subResult = ExpoSpeechRecognitionModule.addListener('result', (event: any) => {
         const transcript = event.results?.[0]?.transcript?.trim();
         const isFinal = event.isFinal || event.results?.[0]?.isFinal;
 
-        if (transcript && transcript.length > 1) {
-          const words = transcript.split(/\s+/).filter(Boolean);
-          const isSubstantialSpeech = words.length >= 2 || transcript.length >= 6;
-
-          // ⚡ REAL-TIME BARGE-IN: Ignore 1-word fillers during playback. Require at least 2 words or 6+ chars to interrupt Kidsko.
+        if (transcript && transcript.length > 0) {
+          // ⚡ REAL-TIME BARGE-IN: If student speaks while Kidsko is talking, stop Kidsko immediately and switch state to 'listening'
           if (this.isKidskoSpeaking()) {
-            if (!isSubstantialSpeech) {
-              console.log('[SpeechRec Lifecycle]: Suppressing 1-word filler speech during Kidsko playback:', transcript);
-              return;
-            }
-            console.log('[SpeechRec Lifecycle] ⚡ Real user interruption detected! Stopping active playback & listening to user:', transcript);
-            this.resetTurnState();
+            console.log('[SpeechRec Lifecycle] ⚡ User interruption detected! Stopping Kidsko playback immediately & switching to listening state:', transcript);
+            this.stopAudioPlayback();
             this.callbacks?.onStateChange?.('listening');
           }
 
@@ -287,27 +275,16 @@ export class VoiceSession {
       });
 
       const subEnd = ExpoSpeechRecognitionModule.addListener('end', () => {
-        console.log('[SpeechRec Lifecycle]: Recognition cycle ended natively.');
+        console.log('[SpeechRec Lifecycle]: Recognition cycle ended natively. Auto-restarting for continuous listening...');
         if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN) {
-          if (this.isKidskoSpeaking()) {
-            console.log('[SpeechRec Lifecycle]: Kidsko is still speaking -> Deferring speech recognition restart until playback finishes.');
-            this.pendingSpeechRestart = true;
-          } else {
-            console.log('[SpeechRec Lifecycle]: Kidsko is not speaking -> Auto-restarting speech recognition for next user turn...');
-            this.restartSpeechRecognition();
-          }
+          this.restartSpeechRecognition();
         }
       });
 
       const subError = ExpoSpeechRecognitionModule.addListener('error', (event: any) => {
         console.error('[SpeechRec Lifecycle]: Error event =', event.error, event.message);
         if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN && event.error !== 'no-match') {
-          if (this.isKidskoSpeaking()) {
-            console.log('[SpeechRec Lifecycle]: Error event during playback -> Deferring speech recognition restart.');
-            this.pendingSpeechRestart = true;
-          } else {
-            this.restartSpeechRecognition();
-          }
+          this.restartSpeechRecognition();
         }
       });
 
@@ -383,13 +360,6 @@ export class VoiceSession {
           }
           this.isPlayingAudio = false;
           this.callbacks?.onStateChange?.('listening');
-
-          // Trigger deferred speech recognition restart after Kidsko has finished speaking
-          if (this.pendingSpeechRestart || (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN)) {
-            this.pendingSpeechRestart = false;
-            console.log('[SpeechRec Lifecycle]: Playback finished -> Restarting speech recognition for next user turn...');
-            this.restartSpeechRecognition();
-          }
         }
       });
 
@@ -404,7 +374,6 @@ export class VoiceSession {
   async end() {
     console.log('[Mobile Session End Call]: User manually ending voice session...');
     this.isSessionActive = false;
-    this.pendingSpeechRestart = false;
     this.clearSpeechSubscriptions();
     this.stopAudioPlayback();
     if (this.ws) {
