@@ -15,8 +15,8 @@ type VoiceCallbacks = {
 };
 
 // 24000 Hz, 16-bit mono PCM = 48000 bytes/sec
-// ~400ms initial buffer = 19200 bytes (~4 chunks) -> ultra-fast first-chunk playback latency (~700ms-800ms)
-const INITIAL_BUFFER_BYTES = 19200;
+// Initial launch segment = ~400ms (19,200 bytes) -> Starts audio playback in ~700ms (fast thinking state!)
+const LAUNCH_SEGMENT_BYTES = 19200;
 
 function createWavBase64(pcmBinary: string): string {
   const pcmBytesLength = pcmBinary.length;
@@ -64,7 +64,7 @@ export class VoiceSession {
   private speechSilenceTimer: any = null;
   private currentTurnId = 0;
 
-  // Streaming Audio State (Fast 2-Segment Architecture)
+  // Hybrid Audio Queue State
   private audioQueue: string[] = [];
   private accumulatedPcmBinary = '';
   private hasStartedPlayback = false;
@@ -128,13 +128,20 @@ export class VoiceSession {
             console.log(`[Mobile Audio] 🚀 First chunk received: +${latencyToFirstChunk} ms after prompt sent`);
           }
 
-          // Accumulate incoming 24kHz PCM binary chunks
+          // Accumulate incoming PCM binary
           this.accumulatedPcmBinary += atob(msg.data);
 
-          // ⚡ FAST FIRST-CHUNK PLAYBACK: Start playing intro segment as soon as ~400ms buffer is collected (~750ms total latency!)
-          if (!this.hasStartedPlayback && this.accumulatedPcmBinary.length >= INITIAL_BUFFER_BYTES) {
-            this.flushPcmSegmentToQueue(INITIAL_BUFFER_BYTES);
-            this.startAudioQueuePlayback();
+          // ⚡ INSTANT LAUNCH: As soon as initial 400ms buffer arrives, start playback immediately!
+          if (!this.hasStartedPlayback && this.accumulatedPcmBinary.length >= LAUNCH_SEGMENT_BYTES) {
+            const launchPcm = this.accumulatedPcmBinary.slice(0, LAUNCH_SEGMENT_BYTES);
+            this.accumulatedPcmBinary = this.accumulatedPcmBinary.slice(LAUNCH_SEGMENT_BYTES);
+
+            const launchWav = createWavBase64(launchPcm);
+            this.audioQueue.push(`data:audio/wav;base64,${launchWav}`);
+
+            this.hasStartedPlayback = true;
+            this.callbacks?.onStateChange?.('speaking');
+            this.playNextAudioSegment();
           }
         } else if (msg.type === 'turn_complete') {
           const turnCompleteTime = Date.now();
@@ -148,13 +155,17 @@ export class VoiceSession {
 
           this.isTurnComplete = true;
 
-          // 🔊 Flush ALL remaining PCM bytes as Segment 2 (the entire rest of turn audio)
+          // 🔊 UNIFIED TAIL SEGMENT: Combine ALL remaining turn chunks into ONE SINGLE WAV file for 100% continuous speech!
           if (this.accumulatedPcmBinary.length > 0) {
-            this.flushPcmSegmentToQueue(this.accumulatedPcmBinary.length);
+            const tailWav = createWavBase64(this.accumulatedPcmBinary);
+            this.accumulatedPcmBinary = '';
+            this.audioQueue.push(`data:audio/wav;base64,${tailWav}`);
           }
 
           if (!this.hasStartedPlayback) {
-            this.startAudioQueuePlayback();
+            this.hasStartedPlayback = true;
+            this.callbacks?.onStateChange?.('speaking');
+            this.playNextAudioSegment();
           } else if (!this.isPlayingQueue) {
             this.playNextAudioSegment();
           } else if (!this.preloadedNextPlayer) {
@@ -307,12 +318,12 @@ export class VoiceSession {
           if (isFinal) {
             this.finalizeSpokenTurn(transcript);
           } else {
-            // 🚀 Fast 0.8s (800ms) silence pause timer: Finalizes turn in 800ms after child stops talking
+            // 🚀 Fast 1.0s (1000ms) silence pause timer: Finalizes turn in 1 second after child stops talking
             if (this.speechSilenceTimer) clearTimeout(this.speechSilenceTimer);
             this.speechSilenceTimer = setTimeout(() => {
-              console.log('[Mobile Voice Input] 0.8s child pause detected -> Finalizing spoken turn:', transcript);
+              console.log('[Mobile Voice Input] 1.0s child pause detected -> Finalizing spoken turn:', transcript);
               this.finalizeSpokenTurn(transcript);
-            }, 800);
+            }, 1000);
           }
         }
       });
@@ -366,24 +377,6 @@ export class VoiceSession {
     } catch {}
   }
 
-  private flushPcmSegmentToQueue(byteCount: number) {
-    if (this.accumulatedPcmBinary.length === 0 || byteCount <= 0) return;
-
-    const lengthToSlice = Math.min(byteCount, this.accumulatedPcmBinary.length);
-    const pcmSegmentBinary = this.accumulatedPcmBinary.slice(0, lengthToSlice);
-    this.accumulatedPcmBinary = this.accumulatedPcmBinary.slice(lengthToSlice);
-
-    const wavBase64 = createWavBase64(pcmSegmentBinary);
-    this.audioQueue.push(`data:audio/wav;base64,${wavBase64}`);
-  }
-
-  private startAudioQueuePlayback() {
-    if (this.isPlayingQueue) return;
-    this.hasStartedPlayback = true;
-    this.callbacks?.onStateChange?.('speaking');
-    this.playNextAudioSegment();
-  }
-
   private preloadNextSegment() {
     if (this.preloadedNextPlayer || this.audioQueue.length === 0) return;
 
@@ -428,10 +421,10 @@ export class VoiceSession {
       if (this.isTurnComplete) {
         const playbackEndTime = Date.now();
         const totalTurnTime = this.promptSentTime > 0 ? playbackEndTime - this.promptSentTime : 0;
-        console.log(`[Mobile Audio] 🔊 Turn Playback finished natively (+${totalTurnTime} ms total). Session WAITING FOR NEXT USER TURN.`);
+        console.log(`[Mobile Audio] 🔊 Turn Playback finished natively (+${totalTurnTime} ms total). Waiting for next user turn.`);
         this.callbacks?.onStateChange?.('listening');
       } else {
-        console.log('[Mobile Audio Stream]: Queue emptied mid-stream, awaiting remaining audio chunk...');
+        console.log('[Mobile Audio Stream]: Queue emptied mid-stream, awaiting next audio chunk...');
       }
       return;
     }
