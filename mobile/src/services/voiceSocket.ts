@@ -264,12 +264,12 @@ export class VoiceSession {
           if (isFinal) {
             this.finalizeSpokenTurn(transcript);
           } else {
-            // 🚀 Kid-friendly 2.5s (2500ms) silence timer: Allows kids 2.5 seconds to pause ("umm...", "aahh...", thinking)
+            // 🚀 Fast 1.2s (1200ms) silence pause timer: Sends spoken turn to Gemini in 1.2s after child stops talking (reduced from 2.5s)
             if (this.speechSilenceTimer) clearTimeout(this.speechSilenceTimer);
             this.speechSilenceTimer = setTimeout(() => {
-              console.log('[Mobile Voice Input] 2.5s child pause detected -> Finalizing spoken turn:', transcript);
+              console.log('[Mobile Voice Input] 1.2s child pause detected -> Finalizing spoken turn:', transcript);
               this.finalizeSpokenTurn(transcript);
-            }, 2500);
+            }, 1200);
           }
         }
       });
