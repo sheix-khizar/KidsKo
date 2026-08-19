@@ -451,11 +451,6 @@ export class VoiceSession {
     const nextSegmentUri = this.audioQueue.shift()!;
     try {
       const player = createAudioPlayer({ uri: nextSegmentUri });
-      try {
-        if (typeof (player as any).setPlaybackRate === 'function') (player as any).setPlaybackRate(1.15);
-        else if (typeof (player as any).setRate === 'function') (player as any).setRate(1.15);
-        else (player as any).playbackRate = 1.15;
-      } catch {}
       this.preloadedNextPlayer = player;
       this.currentSegmentPreloadTime = Date.now();
     } catch (err) {
@@ -475,11 +470,6 @@ export class VoiceSession {
       const nextSegmentUri = this.audioQueue.shift()!;
       try {
         playerToPlay = createAudioPlayer({ uri: nextSegmentUri });
-        try {
-          if (typeof (playerToPlay as any).setPlaybackRate === 'function') (playerToPlay as any).setPlaybackRate(1.15);
-          else if (typeof (playerToPlay as any).setRate === 'function') (playerToPlay as any).setRate(1.15);
-          else (playerToPlay as any).playbackRate = 1.15;
-        } catch {}
       } catch (err) {
         console.error('[Mobile Playback Error]: Exception playing WAV segment:', err);
       }
