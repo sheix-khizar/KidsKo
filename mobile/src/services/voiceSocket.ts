@@ -15,10 +15,10 @@ type VoiceCallbacks = {
 };
 
 // 24000 Hz, 16-bit mono PCM = 48000 bytes/sec
-// ~300ms initial buffer = 14400 bytes (~3 chunks) -> fast first-chunk latency (~600ms-800ms)
-const INITIAL_BUFFER_BYTES = 14400;
-// ~600ms chunk buffer = 28800 bytes per queued segment -> smooth, low-latency playback
-const CHUNK_BUFFER_BYTES = 28800;
+// ~400ms initial buffer = 19200 bytes (~4 chunks) -> preserves fast first-chunk latency (~700ms-900ms)
+const INITIAL_BUFFER_BYTES = 19200;
+// ~1.6s chunk buffer = 76800 bytes per queued segment -> eliminates frequent segment boundaries and audio stutter
+const CHUNK_BUFFER_BYTES = 76800;
 
 function createWavBase64(pcmBinary: string): string {
   const pcmBytesLength = pcmBinary.length;
@@ -138,14 +138,14 @@ export class VoiceSession {
           // Append incoming chunk to binary PCM accumulator
           this.accumulatedPcmBinary += atob(msg.data);
 
-          // Check if initial buffer threshold (~300ms) reached to start streaming playback
+          // Check if initial buffer threshold (~400ms) reached to start streaming playback
           if (!this.hasStartedPlayback) {
             if (this.accumulatedPcmBinary.length >= INITIAL_BUFFER_BYTES) {
               this.flushBufferedPcmToQueue();
               this.startAudioQueuePlayback();
             }
           } else {
-            // Once streaming has started, flush chunks whenever chunk threshold (~600ms) is reached
+            // Once streaming has started, flush chunks whenever chunk threshold (~1.6s) is reached
             if (this.accumulatedPcmBinary.length >= CHUNK_BUFFER_BYTES) {
               this.flushBufferedPcmToQueue();
               if (!this.isPlayingQueue) {
@@ -516,30 +516,39 @@ export class VoiceSession {
       console.log(`[Mobile Audio] Time to first audio: ${timeToFirstAudio} ms`);
     }
 
-    // Clean up previous active player before starting next segment
-    if (this.activePlayer && this.activePlayer !== playerToPlay) {
-      try {
-        this.activePlayer.remove();
-      } catch {}
-      this.activePlayer = null;
-    }
-
+    const previousPlayer = this.activePlayer;
     this.activePlayer = playerToPlay;
 
     playerToPlay.addListener('playbackStatusUpdate', (status: any) => {
       if (status.didJustFinish) {
         this.lastSegmentFinishTime = Date.now();
-        try {
-          playerToPlay.remove();
-        } catch {}
-        if (this.activePlayer === playerToPlay) {
+        const finishedPlayer = playerToPlay;
+        if (this.activePlayer === finishedPlayer) {
           this.activePlayer = null;
         }
+
+        // ⚡ Seamless Handoff: Start playing the next preloaded segment IMMEDIATELY
         this.playNextAudioSegment();
+
+        // Asynchronously cleanup native player after next segment has started
+        setTimeout(() => {
+          try {
+            finishedPlayer.remove();
+          } catch {}
+        }, 50);
       }
     });
 
     playerToPlay.play();
+
+    // Clean up previous player asynchronously after new player has started playing
+    if (previousPlayer && previousPlayer !== playerToPlay) {
+      setTimeout(() => {
+        try {
+          previousPlayer.remove();
+        } catch {}
+      }, 50);
+    }
 
     // ⚡ Immediately preload the NEXT segment player in background while current segment plays
     this.preloadNextSegment();
