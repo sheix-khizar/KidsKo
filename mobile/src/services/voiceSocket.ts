@@ -14,10 +14,6 @@ type VoiceCallbacks = {
   onStateChange?: (state: 'listening' | 'thinking' | 'speaking') => void;
 };
 
-// 24000 Hz, 16-bit mono PCM = 48000 bytes/sec
-// Initial launch segment = ~400ms (19,200 bytes) -> Starts audio playback in ~700ms-800ms
-const LAUNCH_SEGMENT_BYTES = 19200;
-
 function createWavBase64(pcmBinary: string): string {
   const pcmBytesLength = pcmBinary.length;
   const header = new ArrayBuffer(44);
@@ -55,7 +51,6 @@ function createWavBase64(pcmBinary: string): string {
 export class VoiceSession {
   private ws: WebSocket | null = null;
   private activePlayer: any = null;
-  private preloadedNextPlayer: any = null;
   private callbacks: VoiceCallbacks | null = null;
   private speechSubscriptions: any[] = [];
   private lastSentTranscript = '';
@@ -64,13 +59,10 @@ export class VoiceSession {
   private speechSilenceTimer: any = null;
   private currentTurnId = 0;
 
-  // Hybrid Audio Queue State
-  private audioQueue: string[] = [];
+  // Turn Audio State
   private accumulatedPcmBinary = '';
-  private hasStartedPlayback = false;
-  private isPlayingQueue = false;
+  private isPlayingAudio = false;
   private receivedChunkCount = 0;
-  private isTurnComplete = false;
 
   // Diagnostic Timers
   private promptSentTime = 0;
@@ -81,13 +73,7 @@ export class VoiceSession {
   }
 
   private isKidskoSpeaking(): boolean {
-    return (
-      this.isPlayingQueue ||
-      this.audioQueue.length > 0 ||
-      this.preloadedNextPlayer !== null ||
-      this.activePlayer !== null ||
-      (this.hasStartedPlayback && !this.isTurnComplete)
-    );
+    return this.isPlayingAudio || this.activePlayer !== null;
   }
 
   async start(callbacks: VoiceCallbacks, studentId?: string) {
@@ -107,7 +93,6 @@ export class VoiceSession {
     this.ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
-        const turnId = this.currentTurnId;
 
         if (msg.type === 'ready') {
           console.log(`[Mobile WS Ready Frame]: Session cap = ${msg.capSeconds}s`);
@@ -123,59 +108,28 @@ export class VoiceSession {
           console.error('[Mobile WS Error Frame]: Server error =', msg.reason);
           callbacks.onError(msg.reason);
         } else if (msg.type === 'audio') {
-          // Reject audio chunks from cancelled/invalidated turns
-          if (turnId !== this.currentTurnId) return;
-
           this.receivedChunkCount++;
           if (this.receivedChunkCount === 1) {
             this.firstChunkTime = Date.now();
             const latencyToFirstChunk = this.promptSentTime > 0 ? this.firstChunkTime - this.promptSentTime : 0;
-            console.log(`[Mobile Audio] 🚀 First chunk received: +${latencyToFirstChunk} ms after prompt sent (Turn #${turnId})`);
+            console.log(`[Mobile Audio] 🚀 First chunk received: +${latencyToFirstChunk} ms after prompt sent`);
           }
 
-          // Accumulate incoming 24kHz PCM binary
+          // Accumulate incoming 24kHz PCM binary chunks for the turn
           this.accumulatedPcmBinary += atob(msg.data);
-
-          // ⚡ FAST LAUNCH (Segment 1): Start Segment 1 as soon as ~400ms initial buffer is collected (Target <= ~800ms)
-          if (!this.hasStartedPlayback && this.accumulatedPcmBinary.length >= LAUNCH_SEGMENT_BYTES) {
-            const launchPcm = this.accumulatedPcmBinary.slice(0, LAUNCH_SEGMENT_BYTES);
-            this.accumulatedPcmBinary = this.accumulatedPcmBinary.slice(LAUNCH_SEGMENT_BYTES);
-
-            const launchWav = createWavBase64(launchPcm);
-            this.audioQueue.push(`data:audio/wav;base64,${launchWav}`);
-
-            this.hasStartedPlayback = true;
-            this.callbacks?.onStateChange?.('speaking');
-            this.playNextAudioSegment();
-          }
         } else if (msg.type === 'turn_complete') {
-          if (turnId !== this.currentTurnId || (this.receivedChunkCount === 0 && !this.hasStartedPlayback)) {
-            console.log(`[Mobile Audio]: Discarding stray turn_complete frame for Turn #${turnId}`);
+          const turnCompleteTime = Date.now();
+          const latencyToTurnComplete = this.promptSentTime > 0 ? turnCompleteTime - this.promptSentTime : 0;
+          console.log(`[Mobile Audio] Turn complete: +${latencyToTurnComplete} ms after prompt sent. Total chunks collected = ${this.receivedChunkCount}`);
+
+          if (this.receivedChunkCount === 0 || this.accumulatedPcmBinary.length === 0) {
+            console.log('[Mobile Audio] Ignoring turn_complete frame from cancelled turn (0 chunks collected).');
             return;
           }
 
-          const turnCompleteTime = Date.now();
-          const latencyToTurnComplete = this.promptSentTime > 0 ? turnCompleteTime - this.promptSentTime : 0;
-          console.log(`[Mobile Audio] Turn complete: +${latencyToTurnComplete} ms after prompt sent. Total chunks collected = ${this.receivedChunkCount} (Turn #${turnId})`);
-
-          this.isTurnComplete = true;
-
-          // 🔊 UNIFIED TAIL SEGMENT (Segment 2): Combine ALL remaining turn chunks into ONE SINGLE WAV file
-          if (this.accumulatedPcmBinary.length > 0) {
-            const tailWav = createWavBase64(this.accumulatedPcmBinary);
-            this.accumulatedPcmBinary = '';
-            this.audioQueue.push(`data:audio/wav;base64,${tailWav}`);
-          }
-
-          if (!this.hasStartedPlayback) {
-            this.hasStartedPlayback = true;
-            this.callbacks?.onStateChange?.('speaking');
-            this.playNextAudioSegment();
-          } else if (!this.isPlayingQueue) {
-            this.playNextAudioSegment();
-          } else if (!this.preloadedNextPlayer) {
-            this.preloadNextSegment();
-          }
+          // 🔊 Play the turn as ONE unified WAV file for 100% continuous, zero-lag speech!
+          this.playTurnAudio(this.accumulatedPcmBinary);
+          this.accumulatedPcmBinary = '';
         } else if (msg.type === 'text') {
           callbacks.onTranscript?.(msg.data);
         } else if (msg.type === 'snapshot_ack') {
@@ -227,34 +181,21 @@ export class VoiceSession {
     this.firstChunkTime = 0;
     this.receivedChunkCount = 0;
     this.accumulatedPcmBinary = '';
-    this.audioQueue = [];
-    this.hasStartedPlayback = false;
-    this.isPlayingQueue = false;
-    this.isTurnComplete = false;
+    this.isPlayingAudio = false;
   }
 
   private stopAudioPlayback() {
-    const turnId = this.currentTurnId;
-    if (this.activePlayer || this.preloadedNextPlayer || this.audioQueue.length > 0 || this.isPlayingQueue) {
-      console.log(`[INTERRUPTION_CLEANUP] Turn #${turnId}: Stopping playback immediately. Releasing active & preloaded players.`);
+    if (this.activePlayer || this.isPlayingAudio) {
+      console.log('[Mobile Turn Interrupted]: Stopping playback immediately & clearing active audio player.');
     }
-    this.audioQueue = [];
     this.accumulatedPcmBinary = '';
-    this.hasStartedPlayback = false;
-    this.isPlayingQueue = false;
+    this.isPlayingAudio = false;
 
     if (this.activePlayer) {
       try {
         this.activePlayer.remove();
       } catch {}
       this.activePlayer = null;
-    }
-
-    if (this.preloadedNextPlayer) {
-      try {
-        this.preloadedNextPlayer.remove();
-      } catch {}
-      this.preloadedNextPlayer = null;
     }
   }
 
@@ -282,7 +223,7 @@ export class VoiceSession {
       this.resetTurnState();
       this.callbacks?.onStateChange?.('thinking');
       this.promptSentTime = Date.now();
-      console.log(`[Mobile Voice Input] Finalized spoken turn (Turn #${this.currentTurnId}) -> Sending prompt to Gemini Live:`, transcript);
+      console.log('[Mobile Voice Input] Finalized spoken turn -> Sending prompt to Gemini Live:', transcript);
       this.lastSentTranscript = transcript;
       this.ws.send(JSON.stringify({ type: 'text_prompt', data: transcript }));
     }
@@ -313,7 +254,7 @@ export class VoiceSession {
         if (transcript && transcript.length > 0) {
           // ⚡ REAL-TIME BARGE-IN: If student speaks while Kidsko is talking, stop Kidsko immediately and switch state to 'listening'
           if (this.isKidskoSpeaking()) {
-            console.log(`[SpeechRec Lifecycle] ⚡ User interruption detected during Turn #${this.currentTurnId}! Stopping Kidsko playback immediately & switching to listening state:`, transcript);
+            console.log('[SpeechRec Lifecycle] ⚡ User interruption detected! Stopping Kidsko playback immediately & switching to listening state:', transcript);
             this.stopAudioPlayback();
             this.callbacks?.onStateChange?.('listening');
           }
@@ -324,7 +265,7 @@ export class VoiceSession {
           if (isFinal) {
             this.finalizeSpokenTurn(transcript);
           } else {
-            // 🚀 Ultra-fast 600ms silence pause timer: Sends spoken turn to Gemini in 600ms after child stops talking (reduced from 1.2s)
+            // 🚀 Crisp 600ms silence pause timer: Sends spoken turn to Gemini in 600ms after child stops talking
             if (this.speechSilenceTimer) clearTimeout(this.speechSilenceTimer);
             this.speechSilenceTimer = setTimeout(() => {
               console.log('[Mobile Voice Input] 600ms child pause detected -> Finalizing spoken turn:', transcript);
@@ -383,118 +324,52 @@ export class VoiceSession {
     } catch {}
   }
 
-  private preloadNextSegment() {
-    const turnId = this.currentTurnId;
-    if (this.preloadedNextPlayer || this.audioQueue.length === 0) return;
+  private playTurnAudio(pcmBinary: string) {
+    if (!pcmBinary || pcmBinary.length === 0) return;
 
-    const nextSegmentUri = this.audioQueue.shift()!;
+    this.stopAudioPlayback();
+    this.isPlayingAudio = true;
+    this.callbacks?.onStateChange?.('speaking');
+
+    const wavBase64 = createWavBase64(pcmBinary);
+    const wavUri = `data:audio/wav;base64,${wavBase64}`;
 
     try {
-      const player = createAudioPlayer({ uri: nextSegmentUri });
-
-      // Stale turn check: if user interrupted while player was being created, dispose immediately
-      if (this.currentTurnId !== turnId) {
-        try { player.remove(); } catch {}
-        return;
-      }
-
+      const player = createAudioPlayer({ uri: wavUri });
       try {
         if (typeof (player as any).setPlaybackRate === 'function') (player as any).setPlaybackRate(1.15);
         else if (typeof (player as any).setRate === 'function') (player as any).setRate(1.15);
         else (player as any).playbackRate = 1.15;
       } catch {}
 
-      this.preloadedNextPlayer = player;
-    } catch (err) {
-      console.error(`[Mobile Audio Preload Error] Turn #${turnId}: Could not pre-create tail audio player:`, err);
-      if (this.currentTurnId === turnId) {
-        this.audioQueue.unshift(nextSegmentUri);
-      }
-    }
-  }
+      this.activePlayer = player;
 
-  private playNextAudioSegment() {
-    const turnId = this.currentTurnId;
-    let playerToPlay: any = null;
-    const isPreloaded = !!this.preloadedNextPlayer;
+      const playbackStartTime = Date.now();
+      const timeToFirstAudio = this.promptSentTime > 0 ? playbackStartTime - this.promptSentTime : 0;
+      console.log(`[Mobile Audio] 🔊 Continuous Turn Playback started: +${timeToFirstAudio} ms after prompt sent (PCM size = ${pcmBinary.length} bytes)`);
 
-    if (isPreloaded) {
-      playerToPlay = this.preloadedNextPlayer;
-      this.preloadedNextPlayer = null;
-    } else if (this.audioQueue.length > 0) {
-      const nextSegmentUri = this.audioQueue.shift()!;
-      try {
-        playerToPlay = createAudioPlayer({ uri: nextSegmentUri });
-        try {
-          if (typeof (playerToPlay as any).setPlaybackRate === 'function') (playerToPlay as any).setPlaybackRate(1.15);
-          else if (typeof (playerToPlay as any).setRate === 'function') (playerToPlay as any).setRate(1.15);
-          else (playerToPlay as any).playbackRate = 1.15;
-        } catch {}
-      } catch (err) {
-        console.error(`[Mobile Playback Error] Turn #${turnId}: Exception playing WAV segment:`, err);
-      }
-    }
+      player.addListener('playbackStatusUpdate', (status: any) => {
+        if (status.didJustFinish) {
+          const totalTurnDuration = Date.now() - playbackStartTime;
+          console.log(`[Mobile Audio] 🔊 Turn Playback finished natively (${totalTurnDuration} ms duration). Waiting for next user turn.`);
 
-    if (!playerToPlay) {
-      this.isPlayingQueue = false;
-      if (this.isTurnComplete) {
-        const playbackEndTime = Date.now();
-        const totalTurnTime = this.promptSentTime > 0 ? playbackEndTime - this.promptSentTime : 0;
-        console.log(`[Mobile Audio] 🔊 Turn Playback finished natively (+${totalTurnTime} ms total). Session WAITING FOR NEXT USER TURN (Turn #${turnId}).`);
-        this.callbacks?.onStateChange?.('listening');
-      }
-      return;
-    }
-
-    this.isPlayingQueue = true;
-    this.callbacks?.onStateChange?.('speaking');
-
-    const playbackStartTime = Date.now();
-    if (this.promptSentTime > 0 && this.receivedChunkCount <= 2) {
-      const timeToFirstAudio = playbackStartTime - this.promptSentTime;
-      console.log(`[Mobile Audio] 🔊 Playback started (Segment 1 Launch): +${timeToFirstAudio} ms after prompt sent (Turn #${turnId})`);
-    }
-
-    const previousPlayer = this.activePlayer;
-    this.activePlayer = playerToPlay;
-
-    playerToPlay.addListener('playbackStatusUpdate', (status: any) => {
-      if (status.didJustFinish) {
-        if (this.currentTurnId !== turnId) {
-          try { playerToPlay.remove(); } catch {}
-          return;
-        }
-
-        const finishedPlayer = playerToPlay;
-        if (this.activePlayer === finishedPlayer) {
-          this.activePlayer = null;
-        }
-
-        // ⚡ ZERO-GAP HANDOFF: Start preloaded Segment 2 (Tail) IMMEDIATELY
-        this.playNextAudioSegment();
-
-        // Asynchronously release finished native player to prevent audio driver choking
-        setTimeout(() => {
           try {
-            finishedPlayer.remove();
+            player.remove();
           } catch {}
-        }, 50);
-      }
-    });
+          if (this.activePlayer === player) {
+            this.activePlayer = null;
+          }
+          this.isPlayingAudio = false;
+          this.callbacks?.onStateChange?.('listening');
+        }
+      });
 
-    playerToPlay.play();
-
-    // Release previous player asynchronously
-    if (previousPlayer && previousPlayer !== playerToPlay) {
-      setTimeout(() => {
-        try {
-          previousPlayer.remove();
-        } catch {}
-      }, 50);
+      player.play();
+    } catch (err) {
+      console.error('[Mobile Playback Error]: Exception playing turn WAV audio:', err);
+      this.isPlayingAudio = false;
+      this.callbacks?.onStateChange?.('listening');
     }
-
-    // ⚡ Preload NEXT segment in background while current segment plays
-    this.preloadNextSegment();
   }
 
   async end() {
