@@ -96,7 +96,7 @@ export function attachVoiceSocketServer(httpServer: Server) {
 
       clientSocket.send(JSON.stringify({ type: 'ready', capSeconds }));
 
-      // 🎙️ Send initial personalized AI voice greeting upon call start
+      // 🎙️ Send fast, crisp initial personalized AI voice greeting upon call start
       let studentName = 'there';
       if (studentId) {
         try {
@@ -109,7 +109,7 @@ export function attachVoiceSocketServer(httpServer: Server) {
         }
       }
 
-      const greetingPrompt = `Hi ${studentName}, I am Kidsko. How can I help you today?`;
+      const greetingPrompt = `Hi ${studentName}! Ready to learn?`;
       console.log(`[Voice Server] Triggering initial AI voice greeting for ${studentName}: "${greetingPrompt}"`);
       sendTextPrompt(liveSession, greetingPrompt);
 
