@@ -81,15 +81,15 @@ export class VoiceSession {
   private speechSilenceTimer: any = null;
   private currentTurnId = 0;
 
-  // 3. Clean State Machine & UI Throttling
+  // Clean State Machine & UI Throttling
   private currentState: 'listening' | 'thinking' | 'speaking' | null = null;
 
   // Race-condition & response lock flags
   private isProcessingTurn = false;
   private isAwaitingResponse = false;
 
-  // 2. 3-Chunk Jitter Queue (pcmBufferQueue)
-  private pcmQueue: string[] = [];
+  // 1. 3-Chunk Jitter Buffer & Direct Memory Audio Queue (pcmStreamQueue)
+  private pcmStreamQueue: string[] = [];
   private audioQueue: string[] = [];
   private accumulatedPcmBinary = '';
   private hasStartedPlayback = false;
@@ -105,7 +105,6 @@ export class VoiceSession {
     return this.lastSentTranscript;
   }
 
-  // 3. Clean State Machine: Ensures setVoiceState('speaking') is dispatched EXACTLY ONCE per turn
   private updateState(newState: 'listening' | 'thinking' | 'speaking') {
     if (this.currentState !== newState) {
       console.log(`[VoiceSession State Change]: ${this.currentState || 'none'} -> ${newState}`);
@@ -173,7 +172,8 @@ export class VoiceSession {
           this.receivedChunkCount++;
           const decodedPcm = atob(msg.data);
           
-          this.pcmQueue.push(decodedPcm);
+          // 1. Accumulate incoming 24kHz PCM chunks into in-memory queue (pcmStreamQueue)
+          this.pcmStreamQueue.push(decodedPcm);
           this.accumulatedPcmBinary += decodedPcm;
 
           if (this.receivedChunkCount === 1 || this.receivedChunkCount === 2) {
@@ -182,12 +182,12 @@ export class VoiceSession {
               const latencyToFirstChunk = this.promptSentTime > 0 ? this.firstChunkTime - this.promptSentTime : 0;
               console.log(`[Mobile Audio] 🚀 First 24kHz chunk received: +${latencyToFirstChunk} ms after prompt sent (Turn #${turnId})`);
             }
-            // 2. DO NOT TRIGGER PLAYBACK ON CHUNK #1 OR #2
+            // 2. Do NOT trigger nativeAudioEngine.play() until pcmStreamQueue.length >= 3
             return;
           }
 
-          // 2. 3-CHUNK JITTER QUEUE: Wait until pcmBufferQueue.length >= 3 (~300ms cushion) before launching playback
-          if (!this.hasStartedPlayback && this.pcmQueue.length >= 3) {
+          // 2. Wait until pcmStreamQueue.length >= 3 (~300ms jitter buffer) before launching playback
+          if (!this.hasStartedPlayback && this.pcmStreamQueue.length >= 3) {
             const launchPcm = this.accumulatedPcmBinary;
             this.accumulatedPcmBinary = '';
 
@@ -195,11 +195,10 @@ export class VoiceSession {
             this.audioQueue.push(`data:audio/wav;base64,${launchWav}`);
 
             this.hasStartedPlayback = true;
-            // 3. setVoiceState('speaking') dispatched EXACTLY ONCE when 3-chunk buffer is ready to play
             this.updateState('speaking');
             this.playNextAudioSegment();
           } else if (this.hasStartedPlayback && this.accumulatedPcmBinary.length >= STREAM_SEGMENT_BYTES) {
-            // Stream subsequent incoming chunks into open audio handle continuously
+            // 3. Continuously stream all subsequent incoming WebSocket chunks directly into active player handle
             const segmentPcm = this.accumulatedPcmBinary.slice(0, STREAM_SEGMENT_BYTES);
             this.accumulatedPcmBinary = this.accumulatedPcmBinary.slice(STREAM_SEGMENT_BYTES);
 
@@ -224,7 +223,6 @@ export class VoiceSession {
 
           this.isTurnComplete = true;
 
-          // 3. Clean turn complete handling: if 0 chunks collected, reset state cleanly without retry loop
           if (this.receivedChunkCount === 0) {
             console.log(`[Mobile Audio] Turn #${turnId} received 0 chunks. Resetting internal state cleanly.`);
             this.isProcessingTurn = false;
@@ -305,7 +303,7 @@ export class VoiceSession {
     this.promptSentTime = 0;
     this.firstChunkTime = 0;
     this.receivedChunkCount = 0;
-    this.pcmQueue = [];
+    this.pcmStreamQueue = [];
     this.accumulatedPcmBinary = '';
     this.audioQueue = [];
     this.hasStartedPlayback = false;
@@ -318,7 +316,7 @@ export class VoiceSession {
     if (this.activePlayer || this.preloadedNextPlayer || this.audioQueue.length > 0 || this.isPlayingQueue) {
       console.log(`[INTERRUPTION_CLEANUP] Turn #${turnId}: Stopping audio playback immediately. Releasing active & preloaded players.`);
     }
-    this.pcmQueue = [];
+    this.pcmStreamQueue = [];
     this.audioQueue = [];
     this.accumulatedPcmBinary = '';
     this.hasStartedPlayback = false;
@@ -365,7 +363,6 @@ export class VoiceSession {
     }
 
     if (transcript && transcript.length > 0 && transcript !== this.lastSentTranscript && this.ws?.readyState === WebSocket.OPEN) {
-      // 3. Strict boolean flags to prevent race conditions and duplicate turns
       this.isProcessingTurn = true;
       this.isAwaitingResponse = true;
       this.resetTurnState();
@@ -400,9 +397,7 @@ export class VoiceSession {
         const isFinal = event.isFinal || event.results?.[0]?.isFinal;
 
         if (transcript && transcript.length > 0) {
-          // 🛑 1. DISABLE STT INTERRUPTIONS DURING AI SPEECH:
-          // Mute transcript processing while state is speaking or while Kidsko is playing audio over speakers.
-          // STT listening re-enables ONLY after AI turn is 100% finished (speaking -> listening).
+          // Mute STT transcript processing while Kidsko is speaking to prevent ping-pong echo loops
           if (this.currentState === 'speaking' || this.isKidskoSpeaking() || this.isAwaitingResponse) {
             console.log('[SpeechRec Lifecycle] 🛡️ STT transcript muted during AI speech / response generation to prevent ping-pong echo loops:', transcript);
             return;
@@ -519,7 +514,6 @@ export class VoiceSession {
         const playbackEndTime = Date.now();
         const totalTurnTime = this.promptSentTime > 0 ? playbackEndTime - this.promptSentTime : 0;
         console.log(`[Mobile Audio] 🔊 Turn Playback finished natively (+${totalTurnTime} ms total). Session WAITING FOR NEXT USER TURN (Turn #${turnId}).`);
-        // 🔓 Re-enable STT listening ONLY after AI turn is 100% finished (speaking -> listening)
         this.isProcessingTurn = false;
         this.isAwaitingResponse = false;
         this.updateState('listening');
