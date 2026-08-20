@@ -270,7 +270,7 @@ export class VoiceSession {
             this.speechSilenceTimer = setTimeout(() => {
               console.log('[Mobile Voice Input] 600ms child pause detected -> Finalizing spoken turn:', transcript);
               this.finalizeSpokenTurn(transcript);
-            }, 600);
+            }, 800);
           }
         }
       });
