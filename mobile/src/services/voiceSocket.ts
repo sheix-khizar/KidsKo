@@ -49,7 +49,7 @@ function createWavBase64(pcmBinary: string): string {
   return btoa(binaryHeader + pcmBinary);
 }
 
-// ⚡ 1. PRE-WARM AUDIO ENGINE: Play 100ms of silent 24kHz PCM to pre-initialize AVAudioEngine / AudioTrack hardware node
+// ⚡ PRE-WARM AUDIO ENGINE: Play 100ms of silent 24kHz PCM to pre-initialize AVAudioEngine / AudioTrack hardware node
 function prewarmAudioEngine() {
   try {
     const silentPcm = new Array(4800).fill('\0').join('');
@@ -78,14 +78,14 @@ export class VoiceSession {
   private speechSilenceTimer: any = null;
   private currentTurnId = 0;
 
-  // Dedup React State Tracking
+  // 2. DEDUP & GUARD REACT STATE UPDATES: Strictly track current state to dispatch update ONCE per transition
   private currentState: 'listening' | 'thinking' | 'speaking' | null = null;
 
   // Race-condition & response lock flags
   private isProcessingTurn = false;
   private isAwaitingResponse = false;
 
-  // Streaming 2-Chunk Jitter Buffer & Audio State
+  // 1 & 2. 3-CHUNK JITTER BUFFER & DIRECT PCM QUEUE (Bypasses React State)
   private pcmQueue: string[] = [];
   private audioQueue: string[] = [];
   private accumulatedPcmBinary = '';
@@ -102,7 +102,7 @@ export class VoiceSession {
     return this.lastSentTranscript;
   }
 
-  // Dedup React State Updates: Only dispatch state change when transitioning to a NEW distinct state
+  // 2. DEDUP & GUARD REACT STATE UPDATES: Dispatches setVoiceState('speaking') ONCE per turn transition
   private updateState(newState: 'listening' | 'thinking' | 'speaking') {
     if (this.currentState !== newState) {
       console.log(`[VoiceSession State Change]: ${this.currentState || 'none'} -> ${newState}`);
@@ -148,7 +148,6 @@ export class VoiceSession {
 
         if (msg.type === 'ready') {
           console.log(`[Mobile WS Ready Frame]: Session cap = ${msg.capSeconds}s`);
-          // ⚡ Pre-warm native audio engine hardware node immediately on session start
           prewarmAudioEngine();
           this.updateState('listening');
           callbacks.onReady(msg.capSeconds);
@@ -170,18 +169,22 @@ export class VoiceSession {
           this.receivedChunkCount++;
           const decodedPcm = atob(msg.data);
           
+          // 2. BYPASS REACT STATE FOR AUDIO DATA: Direct memory queue, never passes through useState
           this.pcmQueue.push(decodedPcm);
           this.accumulatedPcmBinary += decodedPcm;
 
-          if (this.receivedChunkCount === 1) {
-            this.firstChunkTime = Date.now();
-            const latencyToFirstChunk = this.promptSentTime > 0 ? this.firstChunkTime - this.promptSentTime : 0;
-            console.log(`[Mobile Audio] 🚀 First 24kHz chunk received: +${latencyToFirstChunk} ms after prompt sent (Turn #${turnId})`);
+          if (this.receivedChunkCount === 1 || this.receivedChunkCount === 2) {
+            if (this.receivedChunkCount === 1) {
+              this.firstChunkTime = Date.now();
+              const latencyToFirstChunk = this.promptSentTime > 0 ? this.firstChunkTime - this.promptSentTime : 0;
+              console.log(`[Mobile Audio] 🚀 First 24kHz chunk received: +${latencyToFirstChunk} ms after prompt sent (Turn #${turnId})`);
+            }
+            // 🛡️ Do NOT start playback on Chunk #1 or #2 (prevents buffer underruns and audio stuttering)
             return;
           }
 
-          // 2-Chunk Jitter Buffer: When pcmQueue.length >= 2, initialize streaming playback
-          if (!this.hasStartedPlayback && this.pcmQueue.length >= 2) {
+          // 1. 3-CHUNK JITTER BUFFER: Wait until pcmQueue.length >= 3 (~300ms of audio) before calling player.play()
+          if (!this.hasStartedPlayback && this.pcmQueue.length >= 3) {
             const launchPcm = this.accumulatedPcmBinary;
             this.accumulatedPcmBinary = '';
 
@@ -337,7 +340,6 @@ export class VoiceSession {
     }
 
     if (transcript && transcript.length > 0 && transcript !== this.lastSentTranscript && this.ws?.readyState === WebSocket.OPEN) {
-      // 🔒 2. LOCK STT TRANSCRIPTS: Lock turn processing and mark in-flight request active
       this.isProcessingTurn = true;
       this.isAwaitingResponse = true;
       this.resetTurnState();
@@ -372,7 +374,6 @@ export class VoiceSession {
         const isFinal = event.isFinal || event.results?.[0]?.isFinal;
 
         if (transcript && transcript.length > 0) {
-          // 🔒 2. LOCK STT TRANSCRIPTS WHILE AWAITING GEMINI RESPONSE: Ignore late STT callbacks while waiting for in-flight response
           if (this.isAwaitingResponse && !this.isKidskoSpeaking()) {
             console.log('[SpeechRec Lifecycle] 🔒 Ignored STT callback while awaiting Gemini response (preventing false cancellation):', transcript);
             return;
@@ -469,7 +470,6 @@ export class VoiceSession {
     try {
       const player = createAudioPlayer({ uri: nextSegmentUri });
 
-      // Stale turn check: if user interrupted while player was being created, dispose immediately
       if (this.currentTurnId !== turnId) {
         try { player.remove(); } catch {}
         return;
@@ -507,7 +507,6 @@ export class VoiceSession {
         const playbackEndTime = Date.now();
         const totalTurnTime = this.promptSentTime > 0 ? playbackEndTime - this.promptSentTime : 0;
         console.log(`[Mobile Audio] 🔊 Turn Playback finished natively (+${totalTurnTime} ms total). Session WAITING FOR NEXT USER TURN (Turn #${turnId}).`);
-        // 🔓 Unlock in-flight response locks when playback finishes completely
         this.isProcessingTurn = false;
         this.isAwaitingResponse = false;
         this.updateState('listening');
@@ -519,7 +518,7 @@ export class VoiceSession {
     this.updateState('speaking');
 
     const playbackStartTime = Date.now();
-    if (this.promptSentTime > 0 && this.receivedChunkCount <= 3) {
+    if (this.promptSentTime > 0 && this.receivedChunkCount <= 4) {
       const timeToFirstAudio = playbackStartTime - this.promptSentTime;
       console.log(`[Mobile Audio] 🔊 Playback started (Segment 1 Launch): +${timeToFirstAudio} ms after prompt sent (Turn #${turnId})`);
     }
@@ -539,10 +538,8 @@ export class VoiceSession {
           this.activePlayer = null;
         }
 
-        // ⚡ ZERO-GAP HANDOFF: Start preloaded Segment 2 (Tail) IMMEDIATELY
         this.playNextAudioSegment();
 
-        // Asynchronously release finished native player to prevent audio driver choking
         setTimeout(() => {
           try {
             finishedPlayer.remove();
@@ -553,7 +550,6 @@ export class VoiceSession {
 
     playerToPlay.play();
 
-    // Release previous player asynchronously
     if (previousPlayer && previousPlayer !== playerToPlay) {
       setTimeout(() => {
         try {
@@ -562,7 +558,6 @@ export class VoiceSession {
       }, 50);
     }
 
-    // Preload NEXT segment in background while current segment plays
     this.preloadNextSegment();
   }
 
