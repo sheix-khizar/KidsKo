@@ -93,6 +93,13 @@ export class VoiceSession {
     return this.isPlayingAudio || this.activePlayer !== null;
   }
 
+  // 1. INPUT STREAMING: Stream raw 16kHz PCM audio buffers directly to WebSocket server
+  sendAudioBuffer(base64Pcm16k: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'audio_chunk', isRawPcm: true, data: base64Pcm16k }));
+    }
+  }
+
   async start(callbacks: VoiceCallbacks, studentId?: string) {
     const token = await getToken();
     if (!token) {
@@ -136,7 +143,7 @@ export class VoiceSession {
             console.log(`[Mobile Audio] 🚀 First 24kHz chunk received: +${latencyToFirstChunk} ms after prompt sent (Turn #${turnId})`);
           }
 
-          // Direct Buffer Feeding: Accumulate raw 24kHz PCM binary chunks directly into single turn buffer
+          // 2. OUTPUT STREAMING: Accumulate raw 24kHz PCM binary chunks directly into single turn buffer
           this.accumulatedPcmBinary += atob(msg.data);
         } else if (msg.type === 'turn_complete') {
           if (turnId !== this.currentTurnId) {
@@ -153,7 +160,7 @@ export class VoiceSession {
             return;
           }
 
-          // 🔊 SINGLE UNIFIED WAV TURN: Play full turn as ONE single 24kHz WAV file for 100% crystal-clear, distortion-free speech!
+          // 🔊 SINGLE UNIFIED TURN: Stream single continuous 24kHz audio buffer per turn without mid-turn WAV header re-creation
           this.playTurnAudio(this.accumulatedPcmBinary);
           this.accumulatedPcmBinary = '';
         } else if (msg.type === 'text') {
