@@ -15,9 +15,6 @@ type VoiceCallbacks = {
 };
 
 // 24000 Hz, 16-bit mono PCM = 48000 bytes/sec
-// Launch buffer threshold: 2 full chunks / ~400ms (19,200 bytes) to start streaming playback immediately
-const STREAM_LAUNCH_BYTES = 19200;
-
 function createWavBase64(pcmBinary: string): string {
   const pcmBytesLength = pcmBinary.length;
   const header = new ArrayBuffer(44);
@@ -65,13 +62,14 @@ export class VoiceSession {
   private speechSilenceTimer: any = null;
   private currentTurnId = 0;
 
-  // Dedup React State Tracking
+  // 3. Throttle UI State Updates: Dedup state changes to prevent JS thread locking
   private currentState: 'listening' | 'thinking' | 'speaking' | null = null;
 
   // Race-condition lock flag
   private isProcessingTurn = false;
 
-  // Streaming PCM Audio State
+  // 1 & 2. 2-Chunk Jitter Buffer & Direct Audio Queue State (Bypasses React State)
+  private pcmQueue: string[] = [];
   private audioQueue: string[] = [];
   private accumulatedPcmBinary = '';
   private hasStartedPlayback = false;
@@ -87,6 +85,7 @@ export class VoiceSession {
     return this.lastSentTranscript;
   }
 
+  // 3. Throttle UI State Updates: Dispatches state change ONCE per distinct state transition
   private updateState(newState: 'listening' | 'thinking' | 'speaking') {
     if (this.currentState !== newState) {
       console.log(`[VoiceSession State Change]: ${this.currentState || 'none'} -> ${newState}`);
@@ -148,20 +147,24 @@ export class VoiceSession {
           if (turnId !== this.currentTurnId) return;
 
           this.receivedChunkCount++;
+          const decodedPcm = atob(msg.data);
+          
+          // 2. Bypass React State for Audio Data: Push raw PCM chunks directly to class memory array
+          this.pcmQueue.push(decodedPcm);
+          this.accumulatedPcmBinary += decodedPcm;
+
           if (this.receivedChunkCount === 1) {
             this.firstChunkTime = Date.now();
             const latencyToFirstChunk = this.promptSentTime > 0 ? this.firstChunkTime - this.promptSentTime : 0;
             console.log(`[Mobile Audio] 🚀 First 24kHz chunk received: +${latencyToFirstChunk} ms after prompt sent (Turn #${turnId})`);
+            // Do NOT start playback on Chunk #1 alone (prevents audio underrun)
+            return;
           }
 
-          // Accumulate raw 24kHz PCM binary bytes directly into buffer
-          this.accumulatedPcmBinary += atob(msg.data);
-
-          // 🚀 STREAM AUDIO PLAYBACK IMMEDIATELY (DO NOT WAIT FOR TURN COMPLETE):
-          // Launch playback as soon as Chunk #2 / ~200ms-400ms buffer arrives
-          if (!this.hasStartedPlayback && this.receivedChunkCount >= 2 && this.accumulatedPcmBinary.length >= STREAM_LAUNCH_BYTES) {
-            const launchPcm = this.accumulatedPcmBinary.slice(0, STREAM_LAUNCH_BYTES);
-            this.accumulatedPcmBinary = this.accumulatedPcmBinary.slice(STREAM_LAUNCH_BYTES);
+          // 1. 2-Chunk Jitter Buffer: When pcmQueue.length >= 2, initialize playback
+          if (!this.hasStartedPlayback && this.pcmQueue.length >= 2) {
+            const launchPcm = this.accumulatedPcmBinary;
+            this.accumulatedPcmBinary = '';
 
             const launchWav = createWavBase64(launchPcm);
             this.audioQueue.push(`data:audio/wav;base64,${launchWav}`);
@@ -252,6 +255,7 @@ export class VoiceSession {
     this.promptSentTime = 0;
     this.firstChunkTime = 0;
     this.receivedChunkCount = 0;
+    this.pcmQueue = [];
     this.accumulatedPcmBinary = '';
     this.audioQueue = [];
     this.hasStartedPlayback = false;
@@ -264,6 +268,7 @@ export class VoiceSession {
     if (this.activePlayer || this.preloadedNextPlayer || this.audioQueue.length > 0 || this.isPlayingQueue) {
       console.log(`[INTERRUPTION_CLEANUP] Turn #${turnId}: Stopping audio playback immediately. Releasing active & preloaded players.`);
     }
+    this.pcmQueue = [];
     this.audioQueue = [];
     this.accumulatedPcmBinary = '';
     this.hasStartedPlayback = false;
