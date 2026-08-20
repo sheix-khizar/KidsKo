@@ -15,8 +15,8 @@ type VoiceCallbacks = {
 };
 
 // 24000 Hz, 16-bit mono PCM = 48000 bytes/sec
-// Initial launch segment = ~400ms (19,200 bytes) -> Starts audio playback in ~700ms-800ms
-const LAUNCH_SEGMENT_BYTES = 19200;
+// Jitter buffer threshold: 2 full chunks / ~400ms (19,200 bytes) before starting playback to prevent underruns
+const JITTER_BUFFER_BYTES = 19200;
 
 function createWavBase64(pcmBinary: string): string {
   const pcmBytesLength = pcmBinary.length;
@@ -65,10 +65,13 @@ export class VoiceSession {
   private speechSilenceTimer: any = null;
   private currentTurnId = 0;
 
+  // 2. Dedup React State Tracking
+  private currentState: 'listening' | 'thinking' | 'speaking' | null = null;
+
   // Race-condition lock flag
   private isProcessingTurn = false;
 
-  // Streaming Hybrid Audio State
+  // 1 & 3. Streaming Jitter Buffer & Direct Audio Queue State
   private audioQueue: string[] = [];
   private accumulatedPcmBinary = '';
   private hasStartedPlayback = false;
@@ -82,6 +85,15 @@ export class VoiceSession {
 
   getLastTranscript(): string {
     return this.lastSentTranscript;
+  }
+
+  // 2. Dedup React State Updates: Only dispatch state change when transitioning to a NEW distinct state
+  private updateState(newState: 'listening' | 'thinking' | 'speaking') {
+    if (this.currentState !== newState) {
+      console.log(`[VoiceSession State Change]: ${this.currentState || 'none'} -> ${newState}`);
+      this.currentState = newState;
+      this.callbacks?.onStateChange?.(newState);
+    }
   }
 
   private isKidskoSpeaking(): boolean {
@@ -115,7 +127,7 @@ export class VoiceSession {
 
         if (msg.type === 'ready') {
           console.log(`[Mobile WS Ready Frame]: Session cap = ${msg.capSeconds}s`);
-          this.callbacks?.onStateChange?.('listening');
+          this.updateState('listening');
           callbacks.onReady(msg.capSeconds);
         } else if (msg.type === 'cap_reached') {
           console.log('[Mobile WS Cap Reached Frame]: Server sent cap_reached signal.');
@@ -137,19 +149,19 @@ export class VoiceSession {
             console.log(`[Mobile Audio] 🚀 First chunk received: +${latencyToFirstChunk} ms after prompt sent (Turn #${turnId})`);
           }
 
-          // Accumulate incoming 24kHz PCM binary
+          // 3. Direct Buffer Feeding: Push raw PCM binary bytes directly to in-memory buffer without React state touching
           this.accumulatedPcmBinary += atob(msg.data);
 
-          // ⚡ INSTANT PLAYBACK (FIX STREAMING): Launch Segment 1 immediately when ~400ms initial buffer (Chunk #2 / ~19.2KB) arrives
-          if (!this.hasStartedPlayback && this.accumulatedPcmBinary.length >= LAUNCH_SEGMENT_BYTES) {
-            const launchPcm = this.accumulatedPcmBinary.slice(0, LAUNCH_SEGMENT_BYTES);
-            this.accumulatedPcmBinary = this.accumulatedPcmBinary.slice(LAUNCH_SEGMENT_BYTES);
+          // 1. Jitter Buffer (2-Chunk Queue): Collect at least 2 chunks (~200ms-400ms / 19.2KB) before starting playback to prevent underruns
+          if (!this.hasStartedPlayback && this.receivedChunkCount >= 2 && this.accumulatedPcmBinary.length >= JITTER_BUFFER_BYTES) {
+            const launchPcm = this.accumulatedPcmBinary.slice(0, JITTER_BUFFER_BYTES);
+            this.accumulatedPcmBinary = this.accumulatedPcmBinary.slice(JITTER_BUFFER_BYTES);
 
             const launchWav = createWavBase64(launchPcm);
             this.audioQueue.push(`data:audio/wav;base64,${launchWav}`);
 
             this.hasStartedPlayback = true;
-            this.callbacks?.onStateChange?.('speaking');
+            this.updateState('speaking');
             this.playNextAudioSegment();
           }
         } else if (msg.type === 'turn_complete') {
@@ -173,7 +185,7 @@ export class VoiceSession {
 
           if (!this.hasStartedPlayback) {
             this.hasStartedPlayback = true;
-            this.callbacks?.onStateChange?.('speaking');
+            this.updateState('speaking');
             this.playNextAudioSegment();
           } else if (!this.isPlayingQueue) {
             this.playNextAudioSegment();
@@ -218,7 +230,7 @@ export class VoiceSession {
       console.log('[Mobile Sending Image Capture]:', base64Jpeg.length, 'base64 chars, caption:', caption || '(none)');
       this.isProcessingTurn = true;
       this.resetTurnState();
-      this.callbacks?.onStateChange?.('thinking');
+      this.updateState('thinking');
       this.promptSentTime = Date.now();
       this.ws.send(JSON.stringify({ type: 'image_capture', data: base64Jpeg, caption }));
     }
@@ -286,7 +298,6 @@ export class VoiceSession {
       this.speechSilenceTimer = null;
     }
 
-    // 🔒 2. PREVENT DUPLICATE TURN PROMPTS: Reject secondary turn finalization while a turn is processing
     if (this.isProcessingTurn) {
       console.log('[Mobile Voice Input] 🛑 Duplicate turn finalization blocked (turn processing in progress):', transcript);
       return;
@@ -295,7 +306,7 @@ export class VoiceSession {
     if (transcript && transcript.length > 0 && transcript !== this.lastSentTranscript && this.ws?.readyState === WebSocket.OPEN) {
       this.isProcessingTurn = true;
       this.resetTurnState();
-      this.callbacks?.onStateChange?.('thinking');
+      this.updateState('thinking');
       this.promptSentTime = Date.now();
       console.log(`[Mobile Voice Input] Finalized spoken turn (Turn #${this.currentTurnId}) -> Sending prompt to Gemini Live:`, transcript);
       this.lastSentTranscript = transcript;
@@ -326,7 +337,6 @@ export class VoiceSession {
         const isFinal = event.isFinal || event.results?.[0]?.isFinal;
 
         if (transcript && transcript.length > 0) {
-          // 🛡️ 3. PREVENT ECHO INTERRUPTIONS: If AI is speaking, filter out self-echo & short noise (< 2 words)
           if (this.isKidskoSpeaking()) {
             const words = transcript.split(/\s+/).filter(Boolean);
             const isShortNoise = words.length < 2;
@@ -340,7 +350,7 @@ export class VoiceSession {
             console.log(`[SpeechRec Lifecycle] ⚡ Genuine user interruption detected during Turn #${this.currentTurnId}! Stopping Kidsko playback immediately:`, transcript);
             this.stopAudioPlayback();
             this.isProcessingTurn = false;
-            this.callbacks?.onStateChange?.('listening');
+            this.updateState('listening');
           }
 
           // Real-time live transcript streaming to UI screen
@@ -466,17 +476,17 @@ export class VoiceSession {
         const playbackEndTime = Date.now();
         const totalTurnTime = this.promptSentTime > 0 ? playbackEndTime - this.promptSentTime : 0;
         console.log(`[Mobile Audio] 🔊 Turn Playback finished natively (+${totalTurnTime} ms total). Session WAITING FOR NEXT USER TURN (Turn #${turnId}).`);
-        this.isProcessingTurn = false; // 🔓 Unlock turn processing for next spoken turn
-        this.callbacks?.onStateChange?.('listening');
+        this.isProcessingTurn = false;
+        this.updateState('listening');
       }
       return;
     }
 
     this.isPlayingQueue = true;
-    this.callbacks?.onStateChange?.('speaking');
+    this.updateState('speaking');
 
     const playbackStartTime = Date.now();
-    if (this.promptSentTime > 0 && this.receivedChunkCount <= 2) {
+    if (this.promptSentTime > 0 && this.receivedChunkCount <= 3) {
       const timeToFirstAudio = playbackStartTime - this.promptSentTime;
       console.log(`[Mobile Audio] 🔊 Playback started (Segment 1 Launch): +${timeToFirstAudio} ms after prompt sent (Turn #${turnId})`);
     }
