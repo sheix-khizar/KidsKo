@@ -14,12 +14,67 @@ type VoiceCallbacks = {
   onStateChange?: (state: 'listening' | 'thinking' | 'speaking') => void;
 };
 
-// 24000 Hz, 16-bit mono PCM = 48000 bytes/sec
-// 3-Chunk Jitter Buffer threshold = 28,800 bytes (~300ms of audio buffer cushion)
+// 24000 Hz 16-bit mono PCM = 48000 bytes/sec
+// 3-Chunk Jitter Buffer threshold = 28,800 bytes (~300ms of 24kHz audio buffer cushion)
 const STREAM_SEGMENT_BYTES = 28800;
 
-function createWavBase64(pcmBinary: string): string {
-  const pcmBytesLength = pcmBinary.length;
+/**
+ * Processes 24kHz 16-bit LE Mono PCM binary string:
+ * 1. Sample Interpolation (24kHz to 48kHz): Upsamples 24kHz to 48kHz via 2x linear interpolation.
+ * 2. Low-Pass Audio Filtering: Applies an 8kHz low-pass filter to eliminate digital quantization noise and hiss.
+ */
+function processAudioChunks48k(pcm24kBinary: string): string {
+  const sampleCount24k = Math.floor(pcm24kBinary.length / 2);
+  if (sampleCount24k === 0) return '';
+
+  const samples24k = new Int16Array(sampleCount24k);
+  for (let i = 0; i < sampleCount24k; i++) {
+    const low = pcm24kBinary.charCodeAt(i * 2) & 0xff;
+    const high = pcm24kBinary.charCodeAt(i * 2 + 1) & 0xff;
+    let sample = (high << 8) | low;
+    if (sample & 0x8000) sample |= ~0xffff; // sign extension
+    samples24k[i] = sample;
+  }
+
+  // 1. Linear Interpolation 24kHz -> 48kHz (2x upsampling to match native mobile hardware rates)
+  const sampleCount48k = sampleCount24k * 2;
+  const samples48k = new Int16Array(sampleCount48k);
+
+  for (let i = 0; i < sampleCount24k; i++) {
+    const current = samples24k[i];
+    const next = i < sampleCount24k - 1 ? samples24k[i + 1] : current;
+    
+    samples48k[i * 2] = current;
+    samples48k[i * 2 + 1] = Math.round((current + next) / 2);
+  }
+
+  // 2. Low-Pass Audio Filtering: Cut off frequencies >8kHz to eliminate raw digital noise & hiss
+  const alpha = 0.65;
+  let filteredPrev = 0;
+
+  for (let i = 0; i < sampleCount48k; i++) {
+    const raw = samples48k[i];
+    filteredPrev = filteredPrev + alpha * (raw - filteredPrev);
+    const clamped = Math.max(-32768, Math.min(32767, Math.round(filteredPrev)));
+    samples48k[i] = clamped;
+  }
+
+  // Re-encode samples into LE binary string
+  let binary48k = '';
+  for (let i = 0; i < sampleCount48k; i++) {
+    const sample = samples48k[i];
+    const low = sample & 0xff;
+    const high = (sample >> 8) & 0xff;
+    binary48k += String.fromCharCode(low, high);
+  }
+
+  return binary48k;
+}
+
+function createWavBase64(pcm24kBinary: string): string {
+  // Upsample and low-pass filter to high-fidelity 48kHz mono PCM
+  const pcm48kBinary = processAudioChunks48k(pcm24kBinary);
+  const pcmBytesLength = pcm48kBinary.length;
   const header = new ArrayBuffer(44);
   const view = new DataView(header);
 
@@ -34,8 +89,8 @@ function createWavBase64(pcmBinary: string): string {
   view.setUint32(16, 16, true);        // Subchunk1Size = 16 (PCM)
   view.setUint16(20, 1, true);         // AudioFormat = 1 (PCM)
   view.setUint16(22, 1, true);         // NumChannels = 1 (mono)
-  view.setUint32(24, 24000, true);     // SampleRate = 24000 Hz
-  view.setUint32(28, 24000 * 2, true); // ByteRate = 24000 * 1 * 16/8 = 48000
+  view.setUint32(24, 48000, true);     // SampleRate = 48000 Hz (Strict 48kHz native output)
+  view.setUint32(28, 48000 * 2, true); // ByteRate = 48000 * 1 * 16/8 = 96000
   view.setUint16(32, 2, true);         // BlockAlign = 1 * 16/8 = 2
   view.setUint16(34, 16, true);        // BitsPerSample = 16
 
@@ -49,10 +104,10 @@ function createWavBase64(pcmBinary: string): string {
     binaryHeader += String.fromCharCode(headerBytes[i]);
   }
 
-  return btoa(binaryHeader + pcmBinary);
+  return btoa(binaryHeader + pcm48kBinary);
 }
 
-// ⚡ PRE-WARM AUDIO ENGINE: Play 100ms of silent 24kHz PCM to pre-initialize AVAudioEngine / AudioTrack hardware node
+// ⚡ PRE-WARM AUDIO ENGINE: Play 100ms of silent 48kHz PCM to pre-initialize AVAudioEngine / AudioTrack hardware node
 function prewarmAudioEngine() {
   try {
     const silentPcm = new Array(4800).fill('\0').join('');
@@ -62,7 +117,7 @@ function prewarmAudioEngine() {
     setTimeout(() => {
       try { player.remove(); } catch {}
     }, 150);
-    console.log('[Mobile Audio Engine]: ⚡ Pre-warmed native AVAudioEngine / AudioTrack hardware node');
+    console.log('[Mobile Audio Engine]: ⚡ Pre-warmed native AVAudioEngine / AudioTrack hardware node at 48kHz');
   } catch (err) {
     console.warn('[Mobile Audio Engine]: Could not pre-warm audio engine:', err);
   }
@@ -88,8 +143,8 @@ export class VoiceSession {
   private isProcessingTurn = false;
   private isAwaitingResponse = false;
 
-  // 1. 3-Chunk Jitter Buffer & Direct Memory Audio Queue (pcmStreamQueue)
-  private pcmStreamQueue: string[] = [];
+  // 3-Chunk Jitter Queue
+  private pcmQueue: string[] = [];
   private audioQueue: string[] = [];
   private accumulatedPcmBinary = '';
   private hasStartedPlayback = false;
@@ -172,8 +227,7 @@ export class VoiceSession {
           this.receivedChunkCount++;
           const decodedPcm = atob(msg.data);
           
-          // 1. Accumulate incoming 24kHz PCM chunks into in-memory queue (pcmStreamQueue)
-          this.pcmStreamQueue.push(decodedPcm);
+          this.pcmQueue.push(decodedPcm);
           this.accumulatedPcmBinary += decodedPcm;
 
           if (this.receivedChunkCount === 1 || this.receivedChunkCount === 2) {
@@ -182,12 +236,11 @@ export class VoiceSession {
               const latencyToFirstChunk = this.promptSentTime > 0 ? this.firstChunkTime - this.promptSentTime : 0;
               console.log(`[Mobile Audio] 🚀 First 24kHz chunk received: +${latencyToFirstChunk} ms after prompt sent (Turn #${turnId})`);
             }
-            // 2. Do NOT trigger nativeAudioEngine.play() until pcmStreamQueue.length >= 3
             return;
           }
 
-          // 2. Wait until pcmStreamQueue.length >= 3 (~300ms jitter buffer) before launching playback
-          if (!this.hasStartedPlayback && this.pcmStreamQueue.length >= 3) {
+          // 3-CHUNK JITTER QUEUE: Wait until pcmQueue.length >= 3 (~300ms cushion) before launching playback
+          if (!this.hasStartedPlayback && this.pcmQueue.length >= 3) {
             const launchPcm = this.accumulatedPcmBinary;
             this.accumulatedPcmBinary = '';
 
@@ -198,7 +251,6 @@ export class VoiceSession {
             this.updateState('speaking');
             this.playNextAudioSegment();
           } else if (this.hasStartedPlayback && this.accumulatedPcmBinary.length >= STREAM_SEGMENT_BYTES) {
-            // 3. Continuously stream all subsequent incoming WebSocket chunks directly into active player handle
             const segmentPcm = this.accumulatedPcmBinary.slice(0, STREAM_SEGMENT_BYTES);
             this.accumulatedPcmBinary = this.accumulatedPcmBinary.slice(STREAM_SEGMENT_BYTES);
 
@@ -303,7 +355,7 @@ export class VoiceSession {
     this.promptSentTime = 0;
     this.firstChunkTime = 0;
     this.receivedChunkCount = 0;
-    this.pcmStreamQueue = [];
+    this.pcmQueue = [];
     this.accumulatedPcmBinary = '';
     this.audioQueue = [];
     this.hasStartedPlayback = false;
@@ -316,7 +368,7 @@ export class VoiceSession {
     if (this.activePlayer || this.preloadedNextPlayer || this.audioQueue.length > 0 || this.isPlayingQueue) {
       console.log(`[INTERRUPTION_CLEANUP] Turn #${turnId}: Stopping audio playback immediately. Releasing active & preloaded players.`);
     }
-    this.pcmStreamQueue = [];
+    this.pcmQueue = [];
     this.audioQueue = [];
     this.accumulatedPcmBinary = '';
     this.hasStartedPlayback = false;
@@ -397,7 +449,7 @@ export class VoiceSession {
         const isFinal = event.isFinal || event.results?.[0]?.isFinal;
 
         if (transcript && transcript.length > 0) {
-          // Mute STT transcript processing while Kidsko is speaking to prevent ping-pong echo loops
+          // 🛡️ DISABLE STT INTERRUPTIONS DURING AI SPEECH: Mute STT while Kidsko is speaking to prevent ping-pong loops
           if (this.currentState === 'speaking' || this.isKidskoSpeaking() || this.isAwaitingResponse) {
             console.log('[SpeechRec Lifecycle] 🛡️ STT transcript muted during AI speech / response generation to prevent ping-pong echo loops:', transcript);
             return;
@@ -527,7 +579,7 @@ export class VoiceSession {
     const playbackStartTime = Date.now();
     if (this.promptSentTime > 0 && this.receivedChunkCount <= 4) {
       const timeToFirstAudio = playbackStartTime - this.promptSentTime;
-      console.log(`[Mobile Audio] 🔊 Playback started (Segment 1 Launch): +${timeToFirstAudio} ms after prompt sent (Turn #${turnId})`);
+      console.log(`[Mobile Audio] 🔊 High-Fidelity 48kHz Playback started (Segment 1 Launch): +${timeToFirstAudio} ms after prompt sent (Turn #${turnId})`);
     }
 
     const previousPlayer = this.activePlayer;
