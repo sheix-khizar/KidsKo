@@ -14,7 +14,10 @@ type VoiceCallbacks = {
   onStateChange?: (state: 'listening' | 'thinking' | 'speaking') => void;
 };
 
-// 24000 Hz, 16-bit mono PCM = 48000 bytes/sec
+// 24000 Hz, 16-bit mono PCM = 48000 bytes/sec (9600 bytes = 200ms)
+// 3-Chunk Jitter Buffer threshold = 28,800 bytes (~300ms of audio buffer)
+const STREAM_SEGMENT_BYTES = 28800;
+
 function createWavBase64(pcmBinary: string): string {
   const pcmBytesLength = pcmBinary.length;
   const header = new ArrayBuffer(44);
@@ -78,14 +81,14 @@ export class VoiceSession {
   private speechSilenceTimer: any = null;
   private currentTurnId = 0;
 
-  // 2. DEDUP & GUARD REACT STATE UPDATES: Strictly track current state to dispatch update ONCE per transition
+  // 2. PREVENT JS THREAD STARVATION: Deduplicate state changes to dispatch update ONCE per transition
   private currentState: 'listening' | 'thinking' | 'speaking' | null = null;
 
   // Race-condition & response lock flags
   private isProcessingTurn = false;
   private isAwaitingResponse = false;
 
-  // 1 & 2. 3-CHUNK JITTER BUFFER & DIRECT PCM QUEUE (Bypasses React State)
+  // 1 & 2. 3-CHUNK JITTER BUFFER & DIRECT MEMORY AUDIO QUEUE (Bypasses React State)
   private pcmQueue: string[] = [];
   private audioQueue: string[] = [];
   private accumulatedPcmBinary = '';
@@ -102,7 +105,7 @@ export class VoiceSession {
     return this.lastSentTranscript;
   }
 
-  // 2. DEDUP & GUARD REACT STATE UPDATES: Dispatches setVoiceState('speaking') ONCE per turn transition
+  // 2. PREVENT JS THREAD STARVATION: Dispatches setVoiceState('speaking') ONCE per turn transition
   private updateState(newState: 'listening' | 'thinking' | 'speaking') {
     if (this.currentState !== newState) {
       console.log(`[VoiceSession State Change]: ${this.currentState || 'none'} -> ${newState}`);
@@ -179,11 +182,11 @@ export class VoiceSession {
               const latencyToFirstChunk = this.promptSentTime > 0 ? this.firstChunkTime - this.promptSentTime : 0;
               console.log(`[Mobile Audio] 🚀 First 24kHz chunk received: +${latencyToFirstChunk} ms after prompt sent (Turn #${turnId})`);
             }
-            // 🛡️ Do NOT start playback on Chunk #1 or #2 (prevents buffer underruns and audio stuttering)
+            // 1. DO NOT LAUNCH PLAYBACK ON CHUNK #1 OR #2 (prevents audio underrun & choppy voice)
             return;
           }
 
-          // 1. 3-CHUNK JITTER BUFFER: Wait until pcmQueue.length >= 3 (~300ms of audio) before calling player.play()
+          // 1. 3-CHUNK JITTER BUFFER: Wait until pcmQueue.length >= 3 (~300ms of audio) before triggering play()
           if (!this.hasStartedPlayback && this.pcmQueue.length >= 3) {
             const launchPcm = this.accumulatedPcmBinary;
             this.accumulatedPcmBinary = '';
@@ -194,6 +197,19 @@ export class VoiceSession {
             this.hasStartedPlayback = true;
             this.updateState('speaking');
             this.playNextAudioSegment();
+          } else if (this.hasStartedPlayback && this.accumulatedPcmBinary.length >= STREAM_SEGMENT_BYTES) {
+            // Continuously feed subsequent incoming WebSocket chunks into active player stream
+            const segmentPcm = this.accumulatedPcmBinary.slice(0, STREAM_SEGMENT_BYTES);
+            this.accumulatedPcmBinary = this.accumulatedPcmBinary.slice(STREAM_SEGMENT_BYTES);
+
+            const segmentWav = createWavBase64(segmentPcm);
+            this.audioQueue.push(`data:audio/wav;base64,${segmentWav}`);
+
+            if (!this.isPlayingQueue) {
+              this.playNextAudioSegment();
+            } else if (!this.preloadedNextPlayer) {
+              this.preloadNextSegment();
+            }
           }
         } else if (msg.type === 'turn_complete') {
           if (turnId !== this.currentTurnId) {
