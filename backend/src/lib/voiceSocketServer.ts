@@ -96,47 +96,48 @@ export function attachVoiceSocketServer(httpServer: Server) {
 
       clientSocket.send(JSON.stringify({ type: 'ready', capSeconds }));
 
-      // 🎙️ Send fast, crisp initial personalized AI voice greeting upon call start
+      // Send fast, crisp initial personalized AI voice greeting upon call start
       let studentName = 'there';
       if (studentId) {
         try {
-          const { data: s } = await dbClient.from('students').select('name').eq('id', studentId).maybeSingle();
-          if (s && s.name) {
-            studentName = s.name.trim();
+          const { data: student } = await dbClient
+            .from('students')
+            .select('name')
+            .eq('id', studentId)
+            .single();
+          if (student?.name) {
+            studentName = student.name.split(' ')[0];
           }
-        } catch (err: any) {
-          console.warn('[Voice Socket] Could not fetch student name for greeting:', err?.message);
+        } catch (err) {
+          console.warn('[Voice Socket] Could not fetch student name for greeting:', err);
         }
       }
 
-      const greetingPrompt = `Hi ${studentName}! Ready to learn?`;
-      console.log(`[Voice Server] Triggering initial AI voice greeting for ${studentName}: "${greetingPrompt}"`);
+      const greetingPrompt = `Greet ${studentName} naturally with 5 words max: "Hi ${studentName}! Ready to learn?"`;
+      console.log(`[Voice Socket] Triggering initial AI voice greeting for ${studentName}: "${greetingPrompt}"`);
       sendTextPrompt(liveSession, greetingPrompt);
 
+      // Periodic 10-second usage accounting timer
       accountingTimer = setInterval(async () => {
+        elapsedMs += ACCOUNTING_INTERVAL_MS;
+        const minutesToDeduct = ACCOUNTING_INTERVAL_MS / (60 * 1000);
         try {
-          elapsedMs += ACCOUNTING_INTERVAL_MS;
-          const elapsedSec = Math.floor(elapsedMs / 1000);
-          const remainingSec = Math.max(0, capSeconds - elapsedSec);
-          console.log(`[Voice Accounting Check]: Elapsed=${elapsedSec}s, Remaining=${remainingSec}s, DB update (+${ACCOUNTING_INTERVAL_MS / 60000} min)`);
-          await recordVoiceMinutesUsed(dbClient, parentId, ACCOUNTING_INTERVAL_MS / 60000);
+          await recordVoiceMinutesUsed(dbClient, parentId, minutesToDeduct);
         } catch (err) {
           console.error('[Voice Socket] Error recording voice minutes:', err);
         }
       }, ACCOUNTING_INTERVAL_MS);
 
+      // Hard-cap timer based on available balance
       hardCapTimer = setTimeout(() => {
-        const totalDurationSec = Math.floor((Date.now() - sessionStartTime) / 1000);
-        console.log(`[HARD CAP TIMER FIRED]: Reached maximum allowed cap (${totalDurationSec}s). Closing session with Code 4003.`);
+        console.log(`[Voice Session Hard Cap Reached]: ${capMinutes.toFixed(2)} minutes exhausted for Parent ${parentId}`);
         if (clientSocket.readyState === WebSocket.OPEN) {
           clientSocket.send(JSON.stringify({ type: 'cap_reached' }));
-        }
-        closeLiveSession(liveSession);
-        if (clientSocket.readyState === WebSocket.OPEN) {
-          clientSocket.close(4003, 'Session time limit reached');
+          clientSocket.close(4003, 'Voice cap reached');
         }
       }, capMs);
 
+      // Inbound message handler from client
       clientSocket.on('message', (raw) => {
         (async () => {
           try {
@@ -146,10 +147,11 @@ export function attachVoiceSocketServer(httpServer: Server) {
               if (msg.isRawPcm) {
                 sendAudioChunk(liveSession, msg.data);
               }
-            } else if (msg.type === 'text_prompt') {
+            } else if (msg.type === 'text_prompt' || msg.type === 'user_text_prompt') {
+              const promptText = msg.data || msg.text || '';
               const currentElapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
-              console.log(`[Voice Server User Turn Received]: Prompt="${msg.data}", Elapsed=${currentElapsed}s / ${capSeconds}s, Gemini WS state=${liveSession?.readyState}`);
-              sendTextPrompt(liveSession, msg.data);
+              console.log(`[Voice Server User Turn Received]: Prompt="${promptText}", Elapsed=${currentElapsed}s / ${capSeconds}s, Gemini WS state=${liveSession?.readyState}`);
+              sendTextPrompt(liveSession, promptText);
             } else if (msg.type === 'image_capture') {
               const snapshotEligibility = await checkSnapshotEligibility(dbClient, parentId, eligibility.isPremium);
               if (!snapshotEligibility.allowed) {
@@ -179,30 +181,23 @@ export function attachVoiceSocketServer(httpServer: Server) {
         })();
       });
 
-      clientSocket.on('close', async (code, reason) => {
-        const totalSessionDurationSec = Math.floor((Date.now() - sessionStartTime) / 1000);
-        console.log(`[Client WebSocket Closed]: Code=${code}, Reason="${reason || 'Client disconnected'}", Total Session Duration=${totalSessionDurationSec}s`);
+      clientSocket.on('close', () => {
+        const totalDurationSec = Math.floor((Date.now() - sessionStartTime) / 1000);
+        console.log(`[Voice Session Ended]: ParentId=${parentId}, TotalDuration=${totalDurationSec}s`);
         clearInterval(accountingTimer);
         clearTimeout(hardCapTimer);
-        const remainderMs = elapsedMs % ACCOUNTING_INTERVAL_MS;
-        if (remainderMs > 0) {
-          try {
-            await recordVoiceMinutesUsed(dbClient, parentId, remainderMs / 60000);
-          } catch {}
-        }
-        try {
-          closeLiveSession(liveSession);
-        } catch {
-          // session already closed
-        }
+        closeLiveSession(liveSession);
       });
-    } catch (globalErr: any) {
-      console.error('[Voice Socket] Connection handler exception:', globalErr.message);
-      if (clientSocket.readyState === WebSocket.OPEN) {
-        clientSocket.close(1011, 'Server internal error');
-      }
+
+      clientSocket.on('error', (err) => {
+        console.error('[Voice Socket] Client connection error:', err);
+        clearInterval(accountingTimer);
+        clearTimeout(hardCapTimer);
+        closeLiveSession(liveSession);
+      });
+    } catch (err: any) {
+      console.error('[Voice Session Initialization Error]:', err.message);
+      clientSocket.close(1011, 'Voice session initialization failed');
     }
   });
-
-  return wss;
 }
