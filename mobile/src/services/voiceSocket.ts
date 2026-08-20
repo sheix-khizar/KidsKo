@@ -49,6 +49,22 @@ function createWavBase64(pcmBinary: string): string {
   return btoa(binaryHeader + pcmBinary);
 }
 
+// ⚡ 1. PRE-WARM AUDIO ENGINE: Play 100ms of silent 24kHz PCM to pre-initialize AVAudioEngine / AudioTrack hardware node
+function prewarmAudioEngine() {
+  try {
+    const silentPcm = new Array(4800).fill('\0').join('');
+    const silentWav = createWavBase64(silentPcm);
+    const player = createAudioPlayer({ uri: `data:audio/wav;base64,${silentWav}` });
+    player.play();
+    setTimeout(() => {
+      try { player.remove(); } catch {}
+    }, 150);
+    console.log('[Mobile Audio Engine]: ⚡ Pre-warmed native AVAudioEngine / AudioTrack hardware node');
+  } catch (err) {
+    console.warn('[Mobile Audio Engine]: Could not pre-warm audio engine:', err);
+  }
+}
+
 export class VoiceSession {
   private ws: WebSocket | null = null;
   private activePlayer: any = null;
@@ -62,13 +78,14 @@ export class VoiceSession {
   private speechSilenceTimer: any = null;
   private currentTurnId = 0;
 
-  // 3. Throttle UI State Updates: Dedup state changes to prevent JS thread locking
+  // Dedup React State Tracking
   private currentState: 'listening' | 'thinking' | 'speaking' | null = null;
 
-  // Race-condition lock flag
+  // Race-condition & response lock flags
   private isProcessingTurn = false;
+  private isAwaitingResponse = false;
 
-  // 1 & 2. 2-Chunk Jitter Buffer & Direct Audio Queue State (Bypasses React State)
+  // Streaming 2-Chunk Jitter Buffer & Audio State
   private pcmQueue: string[] = [];
   private audioQueue: string[] = [];
   private accumulatedPcmBinary = '';
@@ -85,7 +102,7 @@ export class VoiceSession {
     return this.lastSentTranscript;
   }
 
-  // 3. Throttle UI State Updates: Dispatches state change ONCE per distinct state transition
+  // Dedup React State Updates: Only dispatch state change when transitioning to a NEW distinct state
   private updateState(newState: 'listening' | 'thinking' | 'speaking') {
     if (this.currentState !== newState) {
       console.log(`[VoiceSession State Change]: ${this.currentState || 'none'} -> ${newState}`);
@@ -131,11 +148,14 @@ export class VoiceSession {
 
         if (msg.type === 'ready') {
           console.log(`[Mobile WS Ready Frame]: Session cap = ${msg.capSeconds}s`);
+          // ⚡ Pre-warm native audio engine hardware node immediately on session start
+          prewarmAudioEngine();
           this.updateState('listening');
           callbacks.onReady(msg.capSeconds);
         } else if (msg.type === 'cap_reached') {
           console.log('[Mobile WS Cap Reached Frame]: Server sent cap_reached signal.');
           this.isSessionActive = false;
+          this.isAwaitingResponse = false;
           this.stopSpeechRecognition();
           this.stopAudioPlayback();
           callbacks.onCapReached();
@@ -143,13 +163,13 @@ export class VoiceSession {
           console.error('[Mobile WS Error Frame]: Server error =', msg.reason);
           callbacks.onError(msg.reason);
           this.isProcessingTurn = false;
+          this.isAwaitingResponse = false;
         } else if (msg.type === 'audio') {
           if (turnId !== this.currentTurnId) return;
 
           this.receivedChunkCount++;
           const decodedPcm = atob(msg.data);
           
-          // 2. Bypass React State for Audio Data: Push raw PCM chunks directly to class memory array
           this.pcmQueue.push(decodedPcm);
           this.accumulatedPcmBinary += decodedPcm;
 
@@ -157,11 +177,10 @@ export class VoiceSession {
             this.firstChunkTime = Date.now();
             const latencyToFirstChunk = this.promptSentTime > 0 ? this.firstChunkTime - this.promptSentTime : 0;
             console.log(`[Mobile Audio] 🚀 First 24kHz chunk received: +${latencyToFirstChunk} ms after prompt sent (Turn #${turnId})`);
-            // Do NOT start playback on Chunk #1 alone (prevents audio underrun)
             return;
           }
 
-          // 1. 2-Chunk Jitter Buffer: When pcmQueue.length >= 2, initialize playback
+          // 2-Chunk Jitter Buffer: When pcmQueue.length >= 2, initialize streaming playback
           if (!this.hasStartedPlayback && this.pcmQueue.length >= 2) {
             const launchPcm = this.accumulatedPcmBinary;
             this.accumulatedPcmBinary = '';
@@ -220,6 +239,7 @@ export class VoiceSession {
       console.log(`[Mobile WebSocket Closed Event]: Code=${e.code}, Reason="${e.reason || 'None'}"`);
       this.isSessionActive = false;
       this.isProcessingTurn = false;
+      this.isAwaitingResponse = false;
       this.stopSpeechRecognition();
       this.stopAudioPlayback();
       callbacks.onClose(e.reason || e.code);
@@ -228,6 +248,7 @@ export class VoiceSession {
     this.ws.onerror = (e: any) => {
       console.error('[Mobile WebSocket Error Event]:', e?.message || e);
       this.isProcessingTurn = false;
+      this.isAwaitingResponse = false;
       callbacks.onError(e?.message || 'Connection error');
     };
 
@@ -238,6 +259,7 @@ export class VoiceSession {
     if (this.ws?.readyState === WebSocket.OPEN) {
       console.log('[Mobile Sending Image Capture]:', base64Jpeg.length, 'base64 chars, caption:', caption || '(none)');
       this.isProcessingTurn = true;
+      this.isAwaitingResponse = true;
       this.resetTurnState();
       this.updateState('thinking');
       this.promptSentTime = Date.now();
@@ -309,13 +331,15 @@ export class VoiceSession {
       this.speechSilenceTimer = null;
     }
 
-    if (this.isProcessingTurn) {
-      console.log('[Mobile Voice Input] 🛑 Duplicate turn finalization blocked (turn processing in progress):', transcript);
+    if (this.isProcessingTurn || this.isAwaitingResponse) {
+      console.log('[Mobile Voice Input] 🛑 Duplicate turn finalization blocked (turn processing / in-flight request):', transcript);
       return;
     }
 
     if (transcript && transcript.length > 0 && transcript !== this.lastSentTranscript && this.ws?.readyState === WebSocket.OPEN) {
+      // 🔒 2. LOCK STT TRANSCRIPTS: Lock turn processing and mark in-flight request active
       this.isProcessingTurn = true;
+      this.isAwaitingResponse = true;
       this.resetTurnState();
       this.updateState('thinking');
       this.promptSentTime = Date.now();
@@ -348,6 +372,12 @@ export class VoiceSession {
         const isFinal = event.isFinal || event.results?.[0]?.isFinal;
 
         if (transcript && transcript.length > 0) {
+          // 🔒 2. LOCK STT TRANSCRIPTS WHILE AWAITING GEMINI RESPONSE: Ignore late STT callbacks while waiting for in-flight response
+          if (this.isAwaitingResponse && !this.isKidskoSpeaking()) {
+            console.log('[SpeechRec Lifecycle] 🔒 Ignored STT callback while awaiting Gemini response (preventing false cancellation):', transcript);
+            return;
+          }
+
           if (this.isKidskoSpeaking()) {
             const words = transcript.split(/\s+/).filter(Boolean);
             const isShortNoise = words.length < 2;
@@ -361,6 +391,7 @@ export class VoiceSession {
             console.log(`[SpeechRec Lifecycle] ⚡ Genuine user interruption detected during Turn #${this.currentTurnId}! Stopping Kidsko playback immediately:`, transcript);
             this.stopAudioPlayback();
             this.isProcessingTurn = false;
+            this.isAwaitingResponse = false;
             this.updateState('listening');
           }
 
@@ -476,7 +507,9 @@ export class VoiceSession {
         const playbackEndTime = Date.now();
         const totalTurnTime = this.promptSentTime > 0 ? playbackEndTime - this.promptSentTime : 0;
         console.log(`[Mobile Audio] 🔊 Turn Playback finished natively (+${totalTurnTime} ms total). Session WAITING FOR NEXT USER TURN (Turn #${turnId}).`);
+        // 🔓 Unlock in-flight response locks when playback finishes completely
         this.isProcessingTurn = false;
+        this.isAwaitingResponse = false;
         this.updateState('listening');
       }
       return;
@@ -537,6 +570,7 @@ export class VoiceSession {
     console.log('[Mobile Session End Call]: User manually ending voice session...');
     this.isSessionActive = false;
     this.isProcessingTurn = false;
+    this.isAwaitingResponse = false;
     this.clearSpeechSubscriptions();
     this.stopAudioPlayback();
     if (this.ws) {
