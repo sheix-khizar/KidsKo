@@ -398,20 +398,29 @@ export class VoiceSession {
         const isFinal = event.isFinal || event.results?.[0]?.isFinal;
 
         if (transcript && transcript.length > 0) {
-          // ⚡ GENUINE USER BARGE-IN / INTERRUPTION DETECTION DURING AI SPEECH:
+          // 🛡️ SELF-ECHO & BARGE-IN FILTERING DURING AI SPEECH:
           if (this.isKidskoSpeaking() || this.currentState === 'speaking') {
             const words = transcript.split(/\s+/).filter(Boolean);
             const cleanTranscript = transcript.toLowerCase();
 
-            // Check for explicit stop / interrupt keywords (Urdu & English)
-            const isExplicitStop = /^(ruko|rukko|stop|wait|suno|listen|tehero|bhai|chup|quiet|hold)/i.test(cleanTranscript);
+            // 1. Explicit user stop/interrupt keywords (Urdu & English)
+            const isExplicitStop = /\b(ruko|rukko|stop|wait|suno|listen|tehero|bhai|chup|quiet|hold|paas|pause)\b/i.test(cleanTranscript);
 
-            // Check if transcript is an echo of Kidsko's recent text
-            const isEchoOfAi = this.lastAiText && cleanTranscript.includes(this.lastAiText.toLowerCase().slice(0, 15));
-            const isShortNoise = words.length < 2 && !isExplicitStop;
+            // 2. Check if transcript contains words from Kidsko's current response (speaker echo)
+            let isEchoOfAi = false;
+            if (this.lastAiText && this.lastAiText.length > 0) {
+              const aiWords = this.lastAiText.toLowerCase().split(/\s+/).filter((w: string) => w.length > 3);
+              const matchingWords = words.filter((w: string) => aiWords.includes(w.toLowerCase()));
+              if (matchingWords.length >= 2 || (words.length > 0 && matchingWords.length / words.length > 0.4)) {
+                isEchoOfAi = true;
+              }
+            }
 
-            if (isEchoOfAi || isShortNoise) {
-              console.log('[SpeechRec Lifecycle] 🛡️ Ignored speaker echo / short background noise during AI speech:', transcript);
+            // 🛡️ Filter out self-echo, short background noises (< 4 words) unless an explicit stop command was spoken
+            const isShortFragment = words.length < 4 && !isExplicitStop;
+
+            if (isEchoOfAi || isShortFragment) {
+              console.log('[SpeechRec Lifecycle] 🛡️ Ignored Kidsko self-echo / short background noise during AI speech:', transcript);
               return;
             }
 
