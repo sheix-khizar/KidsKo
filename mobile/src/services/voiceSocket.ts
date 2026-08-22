@@ -398,53 +398,9 @@ export class VoiceSession {
         const isFinal = event.isFinal || event.results?.[0]?.isFinal;
 
         if (transcript && transcript.length > 0) {
-          // 🛡️ SELF-ECHO & BARGE-IN FILTERING DURING AI SPEECH:
-          if (this.isKidskoSpeaking() || this.currentState === 'speaking') {
-            const words = transcript.split(/\s+/).filter(Boolean);
-            const cleanTranscript = transcript.toLowerCase();
-
-            // 1. Explicit user stop/interrupt keywords (Urdu & English)
-            const isExplicitStop = /\b(ruko|rukko|stop|wait|suno|listen|tehero|bhai|chup|quiet|hold|paas|pause)\b/i.test(cleanTranscript);
-
-            // 2. Check if transcript contains words from Kidsko's current response (speaker echo)
-            let isEchoOfAi = false;
-            if (this.lastAiText && this.lastAiText.length > 0) {
-              const aiWords = this.lastAiText.toLowerCase().split(/\s+/).filter((w: string) => w.length > 3);
-              const matchingWords = words.filter((w: string) => aiWords.includes(w.toLowerCase()));
-              if (matchingWords.length >= 2 || (words.length > 0 && matchingWords.length / words.length > 0.4)) {
-                isEchoOfAi = true;
-              }
-            }
-
-            // 🛡️ Filter out self-echo, short background noises (< 4 words) unless an explicit stop command was spoken
-            const isShortFragment = words.length < 4 && !isExplicitStop;
-
-            if (isEchoOfAi || isShortFragment) {
-              console.log('[SpeechRec Lifecycle] 🛡️ Ignored Kidsko self-echo / short background noise during AI speech:', transcript);
-              return;
-            }
-
-            // ⚡ GENUINE USER BARGE-IN DETECTED: Immediately stop Kidsko playback and switch to listening mode!
-            console.log(`[SpeechRec Lifecycle] ⚡ Genuine user interruption detected ("${transcript}")! Stopping Kidsko playback immediately...`);
-            this.stopAudioPlayback();
-            this.isProcessingTurn = false;
-            this.isAwaitingResponse = false;
-            this.updateState('listening');
-            this.callbacks?.onTranscript?.(transcript);
-
-            if (isFinal) {
-              this.finalizeSpokenTurn(transcript);
-            } else {
-              if (this.speechSilenceTimer) clearTimeout(this.speechSilenceTimer);
-              this.speechSilenceTimer = setTimeout(() => {
-                this.finalizeSpokenTurn(transcript);
-              }, 600);
-            }
-            return;
-          }
-
-          if (this.isAwaitingResponse) {
-            console.log('[SpeechRec Lifecycle] 🔒 Ignored STT callback while awaiting Gemini response (in-flight request):', transcript);
+          // 🛡️ Mute STT transcript callbacks during AI speech & response generation to prevent self-echo loops
+          if (this.currentState === 'speaking' || this.isKidskoSpeaking() || this.isAwaitingResponse) {
+            console.log('[SpeechRec Lifecycle] 🛡️ STT transcript muted during AI speech / response generation:', transcript);
             return;
           }
 
