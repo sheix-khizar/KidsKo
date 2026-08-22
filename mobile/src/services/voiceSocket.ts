@@ -343,7 +343,7 @@ export class VoiceSession {
     setTimeout(() => {
       if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN) {
         try {
-          console.log('[SpeechRec Lifecycle]: Flushed native STT buffer & started listening for fresh user turns...');
+          console.log('[SpeechRec Lifecycle]: Restarted continuous STT listener...');
           ExpoSpeechRecognitionModule.start({ lang: 'en-US', interimResults: true, continuous: true });
         } catch (err: any) {
           console.error('[SpeechRec Lifecycle]: Error restarting speech recognition:', err?.message || err);
@@ -398,9 +398,44 @@ export class VoiceSession {
         const isFinal = event.isFinal || event.results?.[0]?.isFinal;
 
         if (transcript && transcript.length > 0) {
-          // 🛡️ Mute STT transcript callbacks during AI speech & response generation to prevent self-echo loops
-          if (this.currentState === 'speaking' || this.isKidskoSpeaking() || this.isAwaitingResponse) {
-            console.log('[SpeechRec Lifecycle] 🛡️ STT transcript muted during AI speech / response generation:', transcript);
+          // If Kidsko is speaking, check if the transcript is student speech or AI speaker echo
+          if (this.isKidskoSpeaking() || this.currentState === 'speaking') {
+            let isEchoOfAi = false;
+            if (this.lastAiText && this.lastAiText.length > 0) {
+              const cleanAi = this.lastAiText.toLowerCase();
+              const cleanUser = transcript.toLowerCase();
+              if (cleanAi.includes(cleanUser) || cleanUser.includes(cleanAi.slice(0, 20))) {
+                isEchoOfAi = true;
+              }
+            }
+
+            if (isEchoOfAi) {
+              console.log('[SpeechRec Lifecycle] 🛡️ Ignored Kidsko self-echo during AI speech:', transcript);
+              return;
+            }
+
+            // ⚡ STUDENT IS SPEAKING! Stop Kidsko's playback immediately and process the student's turn!
+            console.log(`[SpeechRec Lifecycle] ⚡ Student spoken turn detected ("${transcript}")! Stopping Kidsko playback immediately...`);
+            this.stopAudioPlayback();
+            this.isProcessingTurn = false;
+            this.isAwaitingResponse = false;
+            this.updateState('listening');
+            this.callbacks?.onTranscript?.(transcript);
+
+            if (isFinal) {
+              this.finalizeSpokenTurn(transcript);
+            } else {
+              if (this.speechSilenceTimer) clearTimeout(this.speechSilenceTimer);
+              this.speechSilenceTimer = setTimeout(() => {
+                console.log('[Mobile Voice Input] VAD pause detected -> Finalizing spoken turn:', transcript);
+                this.finalizeSpokenTurn(transcript);
+              }, 600);
+            }
+            return;
+          }
+
+          if (this.isAwaitingResponse) {
+            console.log('[SpeechRec Lifecycle] 🔒 Ignored STT callback while awaiting Gemini response (in-flight request):', transcript);
             return;
           }
 
@@ -518,8 +553,6 @@ export class VoiceSession {
         this.isProcessingTurn = false;
         this.isAwaitingResponse = false;
         this.updateState('listening');
-        // Flush native STT microphone buffer right when AI playback finishes so self-echo does NOT leak into next turn
-        this.restartSpeechRecognition();
       }
       return;
     }
