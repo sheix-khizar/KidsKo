@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Modal, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Modal, ActivityIndicator } from 'react-native';
 import { VoiceSession } from '../services/voiceSocket';
 import { pickImageFromGallery, captureImageFromCamera } from '../utils/imageHelper';
 
@@ -19,8 +19,6 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
   const [isSendingSnapshot, setIsSendingSnapshot] = useState(false);
   const [snapshotsRemaining, setSnapshotsRemaining] = useState<number | null>(null);
   const [lastSpokenTranscript, setLastSpokenTranscript] = useState<string>('');
-  const [showCaptions, setShowCaptions] = useState<boolean>(true);
-  const [aiSpokenText, setAiSpokenText] = useState<string>('');
 
   const sessionRef = useRef<VoiceSession | null>(null);
   const timerRef = useRef<any>(null);
@@ -58,17 +56,9 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
             setLastSpokenTranscript(text.trim());
           }
         },
-        onAiTranscript: (text) => {
-          if (text) {
-            setAiSpokenText((prev) => prev + text);
-          }
-        },
         onStateChange: (state) => {
           console.log('[LiveVoiceScreen] Voice state changed:', state);
           setVoiceState(state);
-          if (state === 'thinking' || state === 'listening') {
-            setAiSpokenText('');
-          }
         },
         onSnapshotAck: (remaining) => {
           setSnapshotsRemaining(remaining);
@@ -95,6 +85,11 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
   const handleEnd = async () => {
     await sessionRef.current?.end();
     onBack();
+  };
+
+  const handleInterrupt = () => {
+    console.log('[LiveVoiceScreen] User triggered Tap to Interrupt!');
+    sessionRef.current?.interrupt();
   };
 
   const handlePickGallery = async () => {
@@ -146,12 +141,12 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
       {status === 'live' && (
         <View style={styles.stateCard}>
           {voiceState === 'speaking' ? (
-            <View style={[styles.avatarCircle, styles.avatarSpeaking]}>
+            <Pressable style={[styles.avatarCircle, styles.avatarSpeaking]} onPress={handleInterrupt}>
               <Text style={styles.avatarEmoji}>🦉</Text>
               <View style={styles.speakingBadge}>
                 <Text style={styles.speakingBadgeText}>🔊 Kidsko is Talking...</Text>
               </View>
-            </View>
+            </Pressable>
           ) : voiceState === 'thinking' ? (
             <View style={[styles.avatarCircle, styles.avatarThinking]}>
               <ActivityIndicator size="large" color="#FFD54F" />
@@ -164,6 +159,12 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
                 <Text style={styles.listeningBadgeText}>🟢 Listening to You...</Text>
               </View>
             </View>
+          )}
+
+          {voiceState === 'speaking' && (
+            <Pressable style={styles.interruptBanner} onPress={handleInterrupt}>
+              <Text style={styles.interruptBannerText}>✋ Tap to Interrupt</Text>
+            </Pressable>
           )}
 
           {lastSpokenTranscript ? (
@@ -179,16 +180,6 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
         </View>
       )}
 
-      {/* Live AI Spoken Caption Box */}
-      {showCaptions && aiSpokenText.length > 0 && status === 'live' && (
-        <View style={styles.aiCaptionCard}>
-          <Text style={styles.aiCaptionLabel}>💬 Kidsko Live Caption:</Text>
-          <ScrollView style={styles.aiCaptionScroll} nestedScrollEnabled>
-            <Text style={styles.aiCaptionText}>{aiSpokenText}</Text>
-          </ScrollView>
-        </View>
-      )}
-
       {isSendingSnapshot ? (
         <View style={styles.analyzingBox}>
           <ActivityIndicator size="large" color="#FFD54F" />
@@ -196,18 +187,9 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
         </View>
       ) : (
         status === 'live' && (
-          <View style={styles.actionRow}>
-            <Pressable style={styles.showButton} onPress={() => setShowOptionModal(true)}>
-              <Text style={styles.showButtonText}>📷 Show Homework</Text>
-            </Pressable>
-
-            <Pressable
-              style={[styles.captionBtn, showCaptions ? styles.captionBtnActive : styles.captionBtnInactive]}
-              onPress={() => setShowCaptions((prev) => !prev)}
-            >
-              <Text style={styles.captionBtnText}>{showCaptions ? '💬 Captions ON' : '💬 Captions OFF'}</Text>
-            </Pressable>
-          </View>
+          <Pressable style={styles.showButton} onPress={() => setShowOptionModal(true)}>
+            <Text style={styles.showButtonText}>📷 Show Homework</Text>
+          </Pressable>
         )
       )}
 
@@ -247,23 +229,15 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1a1a2e', padding: 20 },
+  container: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1a1a2e', padding: 24 },
   title: { fontSize: 20, fontWeight: '800', color: '#fff', marginBottom: 8, textAlign: 'center' },
   timer: { fontSize: 16, color: '#FFD54F', fontWeight: '700', marginBottom: 16 },
   errorSub: { fontSize: 14, color: '#FF8A80', fontWeight: '600', marginBottom: 20, textAlign: 'center' },
   endButton: { backgroundColor: '#EA4335', borderRadius: 30, paddingVertical: 14, paddingHorizontal: 40, marginTop: 10 },
   endButtonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  
-  actionRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
-  showButton: { backgroundColor: '#1a73e8', borderRadius: 24, paddingVertical: 12, paddingHorizontal: 20 },
-  showButtonText: { color: '#fff', fontWeight: '800', fontSize: 15 },
-
-  captionBtn: { borderRadius: 24, paddingVertical: 12, paddingHorizontal: 18, borderWidth: 1 },
-  captionBtnActive: { backgroundColor: '#2e7d32', borderColor: '#4CAF50' },
-  captionBtnInactive: { backgroundColor: '#333355', borderColor: '#555577' },
-  captionBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
-
-  snapshotCount: { color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: '600', marginBottom: 16 },
+  showButton: { backgroundColor: '#1a73e8', borderRadius: 24, paddingVertical: 14, paddingHorizontal: 28, marginBottom: 12 },
+  showButtonText: { color: '#fff', fontWeight: '800', fontSize: 16 },
+  snapshotCount: { color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: '600', marginBottom: 20 },
   analyzingBox: { alignItems: 'center', marginVertical: 20, gap: 10 },
   analyzingText: { color: '#FFD54F', fontSize: 16, fontWeight: '700' },
 
@@ -272,52 +246,89 @@ const styles = StyleSheet.create({
     width: '100%',
     backgroundColor: '#252542',
     borderRadius: 24,
-    padding: 16,
+    padding: 20,
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
   },
   avatarCircle: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: 16,
     position: 'relative',
   },
-  avatarListening: { backgroundColor: '#1b3a2b', borderWidth: 3, borderColor: '#4CAF50' },
-  avatarThinking: { backgroundColor: '#3a351b', borderWidth: 3, borderColor: '#FFC107' },
-  avatarSpeaking: { backgroundColor: '#3a251b', borderWidth: 3, borderColor: '#FF9800' },
-  avatarEmoji: { fontSize: 40 },
-  thinkingText: { color: '#FFD54F', fontWeight: '700', fontSize: 12, marginTop: 4 },
+  avatarListening: {
+    backgroundColor: '#1b3a2b',
+    borderWidth: 3,
+    borderColor: '#4CAF50',
+  },
+  avatarThinking: {
+    backgroundColor: '#3a351b',
+    borderWidth: 3,
+    borderColor: '#FFC107',
+  },
+  avatarSpeaking: {
+    backgroundColor: '#3a251b',
+    borderWidth: 3,
+    borderColor: '#FF9800',
+  },
+  avatarEmoji: { fontSize: 44 },
+  thinkingText: { color: '#FFD54F', fontWeight: '700', fontSize: 13, marginTop: 6 },
 
-  listeningBadge: { position: 'absolute', bottom: -10, backgroundColor: '#2e7d32', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 12 },
+  listeningBadge: {
+    position: 'absolute',
+    bottom: -10,
+    backgroundColor: '#2e7d32',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
   listeningBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
 
-  speakingBadge: { position: 'absolute', bottom: -10, backgroundColor: '#e65100', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 12 },
+  speakingBadge: {
+    position: 'absolute',
+    bottom: -10,
+    backgroundColor: '#e65100',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
   speakingBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
 
-  transcriptBox: { backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6, width: '100%', alignItems: 'center' },
+  interruptBanner: {
+    backgroundColor: '#FF9800',
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderRadius: 20,
+    marginBottom: 14,
+    elevation: 3,
+    shadowColor: '#FF9800',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
+  },
+  interruptBannerText: {
+    color: '#000',
+    fontWeight: '900',
+    fontSize: 13,
+    letterSpacing: 0.3,
+  },
+
+  transcriptBox: {
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    width: '100%',
+    alignItems: 'center',
+  },
   transcriptLabel: { color: '#FFD54F', fontSize: 11, fontWeight: '700', marginBottom: 2 },
   transcriptText: { color: '#fff', fontSize: 13, fontWeight: '600', fontStyle: 'italic', textAlign: 'center' },
   promptHint: { color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: '600', textAlign: 'center' },
-
-  // Live AI Caption Card
-  aiCaptionCard: {
-    width: '100%',
-    maxHeight: 120,
-    backgroundColor: '#16213e',
-    borderRadius: 16,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#0f3460',
-    marginBottom: 16,
-  },
-  aiCaptionLabel: { color: '#FFD54F', fontSize: 12, fontWeight: '800', marginBottom: 4 },
-  aiCaptionScroll: { maxHeight: 80 },
-  aiCaptionText: { color: '#e0e0e0', fontSize: 14, fontWeight: '600', lineHeight: 20 },
 
   // Modal styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },

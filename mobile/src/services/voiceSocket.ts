@@ -15,8 +15,8 @@ type VoiceCallbacks = {
 };
 
 // 24000 Hz, 16-bit mono PCM = 48000 bytes/sec
-// 3-Chunk Jitter Buffer threshold = 28,800 bytes (~300ms safety cushion)
-const STREAM_SEGMENT_BYTES = 28800;
+// 2-Chunk Fast Jitter Buffer threshold = 19,200 bytes (~200ms safety cushion for ultra-fast response)
+const STREAM_SEGMENT_BYTES = 19200;
 
 // Construct a strict 24000Hz (24kHz) 16-bit Mono PCM WAV container
 function createWavBase64(pcmBinary: string): string {
@@ -90,7 +90,7 @@ export class VoiceSession {
   private isProcessingTurn = false;
   private isAwaitingResponse = false;
 
-  // 3-Chunk Jitter Buffer (~300ms Cushion)
+  // 2-Chunk Fast Jitter Buffer (~150-200ms Cushion for ultra-fast startup)
   private pcmQueue: string[] = [];
   private audioQueue: string[] = [];
   private accumulatedPcmBinary = '';
@@ -105,6 +105,19 @@ export class VoiceSession {
 
   getLastTranscript(): string {
     return this.lastSentTranscript;
+  }
+
+  // 🛑 GOOGLE ASSISTANT TAP-TO-INTERRUPT METHOD
+  interrupt() {
+    console.log('[VoiceSession]: 🛑 User tapped "Tap to Interrupt"! Stopping audio playback & returning to listening mode immediately...');
+    this.currentTurnId++; // Invalidate active turn ID to ignore stray incoming audio chunks
+    this.stopAudioPlayback();
+    this.isProcessingTurn = false;
+    this.isAwaitingResponse = false;
+    this.updateState('listening');
+    if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN) {
+      this.restartSpeechRecognition();
+    }
   }
 
   private updateState(newState: 'listening' | 'thinking' | 'speaking') {
@@ -145,7 +158,7 @@ export class VoiceSession {
     const socketUrl = `${WS_URL}/ws/voice?token=${token}${studentParam}`;
     console.log('Connecting Voice WebSocket to:', socketUrl);
     this.ws = new WebSocket(socketUrl);
-    this.ws.binaryType = 'arraybuffer'; // 2.A Binary WS Type
+    this.ws.binaryType = 'arraybuffer';
 
     this.ws.onmessage = (event) => {
       try {
@@ -153,7 +166,6 @@ export class VoiceSession {
         if (typeof event.data === 'string') {
           msg = JSON.parse(event.data);
         } else if (event.data instanceof ArrayBuffer) {
-          // Direct binary relay processing
           const bytes = new Uint8Array(event.data);
           let binary = '';
           for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
@@ -189,18 +201,18 @@ export class VoiceSession {
           this.pcmQueue.push(decodedPcm);
           this.accumulatedPcmBinary += decodedPcm;
 
-          if (this.receivedChunkCount < 3) {
+          if (this.receivedChunkCount < 2) {
             if (this.receivedChunkCount === 1) {
               this.firstChunkTime = Date.now();
               const latencyToFirstChunk = this.promptSentTime > 0 ? this.firstChunkTime - this.promptSentTime : 0;
               console.log(`[Mobile Audio] 🚀 First 24kHz chunk received: +${latencyToFirstChunk} ms after prompt sent (Turn #${turnId})`);
             }
-            // 2.A 3-CHUNK CUSHION: Do NOT start playback on Chunk #1 or #2
+            // ⚡ 2-CHUNK FAST BUFFER: Do NOT start playback on Chunk #1
             return;
           }
 
-          // 2.A BUFFER LAUNCH: Wait until pcmQueue.length >= 3 (~300ms cushion) before triggering playback
-          if (!this.hasStartedPlayback && this.pcmQueue.length >= 3) {
+          // ⚡ FAST BUFFER LAUNCH: Wait until pcmQueue.length >= 2 (~150ms cushion) before triggering playback
+          if (!this.hasStartedPlayback && this.pcmQueue.length >= 2) {
             const launchPcm = this.accumulatedPcmBinary;
             this.accumulatedPcmBinary = '';
 
@@ -211,7 +223,7 @@ export class VoiceSession {
             this.updateState('speaking');
             this.playNextAudioSegment();
           } else if (this.hasStartedPlayback && this.accumulatedPcmBinary.length >= STREAM_SEGMENT_BYTES) {
-            // 2.A STREAM IN: Continuously append incoming chunks to open hardware player
+            // Continuously append incoming chunks to open hardware player
             const segmentPcm = this.accumulatedPcmBinary.slice(0, STREAM_SEGMENT_BYTES);
             this.accumulatedPcmBinary = this.accumulatedPcmBinary.slice(STREAM_SEGMENT_BYTES);
 
@@ -350,15 +362,13 @@ export class VoiceSession {
     }
   }
 
-  // 2.B FIX NATIVE STT DEADLOCK & FREEZE (TURN #11 BUG):
-  // 200ms Cooldown with Singleton Guard to prevent native audio engine locks
   private restartSpeechRecognition() {
     if (!this.isSessionActive || this.ws?.readyState !== WebSocket.OPEN || this.isSTTActive) return;
     setTimeout(() => {
       if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN && !this.isSTTActive) {
         this.startSpeechRecognition();
       }
-    }, 200);
+    }, 150);
   }
 
   private finalizeSpokenTurn(transcript: string) {
@@ -373,7 +383,6 @@ export class VoiceSession {
     }
 
     if (transcript && transcript.length > 0 && transcript !== this.lastSentTranscript && this.ws?.readyState === WebSocket.OPEN) {
-      // 2.C TURN LOCK: Set isProcessingTurn = true and block duplicate transcript submissions
       this.isProcessingTurn = true;
       this.isAwaitingResponse = true;
       this.resetTurnState();
@@ -386,7 +395,6 @@ export class VoiceSession {
   }
 
   private async startSpeechRecognition() {
-    // 2.B SINGLETON GUARD: Ensure start() is never called twice in parallel (fixes Turn #11 freeze)
     if (!this.isSessionActive || this.isStartingSpeech || this.isSTTActive) {
       return;
     }
@@ -404,7 +412,7 @@ export class VoiceSession {
 
       const subStart = ExpoSpeechRecognitionModule.addListener('start', () => {
         console.log('[SpeechRec Lifecycle]: Started listening for spoken user turns...');
-        this.isSTTActive = true; // Mark STT active natively
+        this.isSTTActive = true;
       });
 
       const subResult = ExpoSpeechRecognitionModule.addListener('result', (event: any) => {
@@ -412,31 +420,29 @@ export class VoiceSession {
         const isFinal = event.isFinal || event.results?.[0]?.isFinal;
 
         if (transcript && transcript.length > 0) {
-          // 2.C STT MUTE: Completely ignore STT callbacks while state is speaking/thinking/awaiting response
           if (this.currentState === 'speaking' || this.isKidskoSpeaking() || this.isAwaitingResponse) {
             console.log('[SpeechRec Lifecycle] 🛡️ STT transcript muted during AI speech / response generation to prevent ping-pong echo loops:', transcript);
             return;
           }
 
-          // Real-time live transcript streaming to UI screen
           this.callbacks?.onTranscript?.(transcript);
 
           if (isFinal) {
             this.finalizeSpokenTurn(transcript);
           } else {
-            // VAD silence timer
+            // ⚡ FAST ULTRA-LOW LATENCY VAD SILENCE DETECTOR (350ms timer)
             if (this.speechSilenceTimer) clearTimeout(this.speechSilenceTimer);
             this.speechSilenceTimer = setTimeout(() => {
-              console.log('[Mobile Voice Input] VAD pause detected -> Finalizing spoken turn:', transcript);
+              console.log('[Mobile Voice Input] Fast VAD pause detected (350ms) -> Finalizing spoken turn immediately:', transcript);
               this.finalizeSpokenTurn(transcript);
-            }, 600);
+            }, 350);
           }
         }
       });
 
       const subEnd = ExpoSpeechRecognitionModule.addListener('end', () => {
-        console.log('[SpeechRec Lifecycle]: Recognition cycle ended natively. Auto-restarting after 200ms cooldown...');
-        this.isSTTActive = false; // Reset STT active flag on native end
+        console.log('[SpeechRec Lifecycle]: Recognition cycle ended natively. Auto-restarting after 150ms cooldown...');
+        this.isSTTActive = false;
         if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN) {
           this.restartSpeechRecognition();
         }
@@ -446,13 +452,12 @@ export class VoiceSession {
         console.error('[SpeechRec Lifecycle]: Error event =', event.error, event.message);
         this.isSTTActive = false;
         this.isStartingSpeech = false;
-        // 2.B AUTO-RECOVERY: Debounced 300ms restart on error to prevent hanging indefinitely
         if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN && event.error !== 'no-match') {
           setTimeout(() => {
             if (this.isSessionActive && !this.isSTTActive) {
               this.restartSpeechRecognition();
             }
-          }, 300);
+          }, 250);
         }
       });
 
@@ -550,7 +555,7 @@ export class VoiceSession {
     this.updateState('speaking');
 
     const playbackStartTime = Date.now();
-    if (this.promptSentTime > 0 && this.receivedChunkCount <= 4) {
+    if (this.promptSentTime > 0 && this.receivedChunkCount <= 3) {
       const timeToFirstAudio = playbackStartTime - this.promptSentTime;
       console.log(`[Mobile Audio] 🔊 Direct 24kHz Native Playback started (Segment 1 Launch): +${timeToFirstAudio} ms after prompt sent (Turn #${turnId})`);
     }
