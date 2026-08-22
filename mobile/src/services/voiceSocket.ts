@@ -398,9 +398,44 @@ export class VoiceSession {
         const isFinal = event.isFinal || event.results?.[0]?.isFinal;
 
         if (transcript && transcript.length > 0) {
-          // 🛡️ Mute STT transcript callbacks during AI speech to prevent self-echo loops
-          if (this.currentState === 'speaking' || this.isKidskoSpeaking() || this.isAwaitingResponse) {
-            console.log('[SpeechRec Lifecycle] 🛡️ STT transcript muted during AI speech / response generation to prevent ping-pong echo loops:', transcript);
+          // ⚡ GENUINE USER BARGE-IN / INTERRUPTION DETECTION DURING AI SPEECH:
+          if (this.isKidskoSpeaking() || this.currentState === 'speaking') {
+            const words = transcript.split(/\s+/).filter(Boolean);
+            const cleanTranscript = transcript.toLowerCase();
+
+            // Check for explicit stop / interrupt keywords (Urdu & English)
+            const isExplicitStop = /^(ruko|rukko|stop|wait|suno|listen|tehero|bhai|chup|quiet|hold)/i.test(cleanTranscript);
+
+            // Check if transcript is an echo of Kidsko's recent text
+            const isEchoOfAi = this.lastAiText && cleanTranscript.includes(this.lastAiText.toLowerCase().slice(0, 15));
+            const isShortNoise = words.length < 2 && !isExplicitStop;
+
+            if (isEchoOfAi || isShortNoise) {
+              console.log('[SpeechRec Lifecycle] 🛡️ Ignored speaker echo / short background noise during AI speech:', transcript);
+              return;
+            }
+
+            // ⚡ GENUINE USER BARGE-IN DETECTED: Immediately stop Kidsko playback and switch to listening mode!
+            console.log(`[SpeechRec Lifecycle] ⚡ Genuine user interruption detected ("${transcript}")! Stopping Kidsko playback immediately...`);
+            this.stopAudioPlayback();
+            this.isProcessingTurn = false;
+            this.isAwaitingResponse = false;
+            this.updateState('listening');
+            this.callbacks?.onTranscript?.(transcript);
+
+            if (isFinal) {
+              this.finalizeSpokenTurn(transcript);
+            } else {
+              if (this.speechSilenceTimer) clearTimeout(this.speechSilenceTimer);
+              this.speechSilenceTimer = setTimeout(() => {
+                this.finalizeSpokenTurn(transcript);
+              }, 600);
+            }
+            return;
+          }
+
+          if (this.isAwaitingResponse) {
+            console.log('[SpeechRec Lifecycle] 🔒 Ignored STT callback while awaiting Gemini response (in-flight request):', transcript);
             return;
           }
 
@@ -518,7 +553,7 @@ export class VoiceSession {
         this.isProcessingTurn = false;
         this.isAwaitingResponse = false;
         this.updateState('listening');
-        // ⚡ Flush native STT microphone buffer right when AI playback finishes so self-echo does NOT leak into next turn
+        // Flush native STT microphone buffer right when AI playback finishes so self-echo does NOT leak into next turn
         this.restartSpeechRecognition();
       }
       return;
