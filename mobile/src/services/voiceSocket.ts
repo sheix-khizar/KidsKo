@@ -15,8 +15,8 @@ type VoiceCallbacks = {
 };
 
 // 24000 Hz, 16-bit mono PCM = 48000 bytes/sec
-// Initial launch segment = ~100ms (4,800 bytes) -> Starts audio playback instantly on Chunk #1/#2 in ~700ms-800ms
-const LAUNCH_SEGMENT_BYTES = 4800;
+// Initial launch segment = ~200ms (9,600 bytes) -> Starts audio playback instantly on Chunk #2 in ~800ms with zero initial stutter
+const LAUNCH_SEGMENT_BYTES = 9600;
 // Continuous streaming segment buffer = ~400ms (19,200 bytes) -> Ensures 0ms silence gaps while streaming rest of turn
 const STREAM_SEGMENT_BYTES = 19200;
 
@@ -187,7 +187,7 @@ export class VoiceSession {
 
           this.accumulatedPcmBinary += atob(msg.data);
 
-          // ⚡ INSTANT LAUNCH (Segment 1): Launch playback as soon as 4,800 bytes (~100ms) arrives
+          // ⚡ INSTANT LAUNCH (Segment 1): Launch playback as soon as 9,600 bytes (~200ms buffer) arrives
           if (!this.hasStartedPlayback && this.accumulatedPcmBinary.length >= LAUNCH_SEGMENT_BYTES) {
             const launchPcm = this.accumulatedPcmBinary.slice(0, LAUNCH_SEGMENT_BYTES);
             this.accumulatedPcmBinary = this.accumulatedPcmBinary.slice(LAUNCH_SEGMENT_BYTES);
@@ -444,12 +444,12 @@ export class VoiceSession {
           if (isFinal) {
             this.finalizeSpokenTurn(transcript);
           } else {
-            // 🚀 Kid-friendly 1.2s (1200ms) silence pause timer: Allows kids 1.2s to pause without being cut off mid-sentence
+            // 🚀 Snappy 800ms silence pause timer: Sends spoken turn to Gemini in 800ms after child stops talking
             if (this.speechSilenceTimer) clearTimeout(this.speechSilenceTimer);
             this.speechSilenceTimer = setTimeout(() => {
-              console.log('[Mobile Voice Input] 1200ms child pause detected -> Finalizing spoken turn:', transcript);
+              console.log('[Mobile Voice Input] 800ms child pause detected -> Finalizing spoken turn:', transcript);
               this.finalizeSpokenTurn(transcript);
-            }, 1200);
+            }, 800);
           }
         }
       });
