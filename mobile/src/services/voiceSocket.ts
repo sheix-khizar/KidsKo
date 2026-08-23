@@ -84,6 +84,7 @@ export class VoiceSession {
   private isPlayingQueue = false;
   private receivedChunkCount = 0;
   private isTurnComplete = false;
+  private hasLoggedPlaybackStart = false;
 
   // Fine-grained Lifecycle Diagnostic Timers
   private sessionStartTime = 0;
@@ -98,6 +99,7 @@ export class VoiceSession {
   }
 
   private updateState(newState: 'listening' | 'thinking' | 'speaking') {
+    if (!this.isSessionActive && newState !== 'listening') return;
     if (this.voiceState !== newState) {
       console.log(`[VoiceSession State Transition]: ${this.voiceState || 'none'} -> ${newState}`);
       this.voiceState = newState;
@@ -176,7 +178,7 @@ export class VoiceSession {
           this.isSessionReady = false;
           callbacks.onError(msg.reason);
         } else if (msg.type === 'audio') {
-          if (turnId !== this.currentTurnId) return;
+          if (turnId !== this.currentTurnId || !this.isSessionActive) return;
 
           this.receivedChunkCount++;
           if (this.receivedChunkCount === 1) {
@@ -214,7 +216,7 @@ export class VoiceSession {
             }
           }
         } else if (msg.type === 'turn_complete') {
-          if (turnId !== this.currentTurnId || (this.receivedChunkCount === 0 && !this.hasStartedPlayback)) {
+          if (turnId !== this.currentTurnId || (this.receivedChunkCount === 0 && !this.hasStartedPlayback) || !this.isSessionActive) {
             console.log(`[Mobile Audio]: Discarding stray turn_complete frame for Turn #${turnId}`);
             return;
           }
@@ -299,6 +301,7 @@ export class VoiceSession {
     this.hasStartedPlayback = false;
     this.isPlayingQueue = false;
     this.isTurnComplete = false;
+    this.hasLoggedPlaybackStart = false;
   }
 
   private stopAudioPlayback() {
@@ -311,6 +314,7 @@ export class VoiceSession {
     this.hasStartedPlayback = false;
     this.isPlayingQueue = false;
     this.isTurnInFlight = false;
+    this.hasLoggedPlaybackStart = false;
 
     if (this.activePlayer) {
       try {
@@ -336,7 +340,6 @@ export class VoiceSession {
     this.isRestartingSpeech = true;
     this.restartTriggerTime = Date.now();
 
-    // Fast-path recovery delay: 50ms for benign no-speech timeout, 200ms for other events
     const restartDelayMs = callerTag === 'no-speech' ? 50 : 200;
 
     setTimeout(() => {
@@ -345,7 +348,6 @@ export class VoiceSession {
           console.log(`[SpeechRec Lifecycle]: Started listening for spoken user turns (Triggered by [${callerTag}])...`);
           this.isMicActive = false;
 
-          // ⚡ Step 5: Mic Dead Watchdog Safety Net (3000ms timeout)
           if (this.micWatchdogTimer) clearTimeout(this.micWatchdogTimer);
           this.micWatchdogTimer = setTimeout(() => {
             if (this.isSessionActive && !this.isMicActive) {
@@ -373,14 +375,12 @@ export class VoiceSession {
       this.speechSilenceTimer = null;
     }
 
-    // ⚡ Step 4: Fast-talker Edge Case Guard: Buffer prompt if WebSocket is not ready yet
     if (!this.isSessionReady || this.ws?.readyState !== WebSocket.OPEN) {
       console.log(`[Mobile Voice Input] ⚠️ Turn finalized before WebSocket session ready — queued initial prompt: "${transcript}"`);
       this.pendingInitialPrompt = transcript;
       return;
     }
 
-    // 🛑 DUAL TURN GUARD: Block prompt submission if a turn is already in flight
     if (this.isTurnInFlight) {
       console.log('[Mobile Voice Input] 🛑 Turn in flight. Blocked duplicate submission:', transcript);
       return;
@@ -425,12 +425,10 @@ export class VoiceSession {
         const sinceRestart = this.restartTriggerTime > 0 ? Date.now() - this.restartTriggerTime : 0;
 
         console.log(`[SpeechRec Lifecycle]: Native speech recognition active & listening (session_elapsed=${sessionElapsed}ms, since_restart=${sinceRestart}ms)`);
-        // ⚡ Step 2: Instant UI update (<100ms) as soon as mic is active natively
         this.updateState('listening');
       });
 
       const subResult = ExpoSpeechRecognitionModule.addListener('result', (event: any) => {
-        // 🛑 MUTE STT: Completely ignore all transcript updates and VAD triggers while speaking, thinking, or turn in flight
         if (this.voiceState === 'speaking' || this.voiceState === 'thinking' || this.isTurnInFlight || this.isKidskoSpeaking()) {
           return;
         }
@@ -444,7 +442,6 @@ export class VoiceSession {
           if (isFinal) {
             this.finalizeSpokenTurn(transcript);
           } else {
-            // 🚀 Snappy 800ms silence pause timer: Sends spoken turn to Gemini in 800ms after child stops talking
             if (this.speechSilenceTimer) clearTimeout(this.speechSilenceTimer);
             this.speechSilenceTimer = setTimeout(() => {
               console.log('[Mobile Voice Input] 800ms child pause detected -> Finalizing spoken turn:', transcript);
@@ -514,14 +511,14 @@ export class VoiceSession {
 
   private preloadNextSegment() {
     const turnId = this.currentTurnId;
-    if (this.preloadedNextPlayer || this.audioQueue.length === 0) return;
+    if (this.preloadedNextPlayer || this.audioQueue.length === 0 || !this.isSessionActive) return;
 
     const nextSegmentUri = this.audioQueue.shift()!;
 
     try {
       const player = createAudioPlayer({ uri: nextSegmentUri });
 
-      if (this.currentTurnId !== turnId) {
+      if (this.currentTurnId !== turnId || !this.isSessionActive) {
         try { player.remove(); } catch {}
         return;
       }
@@ -546,6 +543,8 @@ export class VoiceSession {
     let playerToPlay: any = null;
     const isPreloaded = !!this.preloadedNextPlayer;
 
+    if (!this.isSessionActive) return;
+
     if (isPreloaded) {
       playerToPlay = this.preloadedNextPlayer;
       this.preloadedNextPlayer = null;
@@ -565,7 +564,7 @@ export class VoiceSession {
 
     if (!playerToPlay) {
       this.isPlayingQueue = false;
-      if (this.isTurnComplete) {
+      if (this.isTurnComplete && this.isSessionActive) {
         const playbackEndTime = Date.now();
         const totalTurnTime = this.promptSentTime > 0 ? playbackEndTime - this.promptSentTime : 0;
         console.log(`[Mobile Audio] 🔊 Turn Playback finished natively (+${totalTurnTime} ms total). Session WAITING FOR NEXT USER TURN (Turn #${turnId}).`);
@@ -579,7 +578,8 @@ export class VoiceSession {
     this.updateState('speaking');
 
     const playbackStartTime = Date.now();
-    if (this.promptSentTime > 0 && this.receivedChunkCount <= 2) {
+    if (this.promptSentTime > 0 && !this.hasLoggedPlaybackStart) {
+      this.hasLoggedPlaybackStart = true;
       const timeToFirstAudio = playbackStartTime - this.promptSentTime;
       console.log(`[Mobile Audio] 🔊 Playback started (Segment 1 Launch): +${timeToFirstAudio} ms after prompt sent (Turn #${turnId})`);
     }
@@ -589,7 +589,7 @@ export class VoiceSession {
 
     playerToPlay.addListener('playbackStatusUpdate', (status: any) => {
       if (status.didJustFinish) {
-        if (this.currentTurnId !== turnId) {
+        if (this.currentTurnId !== turnId || !this.isSessionActive) {
           try { playerToPlay.remove(); } catch {}
           return;
         }
