@@ -65,6 +65,10 @@ export class VoiceSession {
   private speechSilenceTimer: any = null;
   private currentTurnId = 0;
 
+  // Decoupled Mic & Session Ready Flags
+  private isMicActive = false;
+  private isSessionReady = false;
+
   // Turn Flight & Deduplication State
   private isTurnInFlight = false;
   private pendingInitialPrompt: string | null = null;
@@ -124,7 +128,7 @@ export class VoiceSession {
 
     console.log(`[Voice Lifecycle]: ⚡ Parallel initiation -> Opening WebSocket & starting speech recognition in parallel at +${Date.now() - this.sessionStartTime} ms`);
 
-    // ⚡ STEP 3: Parallelize session open and native speech recognition startup
+    // ⚡ Step 3: Parallelize session open and native speech recognition startup
     this.startSpeechRecognition();
 
     this.ws = new WebSocket(socketUrl);
@@ -141,29 +145,31 @@ export class VoiceSession {
 
         if (msg.type === 'ready') {
           this.wsReadyTime = Date.now();
+          this.isSessionReady = true;
           const setupLatency = this.wsOpenTime > 0 ? this.wsReadyTime - this.wsOpenTime : 0;
           console.log(`[Voice Lifecycle]: [WS Ready Frame]: Handshake complete in +${this.wsReadyTime - this.sessionStartTime} ms total (+${setupLatency} ms setup gap). Cap = ${msg.capSeconds}s`);
 
-          this.updateState('listening');
           callbacks.onReady(msg.capSeconds);
 
-          // ⚡ STEP 5: Fast-talker Edge Case - Flush queued prompt if child spoke before WS was ready
+          // ⚡ Step 4: Fast-talker Edge Case - Flush queued prompt if child spoke before WS was ready
           if (this.pendingInitialPrompt) {
             const queuedPrompt = this.pendingInitialPrompt;
             this.pendingInitialPrompt = null;
-            console.log(`[Voice Lifecycle]: ⚡ Fast-talker prompt unqueued & dispatched: "${queuedPrompt}"`);
+            console.log(`[Voice Lifecycle]: ⚡ Fast-talker prompt unqueued & dispatched at handshake completion: "${queuedPrompt}"`);
             this.finalizeSpokenTurn(queuedPrompt);
           }
         } else if (msg.type === 'cap_reached') {
           console.log('[Mobile WS Cap Reached Frame]: Server sent cap_reached signal.');
           this.isSessionActive = false;
           this.isTurnInFlight = false;
+          this.isSessionReady = false;
           this.stopSpeechRecognition();
           this.stopAudioPlayback();
           callbacks.onCapReached();
         } else if (msg.type === 'error') {
           console.error('[Mobile WS Error Frame]: Server error =', msg.reason);
           this.isTurnInFlight = false;
+          this.isSessionReady = false;
           callbacks.onError(msg.reason);
         } else if (msg.type === 'audio') {
           if (turnId !== this.currentTurnId) return;
@@ -233,6 +239,7 @@ export class VoiceSession {
       console.log(`[Mobile WebSocket Closed Event]: Code=${e.code}, Reason="${e.reason || 'None'}"`);
       this.isSessionActive = false;
       this.isTurnInFlight = false;
+      this.isSessionReady = false;
       this.stopSpeechRecognition();
       this.stopAudioPlayback();
       callbacks.onClose(e.reason || e.code);
@@ -241,6 +248,7 @@ export class VoiceSession {
     this.ws.onerror = (e: any) => {
       console.error('[Mobile WebSocket Error Event]:', e?.message || e);
       this.isTurnInFlight = false;
+      this.isSessionReady = false;
       callbacks.onError(e?.message || 'Connection error');
     };
   }
@@ -329,8 +337,8 @@ export class VoiceSession {
       this.speechSilenceTimer = null;
     }
 
-    // ⚡ STEP 5: Fast-talker Edge Case Guard: Buffer prompt if WebSocket is not ready yet
-    if (this.ws?.readyState !== WebSocket.OPEN) {
+    // ⚡ Step 4: Fast-talker Edge Case Guard: Buffer prompt if WebSocket is not ready yet
+    if (!this.isSessionReady || this.ws?.readyState !== WebSocket.OPEN) {
       console.log(`[Mobile Voice Input] ⚠️ Turn finalized before WebSocket session ready — queued initial prompt: "${transcript}"`);
       this.pendingInitialPrompt = transcript;
       return;
@@ -369,7 +377,10 @@ export class VoiceSession {
 
       const subStart = ExpoSpeechRecognitionModule.addListener('start', () => {
         this.isRestartingSpeech = false;
-        console.log('[SpeechRec Lifecycle]: Native speech recognition active & listening...');
+        this.isMicActive = true;
+        console.log(`[SpeechRec Lifecycle]: Native speech recognition active & listening at +${Date.now() - this.sessionStartTime} ms`);
+        // ⚡ Step 2: Instant UI update (<100ms) as soon as mic is active natively
+        this.updateState('listening');
       });
 
       const subResult = ExpoSpeechRecognitionModule.addListener('result', (event: any) => {
@@ -565,6 +576,7 @@ export class VoiceSession {
 
     this.isSessionActive = false;
     this.isTurnInFlight = false;
+    this.isSessionReady = false;
     this.clearSpeechSubscriptions();
     this.stopAudioPlayback();
     if (this.ws) {
