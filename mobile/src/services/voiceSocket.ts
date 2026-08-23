@@ -15,9 +15,9 @@ type VoiceCallbacks = {
 };
 
 // 24000 Hz, 16-bit mono PCM = 48000 bytes/sec
-// Initial launch segment = ~200ms (9,600 bytes) -> Starts audio playback instantly on Chunk #1/#2 in ~600ms-700ms
-const LAUNCH_SEGMENT_BYTES = 9600;
-// Continuous streaming segment buffer = ~300ms (14,400 bytes) -> Ensures 0ms silence gaps while streaming rest of turn
+// Launch buffer = ~100ms (4,800 bytes) -> Starts audio playback in <500ms-700ms after prompt sent
+const LAUNCH_SEGMENT_BYTES = 4800;
+// Streaming segment buffer = ~300ms (14,400 bytes) -> Direct low-latency continuous streaming
 const STREAM_SEGMENT_BYTES = 14400;
 
 function createWavBase64(pcmBinary: string): string {
@@ -77,7 +77,7 @@ export class VoiceSession {
   private pendingInitialPrompt: string | null = null;
   private voiceState: 'listening' | 'thinking' | 'speaking' | null = null;
 
-  // Continuous Audio Queue State
+  // Continuous Full-Duplex PCM Stream State
   private audioQueue: string[] = [];
   private accumulatedPcmBinary = '';
   private hasStartedPlayback = false;
@@ -104,6 +104,16 @@ export class VoiceSession {
       console.log(`[VoiceSession State Transition]: ${this.voiceState || 'none'} -> ${newState}`);
       this.voiceState = newState;
       this.callbacks?.onStateChange?.(newState);
+
+      // ⚡ TURN-BASED STT LIFECYCLE & CONTINUOUS BARGE-IN:
+      if (newState === 'thinking') {
+        this.stopSpeechRecognition();
+      } else if (newState === 'listening' || newState === 'speaking') {
+        // Keep mic active during speaking for continuous barge-in speech interruption
+        if (!this.isMicActive && !this.isStartingSpeech) {
+          this.startSpeechRecognition();
+        }
+      }
     }
   }
 
@@ -188,7 +198,7 @@ export class VoiceSession {
 
           this.accumulatedPcmBinary += atob(msg.data);
 
-          // ⚡ INSTANT LAUNCH (Segment 1): Launch playback as soon as 9,600 bytes (~200ms buffer) arrives
+          // ⚡ DIRECT PCM STREAMING LAUNCH (<500ms-700ms): Play immediately as soon as 4,800 bytes (~100ms PCM) arrives
           if (!this.hasStartedPlayback && this.accumulatedPcmBinary.length >= LAUNCH_SEGMENT_BYTES) {
             const launchPcm = this.accumulatedPcmBinary.slice(0, LAUNCH_SEGMENT_BYTES);
             this.accumulatedPcmBinary = this.accumulatedPcmBinary.slice(LAUNCH_SEGMENT_BYTES);
@@ -200,7 +210,7 @@ export class VoiceSession {
             this.updateState('speaking');
             this.playNextAudioSegment();
           }
-          // ⚡ CONTINUOUS STREAMING QUEUE: As incoming audio fills STREAM_SEGMENT_BYTES (~300ms buffer), slice and queue!
+          // ⚡ CONTINUOUS RING-BUFFER QUEUE: Slice incoming PCM into ~300ms streaming segments (14,400 bytes)
           else if (this.hasStartedPlayback && this.accumulatedPcmBinary.length >= STREAM_SEGMENT_BYTES) {
             const streamPcm = this.accumulatedPcmBinary.slice(0, STREAM_SEGMENT_BYTES);
             this.accumulatedPcmBinary = this.accumulatedPcmBinary.slice(STREAM_SEGMENT_BYTES);
@@ -222,11 +232,11 @@ export class VoiceSession {
 
           const turnCompleteTime = Date.now();
           const latencyToTurnComplete = this.promptSentTime > 0 ? turnCompleteTime - this.promptSentTime : 0;
-          console.log(`[Mobile Audio] Turn complete: +${latencyToTurnComplete} ms after prompt sent. Total chunks collected = ${this.receivedChunkCount} (Turn #${turnId})`);
+          console.log(`[Mobile Audio] Turn complete: +${latencyToTurnComplete} ms after prompt sent. Total chunks collected = ${this.receivedChunkCount} (${this.accumulatedPcmBinary.length} bytes PCM) (Turn #${turnId})`);
 
           this.isTurnComplete = true;
 
-          // 🔊 TAIL FLUSH: Push any remaining binary buffer into the queue
+          // Push any remaining binary buffer tail
           if (this.accumulatedPcmBinary.length > 0) {
             const tailWav = createWavBase64(this.accumulatedPcmBinary);
             this.accumulatedPcmBinary = '';
@@ -285,6 +295,22 @@ export class VoiceSession {
     }
   }
 
+  private handleBargeIn(userSpeech: string) {
+    console.log(`[Barge-In Interruption]: User spoke mid-phrase during AI playback: "${userSpeech}"`);
+
+    // 1. Immediately flush native audio ring buffer & stop speaker playback
+    this.stopAudioPlayback();
+
+    // 2. Send cancel frame over WS to signal Gemini Live to stop generation
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'cancel' }));
+    }
+
+    // 3. Reset turn state and submit new user utterance
+    this.isTurnInFlight = false;
+    this.finalizeSpokenTurn(userSpeech);
+  }
+
   private resetTurnState() {
     this.currentTurnId++;
     if (this.speechSilenceTimer) {
@@ -333,7 +359,7 @@ export class VoiceSession {
   private restartSpeechRecognition(callerTag: string = 'subEnd') {
     if (!this.isSessionActive || this.ws?.readyState !== WebSocket.OPEN) return;
     if (this.isRestartingSpeech) {
-      console.debug(`[SpeechRec Lifecycle]: restartSpeechRecognition called from [${callerTag}] but restart is already in flight. Ignoring duplicate restart.`);
+      console.log(`[SpeechRec Lifecycle]: restartSpeechRecognition called from [${callerTag}] but restart is already in flight. Ignoring duplicate restart.`);
       return;
     }
     this.isRestartingSpeech = true;
@@ -431,15 +457,18 @@ export class VoiceSession {
         const transcript = event.results?.[0]?.transcript?.trim();
         const isFinal = event.isFinal || event.results?.[0]?.isFinal;
 
-        // ⚡ REAL PHONE CALL INTERRUPTION: Child speaks while Kidsko is talking -> Cut off playback immediately!
-        if (transcript && transcript.length > 0 && (this.voiceState === 'speaking' || this.isKidskoSpeaking())) {
-          console.log(`[Mobile Voice Call Interruption] ⚡ Child spoke while AI was speaking: "${transcript}" -> Cutting off playback instantly!`);
-          this.stopAudioPlayback();
-          this.updateState('listening');
-        }
-
-        if (transcript && transcript.length > 0 && this.voiceState === 'listening' && !this.isTurnInFlight) {
+        if (transcript && transcript.length > 0) {
           this.callbacks?.onTranscript?.(transcript);
+
+          // ⚡ INSTANT SPEECH INTERRUPTION (BARGE-IN): If user speaks mid-phrase while AI is playing
+          if (this.voiceState === 'speaking' || this.isKidskoSpeaking()) {
+            this.handleBargeIn(transcript);
+            return;
+          }
+
+          if (this.voiceState === 'thinking' || this.isTurnInFlight) {
+            return;
+          }
 
           if (isFinal) {
             this.finalizeSpokenTurn(transcript);
@@ -463,6 +492,7 @@ export class VoiceSession {
       const subError = ExpoSpeechRecognitionModule.addListener('error', (event: any) => {
         console.log('[SpeechRec Lifecycle]: Error event =', event.error, event.message);
         if (event.error === 'no-speech') {
+          console.log('[SpeechRec Lifecycle]: Fast-restarting after benign no-speech timeout (Triggered by [no-speech])...');
           if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN) {
             this.restartSpeechRecognition('no-speech');
           }
@@ -568,7 +598,7 @@ export class VoiceSession {
       if (this.isTurnComplete && this.isSessionActive) {
         const playbackEndTime = Date.now();
         const totalTurnTime = this.promptSentTime > 0 ? playbackEndTime - this.promptSentTime : 0;
-        console.log(`[Mobile Audio] 🔊 Turn Playback finished natively (+${totalTurnTime} ms total). Session WAITING FOR NEXT USER TURN (Turn #${turnId}).`);
+        console.log(`[Mobile Audio] 🔊 Direct Continuous Response Playback Finished (+${totalTurnTime} ms total). Session WAITING FOR NEXT USER TURN (Turn #${turnId}).`);
         this.isTurnInFlight = false;
         this.updateState('listening');
       }
@@ -582,7 +612,7 @@ export class VoiceSession {
     if (this.promptSentTime > 0 && !this.hasLoggedPlaybackStart) {
       this.hasLoggedPlaybackStart = true;
       const timeToFirstAudio = playbackStartTime - this.promptSentTime;
-      console.log(`[Mobile Audio] 🔊 Playback started (Segment 1 Launch): +${timeToFirstAudio} ms after prompt sent (Turn #${turnId})`);
+      console.log(`[Mobile Audio] 🔊 Direct Continuous Streaming Playback Started: +${timeToFirstAudio} ms after prompt sent (Turn #${turnId})`);
     }
 
     const previousPlayer = this.activePlayer;

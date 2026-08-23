@@ -3,7 +3,7 @@ import { Server } from 'http';
 import sharp from 'sharp';
 import { supabase, supabaseAdmin } from './supabase';
 import { checkVoiceEligibility, recordVoiceMinutesUsed, checkSnapshotEligibility, recordSnapshotUsed } from './voiceLimits';
-import { startLiveSession, sendAudioChunk, sendTextPrompt, sendImagePrompt, closeLiveSession } from './geminiLive';
+import { startLiveSession, sendAudioChunk, sendTextPrompt, sendImagePrompt, sendCancelSignal, closeLiveSession } from './geminiLive';
 import { logUsageEvent } from './usageEvents';
 
 const ACCOUNTING_INTERVAL_MS = 10_000;
@@ -125,7 +125,10 @@ export function attachVoiceSocketServer(httpServer: Server) {
         (async () => {
           try {
             const msg = JSON.parse(raw.toString());
-            if (msg.type === 'audio_chunk') {
+            if (msg.type === 'cancel') {
+              console.log('[Voice Server] Barge-in cancel signal received from client. Stopping Gemini output generation...');
+              sendCancelSignal(liveSession);
+            } else if (msg.type === 'audio_chunk') {
               console.log('[Voice Server] Received chunk, bytes:', msg.data.length);
               if (msg.isRawPcm) {
                 sendAudioChunk(liveSession, msg.data);
@@ -134,8 +137,6 @@ export function attachVoiceSocketServer(httpServer: Server) {
               const currentElapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
               console.log(`[Voice Server User Turn Received]: Prompt="${msg.data}", Elapsed=${currentElapsed}s / ${capSeconds}s, Gemini WS state=${liveSession?.readyState}`);
               sendTextPrompt(liveSession, msg.data);
-            } else if (msg.type === 'cancel_turn') {
-              console.log('[Voice Server Barge-In]: Client interrupted playback -> Cancelling active Gemini turn generation');
             } else if (msg.type === 'image_capture') {
               const snapshotEligibility = await checkSnapshotEligibility(dbClient, parentId, eligibility.isPremium);
               if (!snapshotEligibility.allowed) {

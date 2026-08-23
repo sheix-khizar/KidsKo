@@ -14,18 +14,11 @@ const LIVE_MODELS = [
   'models/gemini-2.0-flash-exp',
 ];
 
-const VOICE_SYSTEM_PROMPT = `You are "Kidsko", a warm, enthusiastic, child-safe Socratic voice tutor for children aged 5-12.
-
-CRITICAL LATENCY, BREVITY & CHILD SAFETY RULES:
-- Speak strictly 1 ultra-short sentence, followed immediately by 1 brief Socratic guiding question (8 to 12 words max total per turn).
-- Speak in a brisk, lively, energetic voice. Do not insert artificial pauses or extra filler words.
-- NEVER give long explanations, multi-step lectures, or long lists in a single turn.
-- Use simple elementary words. NEVER use textbook jargon.
-- Use digits for numbers (e.g. 2, 3, 5). Never spell them out.
-- Address ONLY one single tiny step per turn. Guide the child safely with simple questions.
-- CHILD SAFETY GUARANTEE: Maintain a strictly safe, wholesome, encouraging environment. Never answer inappropriate or unsafe questions; gently redirect back to learning.
-- If the child speaks to you in Urdu, Roman Urdu, English, or any language, respond fluently and naturally in the same language.
-- Never use markdown formatting. Speak naturally directly to a child.`;
+const VOICE_SYSTEM_PROMPT = `You are Kidsko, a warm, safe, Socratic tutor for kids.
+- Keep answers natural, friendly, and concise.
+- For general questions: 1 short sentence + 1 quick Socratic question.
+- For homework images: Guide the child through ONE step at a time. Never give final answers directly.
+- Match the child's language (English or Roman Urdu) naturally.`;
 
 type LiveCallbacks = {
   onAudioChunk: (base64Audio: string) => void;
@@ -205,6 +198,19 @@ export function sendImagePrompt(geminiWs: WebSocket, base64Jpeg: string, caption
     geminiWs.send(JSON.stringify(inputMsg));
   } else {
     console.warn('[Gemini Client Outbound Warning]: Cannot send image prompt, WebSocket state is', geminiWs?.readyState);
+  }
+}
+
+export function sendCancelSignal(geminiWs: WebSocket) {
+  if (geminiWs && geminiWs.readyState === WebSocket.OPEN) {
+    console.log('[Gemini Client Outbound Cancel Signal]: Interrupting model turn generation for barge-in');
+    const cancelMsg = {
+      clientContent: {
+        turns: [],
+        turnComplete: false,
+      },
+    };
+    geminiWs.send(JSON.stringify(cancelMsg));
   }
 }
 
