@@ -414,7 +414,7 @@ export class VoiceSession {
 
       const subEnd = ExpoSpeechRecognitionModule.addListener('end', () => {
         console.log('[SpeechRec Lifecycle]: Recognition cycle ended natively (Event: subEnd). Requesting restart...');
-        if (this.isSessionActive && this.ws?.readyState !== WebSocket.OPEN) {
+        if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN) {
           this.restartSpeechRecognition('subEnd');
         }
       });
