@@ -18,7 +18,7 @@ type VoiceCallbacks = {
 // Initial launch segment = ~200ms (9,600 bytes) -> Starts audio playback instantly on Chunk #2 in ~800ms with zero initial stutter
 const LAUNCH_SEGMENT_BYTES = 9600;
 // Continuous streaming segment buffer = ~400ms (19,200 bytes) -> Ensures 0ms silence gaps while streaming rest of turn
-const STREAM_SEGMENT_BYTES = 19200;
+const STREAM_SEGMENT_BYTES = 14400;
 
 function createWavBase64(pcmBinary: string): string {
   const pcmBytesLength = pcmBinary.length;
@@ -524,9 +524,9 @@ export class VoiceSession {
       }
 
       try {
-        if (typeof (player as any).setPlaybackRate === 'function') (player as any).setPlaybackRate(1.15);
-        else if (typeof (player as any).setRate === 'function') (player as any).setRate(1.15);
-        else (player as any).playbackRate = 1.15;
+        if (typeof (player as any).setPlaybackRate === 'function') (player as any).setPlaybackRate(1.22);
+        else if (typeof (player as any).setRate === 'function') (player as any).setRate(1.22);
+        else (player as any).playbackRate = 1.22;
       } catch {}
 
       this.preloadedNextPlayer = player;
@@ -553,9 +553,9 @@ export class VoiceSession {
       try {
         playerToPlay = createAudioPlayer({ uri: nextSegmentUri });
         try {
-          if (typeof (playerToPlay as any).setPlaybackRate === 'function') (playerToPlay as any).setPlaybackRate(1.15);
-          else if (typeof (playerToPlay as any).setRate === 'function') (playerToPlay as any).setRate(1.15);
-          else (playerToPlay as any).playbackRate = 1.15;
+          if (typeof (playerToPlay as any).setPlaybackRate === 'function') (playerToPlay as any).setPlaybackRate(1.22);
+          else if (typeof (playerToPlay as any).setRate === 'function') (playerToPlay as any).setRate(1.22);
+          else (playerToPlay as any).playbackRate = 1.22;
         } catch {}
       } catch (err) {
         console.error(`[Mobile Playback Error] Turn #${turnId}: Exception playing WAV segment:`, err);
