@@ -130,12 +130,12 @@ export function attachVoiceSocketServer(httpServer: Server) {
               if (msg.isRawPcm) {
                 sendAudioChunk(liveSession, msg.data);
               }
-            } else if (msg.type === 'user_interrupted') {
-              console.log('[Voice Server] ⚡ Client sent user_interrupted frame — child interrupted AI mid-sentence');
             } else if (msg.type === 'text_prompt') {
               const currentElapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
               console.log(`[Voice Server User Turn Received]: Prompt="${msg.data}", Elapsed=${currentElapsed}s / ${capSeconds}s, Gemini WS state=${liveSession?.readyState}`);
               sendTextPrompt(liveSession, msg.data);
+            } else if (msg.type === 'cancel_turn') {
+              console.log('[Voice Server Barge-In]: Client interrupted playback -> Cancelling active Gemini turn generation');
             } else if (msg.type === 'image_capture') {
               const snapshotEligibility = await checkSnapshotEligibility(dbClient, parentId, eligibility.isPremium);
               if (!snapshotEligibility.allowed) {
