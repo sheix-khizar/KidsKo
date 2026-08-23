@@ -15,10 +15,9 @@ type VoiceCallbacks = {
 };
 
 // 24000 Hz, 16-bit mono PCM = 48000 bytes/sec
-// 4-Chunk Jitter Buffer threshold = 38,400 bytes (~350ms to 400ms of audio buffer cushion)
-const STREAM_SEGMENT_BYTES = 38400;
+// Initial launch segment = ~400ms (19,200 bytes) -> Starts audio playback in ~700ms-800ms
+const LAUNCH_SEGMENT_BYTES = 19200;
 
-// Construct a strict 24000Hz (24kHz) 16-bit Mono PCM WAV container
 function createWavBase64(pcmBinary: string): string {
   const pcmBytesLength = pcmBinary.length;
   const header = new ArrayBuffer(44);
@@ -35,7 +34,7 @@ function createWavBase64(pcmBinary: string): string {
   view.setUint32(16, 16, true);        // Subchunk1Size = 16 (PCM)
   view.setUint16(20, 1, true);         // AudioFormat = 1 (PCM)
   view.setUint16(22, 1, true);         // NumChannels = 1 (mono)
-  view.setUint32(24, 24000, true);     // SampleRate = 24000 Hz (Strict 24kHz output)
+  view.setUint32(24, 24000, true);     // SampleRate = 24000 Hz
   view.setUint32(28, 24000 * 2, true); // ByteRate = 24000 * 1 * 16/8 = 48000
   view.setUint16(32, 2, true);         // BlockAlign = 1 * 16/8 = 2
   view.setUint16(34, 16, true);        // BitsPerSample = 16
@@ -53,22 +52,6 @@ function createWavBase64(pcmBinary: string): string {
   return btoa(binaryHeader + pcmBinary);
 }
 
-// ⚡ PRE-WARM AUDIO ENGINE: Play 100ms of silent 24kHz PCM to pre-initialize AVAudioEngine / AudioTrack hardware node
-function prewarmAudioEngine() {
-  try {
-    const silentPcm = new Array(4800).fill('\0').join('');
-    const silentWav = createWavBase64(silentPcm);
-    const player = createAudioPlayer({ uri: `data:audio/wav;base64,${silentWav}` });
-    player.play();
-    setTimeout(() => {
-      try { player.remove(); } catch {}
-    }, 150);
-    console.log('[Mobile Audio Engine]: ⚡ Pre-warmed native AVAudioEngine / AudioTrack hardware node at 24kHz');
-  } catch (err) {
-    console.warn('[Mobile Audio Engine]: Could not pre-warm audio engine:', err);
-  }
-}
-
 export class VoiceSession {
   private ws: WebSocket | null = null;
   private activePlayer: any = null;
@@ -76,21 +59,15 @@ export class VoiceSession {
   private callbacks: VoiceCallbacks | null = null;
   private speechSubscriptions: any[] = [];
   private lastSentTranscript = '';
-  private lastAiText = '';
   private isSessionActive = false;
   private isStartingSpeech = false;
   private speechSilenceTimer: any = null;
   private currentTurnId = 0;
 
-  // Clean State Machine & UI Throttling
-  private currentState: 'listening' | 'thinking' | 'speaking' | null = null;
+  // Turn Lock & Duplicate Guard Flag
+  private isTurnProcessing = false;
 
-  // Race-condition & response lock flags
-  private isProcessingTurn = false;
-  private isAwaitingResponse = false;
-
-  // 4-Chunk Jitter Buffer (~350ms Cushion)
-  private pcmQueue: string[] = [];
+  // Hybrid Audio Queue State
   private audioQueue: string[] = [];
   private accumulatedPcmBinary = '';
   private hasStartedPlayback = false;
@@ -106,29 +83,14 @@ export class VoiceSession {
     return this.lastSentTranscript;
   }
 
-  private updateState(newState: 'listening' | 'thinking' | 'speaking') {
-    if (this.currentState !== newState) {
-      console.log(`[VoiceSession State Change]: ${this.currentState || 'none'} -> ${newState}`);
-      this.currentState = newState;
-      this.callbacks?.onStateChange?.(newState);
-    }
-  }
-
   private isKidskoSpeaking(): boolean {
     return (
-      this.currentState === 'speaking' ||
       this.isPlayingQueue ||
       this.audioQueue.length > 0 ||
       this.preloadedNextPlayer !== null ||
       this.activePlayer !== null ||
       (this.hasStartedPlayback && !this.isTurnComplete)
     );
-  }
-
-  sendAudioBuffer(base64Pcm16k: string) {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'audio_chunk', isRawPcm: true, data: base64Pcm16k }));
-    }
   }
 
   async start(callbacks: VoiceCallbacks, studentId?: string) {
@@ -152,65 +114,47 @@ export class VoiceSession {
 
         if (msg.type === 'ready') {
           console.log(`[Mobile WS Ready Frame]: Session cap = ${msg.capSeconds}s`);
-          prewarmAudioEngine();
-          this.updateState('listening');
+          this.callbacks?.onStateChange?.('listening');
           callbacks.onReady(msg.capSeconds);
         } else if (msg.type === 'cap_reached') {
           console.log('[Mobile WS Cap Reached Frame]: Server sent cap_reached signal.');
           this.isSessionActive = false;
-          this.isAwaitingResponse = false;
+          this.isTurnProcessing = false;
           this.stopSpeechRecognition();
           this.stopAudioPlayback();
           callbacks.onCapReached();
         } else if (msg.type === 'error') {
           console.error('[Mobile WS Error Frame]: Server error =', msg.reason);
+          this.isTurnProcessing = false;
           callbacks.onError(msg.reason);
-          this.isProcessingTurn = false;
-          this.isAwaitingResponse = false;
         } else if (msg.type === 'audio') {
+          // Reject audio chunks from cancelled/invalidated turns
           if (turnId !== this.currentTurnId) return;
 
           this.receivedChunkCount++;
-          const decodedPcm = atob(msg.data);
-          
-          this.pcmQueue.push(decodedPcm);
-          this.accumulatedPcmBinary += decodedPcm;
-
-          if (this.receivedChunkCount < 4) {
-            if (this.receivedChunkCount === 1) {
-              this.firstChunkTime = Date.now();
-              const latencyToFirstChunk = this.promptSentTime > 0 ? this.firstChunkTime - this.promptSentTime : 0;
-              console.log(`[Mobile Audio] 🚀 First 24kHz chunk received: +${latencyToFirstChunk} ms after prompt sent (Turn #${turnId})`);
-            }
-            return;
+          if (this.receivedChunkCount === 1) {
+            this.firstChunkTime = Date.now();
+            const latencyToFirstChunk = this.promptSentTime > 0 ? this.firstChunkTime - this.promptSentTime : 0;
+            console.log(`[Mobile Audio] 🚀 First chunk received: +${latencyToFirstChunk} ms after prompt sent (Turn #${turnId})`);
           }
 
-          // 4-CHUNK JITTER BUFFER: Trigger play() ONLY when 4 chunks are buffered (~350ms cushion)
-          if (!this.hasStartedPlayback && this.pcmQueue.length >= 4) {
-            const launchPcm = this.accumulatedPcmBinary;
-            this.accumulatedPcmBinary = '';
+          // Accumulate incoming 24kHz PCM binary
+          this.accumulatedPcmBinary += atob(msg.data);
+
+          // ⚡ FAST LAUNCH (Segment 1): Start Segment 1 as soon as ~400ms initial buffer is collected (Target <= ~800ms)
+          if (!this.hasStartedPlayback && this.accumulatedPcmBinary.length >= LAUNCH_SEGMENT_BYTES) {
+            const launchPcm = this.accumulatedPcmBinary.slice(0, LAUNCH_SEGMENT_BYTES);
+            this.accumulatedPcmBinary = this.accumulatedPcmBinary.slice(LAUNCH_SEGMENT_BYTES);
 
             const launchWav = createWavBase64(launchPcm);
             this.audioQueue.push(`data:audio/wav;base64,${launchWav}`);
 
             this.hasStartedPlayback = true;
-            this.updateState('speaking');
+            this.callbacks?.onStateChange?.('speaking');
             this.playNextAudioSegment();
-          } else if (this.hasStartedPlayback && this.accumulatedPcmBinary.length >= STREAM_SEGMENT_BYTES) {
-            const segmentPcm = this.accumulatedPcmBinary.slice(0, STREAM_SEGMENT_BYTES);
-            this.accumulatedPcmBinary = this.accumulatedPcmBinary.slice(STREAM_SEGMENT_BYTES);
-
-            const segmentWav = createWavBase64(segmentPcm);
-            this.audioQueue.push(`data:audio/wav;base64,${segmentWav}`);
-
-            if (!this.isPlayingQueue) {
-              this.playNextAudioSegment();
-            } else if (!this.preloadedNextPlayer) {
-              this.preloadNextSegment();
-            }
           }
         } else if (msg.type === 'turn_complete') {
-          if (turnId !== this.currentTurnId) {
+          if (turnId !== this.currentTurnId || (this.receivedChunkCount === 0 && !this.hasStartedPlayback)) {
             console.log(`[Mobile Audio]: Discarding stray turn_complete frame for Turn #${turnId}`);
             return;
           }
@@ -221,14 +165,7 @@ export class VoiceSession {
 
           this.isTurnComplete = true;
 
-          if (this.receivedChunkCount === 0) {
-            console.log(`[Mobile Audio] Turn #${turnId} received 0 chunks. Resetting internal state cleanly.`);
-            this.isProcessingTurn = false;
-            this.isAwaitingResponse = false;
-            this.updateState('listening');
-            return;
-          }
-
+          // 🔊 UNIFIED TAIL SEGMENT (Segment 2): Combine ALL remaining turn chunks into ONE SINGLE WAV file
           if (this.accumulatedPcmBinary.length > 0) {
             const tailWav = createWavBase64(this.accumulatedPcmBinary);
             this.accumulatedPcmBinary = '';
@@ -237,7 +174,7 @@ export class VoiceSession {
 
           if (!this.hasStartedPlayback) {
             this.hasStartedPlayback = true;
-            this.updateState('speaking');
+            this.callbacks?.onStateChange?.('speaking');
             this.playNextAudioSegment();
           } else if (!this.isPlayingQueue) {
             this.playNextAudioSegment();
@@ -245,7 +182,6 @@ export class VoiceSession {
             this.preloadNextSegment();
           }
         } else if (msg.type === 'text') {
-          this.lastAiText = msg.data || '';
           callbacks.onTranscript?.(msg.data);
         } else if (msg.type === 'snapshot_ack') {
           console.log(`[Mobile Snapshot Ack]: ${msg.remaining} remaining this week`);
@@ -262,8 +198,7 @@ export class VoiceSession {
     this.ws.onclose = (e) => {
       console.log(`[Mobile WebSocket Closed Event]: Code=${e.code}, Reason="${e.reason || 'None'}"`);
       this.isSessionActive = false;
-      this.isProcessingTurn = false;
-      this.isAwaitingResponse = false;
+      this.isTurnProcessing = false;
       this.stopSpeechRecognition();
       this.stopAudioPlayback();
       callbacks.onClose(e.reason || e.code);
@@ -271,8 +206,7 @@ export class VoiceSession {
 
     this.ws.onerror = (e: any) => {
       console.error('[Mobile WebSocket Error Event]:', e?.message || e);
-      this.isProcessingTurn = false;
-      this.isAwaitingResponse = false;
+      this.isTurnProcessing = false;
       callbacks.onError(e?.message || 'Connection error');
     };
 
@@ -282,10 +216,9 @@ export class VoiceSession {
   sendImageCapture(base64Jpeg: string, caption?: string) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       console.log('[Mobile Sending Image Capture]:', base64Jpeg.length, 'base64 chars, caption:', caption || '(none)');
-      this.isProcessingTurn = true;
-      this.isAwaitingResponse = true;
+      this.isTurnProcessing = true;
       this.resetTurnState();
-      this.updateState('thinking');
+      this.callbacks?.onStateChange?.('thinking');
       this.promptSentTime = Date.now();
       this.ws.send(JSON.stringify({ type: 'image_capture', data: base64Jpeg, caption }));
     }
@@ -301,7 +234,6 @@ export class VoiceSession {
     this.promptSentTime = 0;
     this.firstChunkTime = 0;
     this.receivedChunkCount = 0;
-    this.pcmQueue = [];
     this.accumulatedPcmBinary = '';
     this.audioQueue = [];
     this.hasStartedPlayback = false;
@@ -312,13 +244,13 @@ export class VoiceSession {
   private stopAudioPlayback() {
     const turnId = this.currentTurnId;
     if (this.activePlayer || this.preloadedNextPlayer || this.audioQueue.length > 0 || this.isPlayingQueue) {
-      console.log(`[INTERRUPTION_CLEANUP] Turn #${turnId}: Stopping audio playback immediately. Releasing active & preloaded players.`);
+      console.log(`[INTERRUPTION_CLEANUP] Turn #${turnId}: Stopping playback immediately. Releasing active & preloaded players.`);
     }
-    this.pcmQueue = [];
     this.audioQueue = [];
     this.accumulatedPcmBinary = '';
     this.hasStartedPlayback = false;
     this.isPlayingQueue = false;
+    this.isTurnProcessing = false;
 
     if (this.activePlayer) {
       try {
@@ -337,19 +269,16 @@ export class VoiceSession {
 
   private restartSpeechRecognition() {
     if (!this.isSessionActive || this.ws?.readyState !== WebSocket.OPEN) return;
-    try {
-      ExpoSpeechRecognitionModule.stop();
-    } catch {}
     setTimeout(() => {
       if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN) {
         try {
-          console.log('[SpeechRec Lifecycle]: Restarted continuous STT listener...');
+          console.log('[SpeechRec Lifecycle]: Started listening for spoken user turns...');
           ExpoSpeechRecognitionModule.start({ lang: 'en-US', interimResults: true, continuous: true });
         } catch (err: any) {
           console.error('[SpeechRec Lifecycle]: Error restarting speech recognition:', err?.message || err);
         }
       }
-    }, 150);
+    }, 200);
   }
 
   private finalizeSpokenTurn(transcript: string) {
@@ -358,16 +287,15 @@ export class VoiceSession {
       this.speechSilenceTimer = null;
     }
 
-    if (this.isProcessingTurn || this.isAwaitingResponse) {
-      console.log('[Mobile Voice Input] 🛑 Duplicate turn finalization blocked (turn processing / in-flight request):', transcript);
+    if (this.isTurnProcessing) {
+      console.log('[Mobile Voice Input] 🛑 Turn processing in progress. Blocked duplicate turn prompt:', transcript);
       return;
     }
 
     if (transcript && transcript.length > 0 && transcript !== this.lastSentTranscript && this.ws?.readyState === WebSocket.OPEN) {
-      this.isProcessingTurn = true;
-      this.isAwaitingResponse = true;
+      this.isTurnProcessing = true;
       this.resetTurnState();
-      this.updateState('thinking');
+      this.callbacks?.onStateChange?.('thinking');
       this.promptSentTime = Date.now();
       console.log(`[Mobile Voice Input] Finalized spoken turn (Turn #${this.currentTurnId}) -> Sending prompt to Gemini Live:`, transcript);
       this.lastSentTranscript = transcript;
@@ -398,60 +326,25 @@ export class VoiceSession {
         const isFinal = event.isFinal || event.results?.[0]?.isFinal;
 
         if (transcript && transcript.length > 0) {
-          // If Kidsko is speaking or response generation is in flight, evaluate interruption vs stale tail speech vs echo
-          if (this.isKidskoSpeaking() || this.currentState === 'speaking') {
-            const cleanUser = transcript.toLowerCase().trim();
+          // 🛡️ DUP PROMPT & ECHO GUARD: If student is already processing a turn or AI is speaking
+          if (this.isKidskoSpeaking()) {
+            const words = transcript.split(/\s+/).filter(Boolean);
+            const isShortEcho = words.length < 2 && transcript.length < 6;
 
-            // 1. Check if transcript is part of the user's ALREADY SENT prompt (stale tail speech)
-            let isSentPromptTail = false;
-            if (this.lastSentTranscript && this.lastSentTranscript.length > 0) {
-              const cleanSent = this.lastSentTranscript.toLowerCase().trim();
-              if (cleanUser.startsWith(cleanSent) || cleanSent.startsWith(cleanUser) || cleanUser.includes(cleanSent.slice(0, 15))) {
-                isSentPromptTail = true;
-              }
-            }
-
-            if (isSentPromptTail) {
-              console.log('[SpeechRec Lifecycle] 🛡️ Ignored late tail transcript from already-sent user turn:', transcript);
+            if (isShortEcho) {
+              console.log('[SpeechRec Lifecycle] 🛡️ Ignored speaker echo / short noise artifact during AI speech:', transcript);
               return;
             }
 
-            // 2. Check if transcript is Kidsko's own AI response speaker echo
-            let isEchoOfAi = false;
-            if (this.lastAiText && this.lastAiText.length > 0) {
-              const cleanAi = this.lastAiText.toLowerCase().trim();
-              if (cleanAi.includes(cleanUser) || cleanUser.includes(cleanAi.slice(0, 20))) {
-                isEchoOfAi = true;
-              }
-            }
-
-            if (isEchoOfAi) {
-              console.log('[SpeechRec Lifecycle] 🛡️ Ignored Kidsko self-echo during AI speech:', transcript);
-              return;
-            }
-
-            // ⚡ GENUINE NEW STUDENT INTERRUPTION DETECTED!
-            console.log(`[SpeechRec Lifecycle] ⚡ Genuine new student interruption detected ("${transcript}")! Stopping Kidsko playback immediately...`);
+            console.log(`[SpeechRec Lifecycle] ⚡ User interruption detected during Turn #${this.currentTurnId}! Stopping Kidsko playback immediately & switching to listening state:`, transcript);
             this.stopAudioPlayback();
-            this.isProcessingTurn = false;
-            this.isAwaitingResponse = false;
-            this.updateState('listening');
-            this.callbacks?.onTranscript?.(transcript);
-
-            if (isFinal) {
-              this.finalizeSpokenTurn(transcript);
-            } else {
-              if (this.speechSilenceTimer) clearTimeout(this.speechSilenceTimer);
-              this.speechSilenceTimer = setTimeout(() => {
-                console.log('[Mobile Voice Input] VAD pause detected -> Finalizing spoken turn:', transcript);
-                this.finalizeSpokenTurn(transcript);
-              }, 600);
-            }
-            return;
+            this.isTurnProcessing = false;
+            this.callbacks?.onStateChange?.('listening');
           }
 
-          if (this.isAwaitingResponse) {
-            console.log('[SpeechRec Lifecycle] 🔒 Ignored STT callback while awaiting Gemini response (in-flight request):', transcript);
+          // If turn is currently processing (thinking or awaiting audio), ignore new VAD triggers until turn finishes
+          if (this.isTurnProcessing && !this.isKidskoSpeaking()) {
+            console.log('[SpeechRec Lifecycle] 🛑 Turn processing active. Ignoring interim transcript update:', transcript);
             return;
           }
 
@@ -461,10 +354,10 @@ export class VoiceSession {
           if (isFinal) {
             this.finalizeSpokenTurn(transcript);
           } else {
-            // VAD silence timer (600ms for fast responsive turn finalization)
+            // 🚀 Fast 600ms silence pause timer: Sends spoken turn to Gemini in 600ms after child stops talking
             if (this.speechSilenceTimer) clearTimeout(this.speechSilenceTimer);
             this.speechSilenceTimer = setTimeout(() => {
-              console.log('[Mobile Voice Input] VAD pause detected -> Finalizing spoken turn:', transcript);
+              console.log('[Mobile Voice Input] 600ms child pause detected -> Finalizing spoken turn:', transcript);
               this.finalizeSpokenTurn(transcript);
             }, 600);
           }
@@ -473,7 +366,7 @@ export class VoiceSession {
 
       const subEnd = ExpoSpeechRecognitionModule.addListener('end', () => {
         console.log('[SpeechRec Lifecycle]: Recognition cycle ended natively. Auto-restarting for continuous listening...');
-        if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN && !this.isKidskoSpeaking()) {
+        if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN) {
           this.restartSpeechRecognition();
         }
       });
@@ -529,10 +422,17 @@ export class VoiceSession {
     try {
       const player = createAudioPlayer({ uri: nextSegmentUri });
 
+      // Stale turn check: if user interrupted while player was being created, dispose immediately
       if (this.currentTurnId !== turnId) {
         try { player.remove(); } catch {}
         return;
       }
+
+      try {
+        if (typeof (player as any).setPlaybackRate === 'function') (player as any).setPlaybackRate(1.15);
+        else if (typeof (player as any).setRate === 'function') (player as any).setRate(1.15);
+        else (player as any).playbackRate = 1.15;
+      } catch {}
 
       this.preloadedNextPlayer = player;
     } catch (err) {
@@ -555,6 +455,11 @@ export class VoiceSession {
       const nextSegmentUri = this.audioQueue.shift()!;
       try {
         playerToPlay = createAudioPlayer({ uri: nextSegmentUri });
+        try {
+          if (typeof (playerToPlay as any).setPlaybackRate === 'function') (playerToPlay as any).setPlaybackRate(1.15);
+          else if (typeof (playerToPlay as any).setRate === 'function') (playerToPlay as any).setRate(1.15);
+          else (playerToPlay as any).playbackRate = 1.15;
+        } catch {}
       } catch (err) {
         console.error(`[Mobile Playback Error] Turn #${turnId}: Exception playing WAV segment:`, err);
       }
@@ -566,20 +471,19 @@ export class VoiceSession {
         const playbackEndTime = Date.now();
         const totalTurnTime = this.promptSentTime > 0 ? playbackEndTime - this.promptSentTime : 0;
         console.log(`[Mobile Audio] 🔊 Turn Playback finished natively (+${totalTurnTime} ms total). Session WAITING FOR NEXT USER TURN (Turn #${turnId}).`);
-        this.isProcessingTurn = false;
-        this.isAwaitingResponse = false;
-        this.updateState('listening');
+        this.isTurnProcessing = false; // 🔓 Unlock turn processing for next spoken turn!
+        this.callbacks?.onStateChange?.('listening');
       }
       return;
     }
 
     this.isPlayingQueue = true;
-    this.updateState('speaking');
+    this.callbacks?.onStateChange?.('speaking');
 
     const playbackStartTime = Date.now();
-    if (this.promptSentTime > 0 && this.receivedChunkCount <= 5) {
+    if (this.promptSentTime > 0 && this.receivedChunkCount <= 2) {
       const timeToFirstAudio = playbackStartTime - this.promptSentTime;
-      console.log(`[Mobile Audio] 🔊 Direct 24kHz Native Playback started (Segment 1 Launch): +${timeToFirstAudio} ms after prompt sent (Turn #${turnId})`);
+      console.log(`[Mobile Audio] 🔊 Playback started (Segment 1 Launch): +${timeToFirstAudio} ms after prompt sent (Turn #${turnId})`);
     }
 
     const previousPlayer = this.activePlayer;
@@ -597,8 +501,10 @@ export class VoiceSession {
           this.activePlayer = null;
         }
 
+        // ⚡ ZERO-GAP HANDOFF: Start preloaded Segment 2 (Tail) IMMEDIATELY
         this.playNextAudioSegment();
 
+        // Asynchronously release finished native player to prevent audio driver choking
         setTimeout(() => {
           try {
             finishedPlayer.remove();
@@ -609,6 +515,7 @@ export class VoiceSession {
 
     playerToPlay.play();
 
+    // Release previous player asynchronously
     if (previousPlayer && previousPlayer !== playerToPlay) {
       setTimeout(() => {
         try {
@@ -617,14 +524,14 @@ export class VoiceSession {
       }, 50);
     }
 
+    // ⚡ Preload NEXT segment in background while current segment plays
     this.preloadNextSegment();
   }
 
   async end() {
     console.log('[Mobile Session End Call]: User manually ending voice session...');
     this.isSessionActive = false;
-    this.isProcessingTurn = false;
-    this.isAwaitingResponse = false;
+    this.isTurnProcessing = false;
     this.clearSpeechSubscriptions();
     this.stopAudioPlayback();
     if (this.ws) {
