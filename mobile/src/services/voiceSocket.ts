@@ -398,12 +398,28 @@ export class VoiceSession {
         const isFinal = event.isFinal || event.results?.[0]?.isFinal;
 
         if (transcript && transcript.length > 0) {
-          // If Kidsko is speaking, check if the transcript is student speech or AI speaker echo
+          // If Kidsko is speaking or response generation is in flight, evaluate interruption vs stale tail speech vs echo
           if (this.isKidskoSpeaking() || this.currentState === 'speaking') {
+            const cleanUser = transcript.toLowerCase().trim();
+
+            // 1. Check if transcript is part of the user's ALREADY SENT prompt (stale tail speech)
+            let isSentPromptTail = false;
+            if (this.lastSentTranscript && this.lastSentTranscript.length > 0) {
+              const cleanSent = this.lastSentTranscript.toLowerCase().trim();
+              if (cleanUser.startsWith(cleanSent) || cleanSent.startsWith(cleanUser) || cleanUser.includes(cleanSent.slice(0, 15))) {
+                isSentPromptTail = true;
+              }
+            }
+
+            if (isSentPromptTail) {
+              console.log('[SpeechRec Lifecycle] 🛡️ Ignored late tail transcript from already-sent user turn:', transcript);
+              return;
+            }
+
+            // 2. Check if transcript is Kidsko's own AI response speaker echo
             let isEchoOfAi = false;
             if (this.lastAiText && this.lastAiText.length > 0) {
-              const cleanAi = this.lastAiText.toLowerCase();
-              const cleanUser = transcript.toLowerCase();
+              const cleanAi = this.lastAiText.toLowerCase().trim();
               if (cleanAi.includes(cleanUser) || cleanUser.includes(cleanAi.slice(0, 20))) {
                 isEchoOfAi = true;
               }
@@ -414,8 +430,8 @@ export class VoiceSession {
               return;
             }
 
-            // ⚡ STUDENT IS SPEAKING! Stop Kidsko's playback immediately and process the student's turn!
-            console.log(`[SpeechRec Lifecycle] ⚡ Student spoken turn detected ("${transcript}")! Stopping Kidsko playback immediately...`);
+            // ⚡ GENUINE NEW STUDENT INTERRUPTION DETECTED!
+            console.log(`[SpeechRec Lifecycle] ⚡ Genuine new student interruption detected ("${transcript}")! Stopping Kidsko playback immediately...`);
             this.stopAudioPlayback();
             this.isProcessingTurn = false;
             this.isAwaitingResponse = false;
