@@ -63,6 +63,7 @@ export class VoiceSession {
   private isStartingSpeech = false;
   private isRestartingSpeech = false;
   private speechSilenceTimer: any = null;
+  private micWatchdogTimer: any = null;
   private currentTurnId = 0;
 
   // Decoupled Mic & Session Ready Flags
@@ -86,6 +87,7 @@ export class VoiceSession {
   private sessionStartTime = 0;
   private wsOpenTime = 0;
   private wsReadyTime = 0;
+  private restartTriggerTime = 0;
   private promptSentTime = 0;
   private firstChunkTime = 0;
 
@@ -314,11 +316,27 @@ export class VoiceSession {
       return;
     }
     this.isRestartingSpeech = true;
+    this.restartTriggerTime = Date.now();
+
+    // Fast-path recovery delay: 50ms for benign no-speech timeout, 200ms for other events
+    const restartDelayMs = callerTag === 'no-speech' ? 50 : 200;
 
     setTimeout(() => {
       if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN) {
         try {
           console.log(`[SpeechRec Lifecycle]: Started listening for spoken user turns (Triggered by [${callerTag}])...`);
+          this.isMicActive = false;
+
+          // ⚡ Step 5: Mic Dead Watchdog Safety Net (3000ms timeout)
+          if (this.micWatchdogTimer) clearTimeout(this.micWatchdogTimer);
+          this.micWatchdogTimer = setTimeout(() => {
+            if (this.isSessionActive && !this.isMicActive) {
+              console.warn('[SpeechRec Watchdog]: Mic active state did not recover within 3000ms. Forcing hard-restart...');
+              this.isRestartingSpeech = false;
+              this.restartSpeechRecognition('watchdog_forced');
+            }
+          }, 3000);
+
           ExpoSpeechRecognitionModule.start({ lang: 'en-US', interimResults: true, continuous: true });
         } catch (err: any) {
           console.error('[SpeechRec Lifecycle]: Error restarting speech recognition:', err?.message || err);
@@ -328,7 +346,7 @@ export class VoiceSession {
       } else {
         this.isRestartingSpeech = false;
       }
-    }, 200);
+    }, restartDelayMs);
   }
 
   private finalizeSpokenTurn(transcript: string) {
@@ -364,6 +382,7 @@ export class VoiceSession {
   private async startSpeechRecognition() {
     if (!this.isSessionActive || this.isStartingSpeech) return;
     this.isStartingSpeech = true;
+    this.restartTriggerTime = Date.now();
 
     try {
       const perm = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
@@ -378,7 +397,16 @@ export class VoiceSession {
       const subStart = ExpoSpeechRecognitionModule.addListener('start', () => {
         this.isRestartingSpeech = false;
         this.isMicActive = true;
-        console.log(`[SpeechRec Lifecycle]: Native speech recognition active & listening at +${Date.now() - this.sessionStartTime} ms`);
+
+        if (this.micWatchdogTimer) {
+          clearTimeout(this.micWatchdogTimer);
+          this.micWatchdogTimer = null;
+        }
+
+        const sessionElapsed = this.sessionStartTime > 0 ? Date.now() - this.sessionStartTime : 0;
+        const sinceRestart = this.restartTriggerTime > 0 ? Date.now() - this.restartTriggerTime : 0;
+
+        console.log(`[SpeechRec Lifecycle]: Native speech recognition active & listening (session_elapsed=${sessionElapsed}ms, since_restart=${sinceRestart}ms)`);
         // ⚡ Step 2: Instant UI update (<100ms) as soon as mic is active natively
         this.updateState('listening');
       });
@@ -416,8 +444,13 @@ export class VoiceSession {
       });
 
       const subError = ExpoSpeechRecognitionModule.addListener('error', (event: any) => {
-        console.error('[SpeechRec Lifecycle]: Error event =', event.error, event.message);
-        if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN && event.error !== 'no-match') {
+        console.log('[SpeechRec Lifecycle]: Error event =', event.error, event.message);
+        if (event.error === 'no-speech') {
+          console.log('[SpeechRec Lifecycle]: Fast-restarting after benign no-speech timeout (Triggered by [no-speech])...');
+          if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN) {
+            this.restartSpeechRecognition('no-speech');
+          }
+        } else if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN && event.error !== 'no-match') {
           this.restartSpeechRecognition('subError');
         }
       });
@@ -440,6 +473,10 @@ export class VoiceSession {
     if (this.speechSilenceTimer) {
       clearTimeout(this.speechSilenceTimer);
       this.speechSilenceTimer = null;
+    }
+    if (this.micWatchdogTimer) {
+      clearTimeout(this.micWatchdogTimer);
+      this.micWatchdogTimer = null;
     }
     for (const sub of this.speechSubscriptions) {
       try {
