@@ -15,10 +15,8 @@ type VoiceCallbacks = {
 };
 
 // 24000 Hz, 16-bit mono PCM = 48000 bytes/sec
-// Initial launch segment = ~200ms (9,600 bytes) -> Starts audio playback instantly on Chunk #2 in ~800ms with zero initial stutter
-const LAUNCH_SEGMENT_BYTES = 9600;
-// Continuous streaming segment buffer = ~400ms (19,200 bytes) -> Ensures 0ms silence gaps while streaming rest of turn
-const STREAM_SEGMENT_BYTES = 14400;
+// Segment 1 Launch buffer = ~300ms (14,400 bytes) -> Starts audio playback instantly in ~1,000ms with zero stutter
+const LAUNCH_SEGMENT_BYTES = 14400;
 
 function createWavBase64(pcmBinary: string): string {
   const pcmBytesLength = pcmBinary.length;
@@ -77,7 +75,7 @@ export class VoiceSession {
   private pendingInitialPrompt: string | null = null;
   private voiceState: 'listening' | 'thinking' | 'speaking' | null = null;
 
-  // Continuous Streaming Queue State
+  // Hybrid Audio Queue State
   private audioQueue: string[] = [];
   private accumulatedPcmBinary = '';
   private hasStartedPlayback = false;
@@ -189,7 +187,7 @@ export class VoiceSession {
 
           this.accumulatedPcmBinary += atob(msg.data);
 
-          // ⚡ INSTANT LAUNCH (Segment 1): Launch playback as soon as 9,600 bytes (~200ms buffer) arrives
+          // ⚡ INSTANT LAUNCH (Segment 1): Launch playback as soon as 14,400 bytes (~300ms buffer) arrives
           if (!this.hasStartedPlayback && this.accumulatedPcmBinary.length >= LAUNCH_SEGMENT_BYTES) {
             const launchPcm = this.accumulatedPcmBinary.slice(0, LAUNCH_SEGMENT_BYTES);
             this.accumulatedPcmBinary = this.accumulatedPcmBinary.slice(LAUNCH_SEGMENT_BYTES);
@@ -200,20 +198,6 @@ export class VoiceSession {
             this.hasStartedPlayback = true;
             this.updateState('speaking');
             this.playNextAudioSegment();
-          }
-          // ⚡ CONTINUOUS STREAMING QUEUE: As incoming audio fills STREAM_SEGMENT_BYTES (~400ms buffer), slice and queue!
-          else if (this.hasStartedPlayback && this.accumulatedPcmBinary.length >= STREAM_SEGMENT_BYTES) {
-            const streamPcm = this.accumulatedPcmBinary.slice(0, STREAM_SEGMENT_BYTES);
-            this.accumulatedPcmBinary = this.accumulatedPcmBinary.slice(STREAM_SEGMENT_BYTES);
-
-            const streamWav = createWavBase64(streamPcm);
-            this.audioQueue.push(`data:audio/wav;base64,${streamWav}`);
-
-            if (!this.isPlayingQueue) {
-              this.playNextAudioSegment();
-            } else if (!this.preloadedNextPlayer) {
-              this.preloadNextSegment();
-            }
           }
         } else if (msg.type === 'turn_complete') {
           if (turnId !== this.currentTurnId || (this.receivedChunkCount === 0 && !this.hasStartedPlayback) || !this.isSessionActive) {
@@ -227,7 +211,7 @@ export class VoiceSession {
 
           this.isTurnComplete = true;
 
-          // 🔊 TAIL FLUSH: Push any remaining binary buffer into the queue
+          // 🔊 UNIFIED TAIL SEGMENT (Segment 2): Combine ALL remaining turn chunks into ONE SINGLE WAV file for 100% continuous speech
           if (this.accumulatedPcmBinary.length > 0) {
             const tailWav = createWavBase64(this.accumulatedPcmBinary);
             this.accumulatedPcmBinary = '';
