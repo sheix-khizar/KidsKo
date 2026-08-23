@@ -98,6 +98,16 @@ export class VoiceSession {
       console.log(`[VoiceSession State Transition]: ${this.voiceState || 'none'} -> ${newState}`);
       this.voiceState = newState;
       this.callbacks?.onStateChange?.(newState);
+
+      // ⚡ TURN-BASED STT LIFECYCLE:
+      // 1. Stop STT during AI turns to release native mic hardware and prevent OS timer accumulation
+      if (newState === 'thinking' || newState === 'speaking') {
+        this.stopSpeechRecognition();
+      }
+      // 2. Start a fresh STT instance for user turns when Kidsko finishes speaking
+      else if (newState === 'listening') {
+        this.startSpeechRecognition();
+      }
     }
   }
 
@@ -413,7 +423,7 @@ export class VoiceSession {
       });
 
       const subEnd = ExpoSpeechRecognitionModule.addListener('end', () => {
-        console.log('[SpeechRec Lifecycle]: Recognition cycle ended natively (Event: subEnd). Requesting restart...');
+        console.debug('[SpeechRec Lifecycle]: Recognition cycle ended natively (Event: subEnd). Requesting restart...');
         if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN) {
           this.restartSpeechRecognition('subEnd');
         }
