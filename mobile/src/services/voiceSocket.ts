@@ -301,7 +301,7 @@ export class VoiceSession {
     this.isRestartingSpeech = true;
     this.restartTriggerTime = Date.now();
 
-    const restartDelayMs = callerTag === 'no-speech' ? 50 : 200;
+    const restartDelayMs = (callerTag === 'no-speech' || callerTag === 'subEnd') ? 10 : 200;
 
     setTimeout(() => {
       if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN) {
