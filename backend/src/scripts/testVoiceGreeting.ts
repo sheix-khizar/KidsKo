@@ -81,14 +81,15 @@ async function testVoiceGreetingForStudent(studentName: string) {
       try {
         const msg = JSON.parse(raw.toString());
         if (msg.type === 'ready') {
-          console.log(`[Test WS Ready]: CapSeconds = ${msg.capSeconds}s`);
+          console.log(`[Test WS Ready]: CapSeconds = ${msg.capSeconds}s. Sending prompt for ${studentName}...`);
+          ws.send(JSON.stringify({ type: 'text_prompt', data: `Hi Kidsko, I am ${studentName}!` }));
         } else if (msg.type === 'audio') {
           audioChunkCount++;
           if (audioChunkCount === 1) {
             console.log(`🔊 [Test Audio Received]: First audio chunk streamed back for ${studentName}!`);
           }
         } else if (msg.type === 'turn_complete') {
-          console.log(`🎉 [Test Greeting Complete]: Streamed ${audioChunkCount} audio chunks for ${studentName}'s initial greeting turn!`);
+          console.log(`🎉 [Test Turn Complete]: Streamed ${audioChunkCount} audio chunks for ${studentName}'s spoken turn!`);
           clearTimeout(timeout);
           ws.close();
           resolve();
