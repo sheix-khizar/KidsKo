@@ -54,25 +54,27 @@ export function attachVoiceSocketServer(httpServer: Server) {
       let accountingTimer: NodeJS.Timeout;
       let hardCapTimer: NodeJS.Timeout;
 
+      let serverTurnId = 1;
+
       try {
         liveSession = await startLiveSession({
           onTextChunk: (text) => {
-            console.log(`[Voice Server AI Response Text]: "${text}"`);
+            console.log(`[Voice Server AI Response Text]: "${text}" (Turn #${serverTurnId})`);
             if (clientSocket.readyState === WebSocket.OPEN) {
-              clientSocket.send(JSON.stringify({ type: 'text', data: text }));
+              clientSocket.send(JSON.stringify({ type: 'text', data: text, turnId: serverTurnId }));
             }
           },
           onAudioChunk: (base64Audio) => {
             if (clientSocket.readyState === WebSocket.OPEN) {
-              console.log(`[Backend Outbound Audio Chunk to Mobile]: bytes=${base64Audio.length}`);
-              clientSocket.send(JSON.stringify({ type: 'audio', data: base64Audio }));
+              console.log(`[Backend Outbound Audio Chunk to Mobile]: bytes=${base64Audio.length} (Turn #${serverTurnId})`);
+              clientSocket.send(JSON.stringify({ type: 'audio', data: base64Audio, turnId: serverTurnId }));
             }
           },
           onTurnComplete: () => {
             if (clientSocket.readyState === WebSocket.OPEN) {
               const elapsedSec = Math.floor((Date.now() - sessionStartTime) / 1000);
-              console.log(`[Backend Outbound turn_complete Frame]: Gemini turn complete. Session active for ${elapsedSec}s / ${capSeconds}s max. Client WS state=${clientSocket.readyState}, Gemini WS state=${liveSession?.readyState}`);
-              clientSocket.send(JSON.stringify({ type: 'turn_complete' }));
+              console.log(`[Backend Outbound turn_complete Frame]: Gemini turn complete (Turn #${serverTurnId}). Session active for ${elapsedSec}s / ${capSeconds}s max.`);
+              clientSocket.send(JSON.stringify({ type: 'turn_complete', turnId: serverTurnId }));
             }
           },
           onClose: (reason) => {
@@ -132,11 +134,13 @@ export function attachVoiceSocketServer(httpServer: Server) {
                 sendAudioChunk(liveSession, msg.data);
               }
             } else if (msg.type === 'text_prompt') {
+              serverTurnId++;
               const currentElapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
-              console.log(`[Voice Server User Turn Received]: Prompt="${msg.data}", Elapsed=${currentElapsed}s / ${capSeconds}s, Gemini WS state=${liveSession?.readyState}`);
+              console.log(`[Voice Server User Turn #${serverTurnId} Received]: Prompt="${msg.data}", Elapsed=${currentElapsed}s / ${capSeconds}s`);
               sendTextPrompt(liveSession, msg.data);
             } else if (msg.type === 'cancel') {
-              console.log('[Voice Server] Client sent turn cancel signal -> Discarding active Gemini speech');
+              serverTurnId++;
+              console.log(`[Voice Server] Client sent turn cancel signal -> Discarding active Gemini speech (Incremented serverTurnId to #${serverTurnId})`);
             } else if (msg.type === 'image_capture') {
               const snapshotEligibility = await checkSnapshotEligibility(dbClient, parentId, eligibility.isPremium);
               if (!snapshotEligibility.allowed) {
