@@ -14,12 +14,6 @@ type VoiceCallbacks = {
   onStateChange?: (state: 'listening' | 'thinking' | 'speaking') => void;
 };
 
-// 24000 Hz, 16-bit mono PCM = 48000 bytes/sec
-// Launch segment = ~600ms (28,800 bytes) -> Starts audio playback in ~1.0s with zero initial stutter
-const LAUNCH_SEGMENT_BYTES = 28800;
-// Continuous streaming segment buffer = ~1.0s (48,000 bytes) -> Ensures 100% studio-smooth streaming handoffs
-const STREAM_SEGMENT_BYTES = 48000;
-
 function createWavBase64(pcmBinary: string): string {
   const pcmBytesLength = pcmBinary.length;
   const header = new ArrayBuffer(44);
@@ -105,13 +99,9 @@ export class VoiceSession {
       this.voiceState = newState;
       this.callbacks?.onStateChange?.(newState);
 
-      // ⚡ TURN-BASED STT LIFECYCLE:
-      // 1. Stop STT during AI turns to release native mic hardware and prevent OS timer accumulation
-      if (newState === 'thinking' || newState === 'speaking') {
-        this.stopSpeechRecognition();
-      }
-      // 2. Start a fresh STT instance for user turns when Kidsko finishes speaking
-      else if (newState === 'listening') {
+      // ⚡ REAL-CALL BARGE-IN & STT LIFECYCLE:
+      // Keep STT active so when user speaks mid-turn, native speech detection instantly silences speaker
+      if (!this.isMicActive && !this.isStartingSpeech) {
         this.startSpeechRecognition();
       }
     }
@@ -196,36 +186,10 @@ export class VoiceSession {
             console.log(`[Mobile Audio] 🚀 First chunk received: +${latencyToFirstChunk} ms after prompt sent (Turn #${turnId})`);
           }
 
+          // Accumulate 100% of turn PCM binary chunks into memory for Single Continuous Response
           this.accumulatedPcmBinary += atob(msg.data);
-
-          // ⚡ INSTANT SUB-SECOND LAUNCH (Segment 1): Launch playback as soon as 14,400 bytes (~300ms buffer) arrives
-          if (!this.hasStartedPlayback && this.accumulatedPcmBinary.length >= LAUNCH_SEGMENT_BYTES) {
-            const launchPcm = this.accumulatedPcmBinary.slice(0, LAUNCH_SEGMENT_BYTES);
-            this.accumulatedPcmBinary = this.accumulatedPcmBinary.slice(LAUNCH_SEGMENT_BYTES);
-
-            const launchWav = createWavBase64(launchPcm);
-            this.audioQueue.push(`data:audio/wav;base64,${launchWav}`);
-
-            this.hasStartedPlayback = true;
-            this.updateState('speaking');
-            this.playNextAudioSegment();
-          }
-          // ⚡ CONTINUOUS REAL-TIME STREAMING: Queue ~300ms segments in real-time as chunks arrive
-          else if (this.hasStartedPlayback && this.accumulatedPcmBinary.length >= STREAM_SEGMENT_BYTES) {
-            const streamPcm = this.accumulatedPcmBinary.slice(0, STREAM_SEGMENT_BYTES);
-            this.accumulatedPcmBinary = this.accumulatedPcmBinary.slice(STREAM_SEGMENT_BYTES);
-
-            const streamWav = createWavBase64(streamPcm);
-            this.audioQueue.push(`data:audio/wav;base64,${streamWav}`);
-
-            if (!this.isPlayingQueue) {
-              this.playNextAudioSegment();
-            } else if (!this.preloadedNextPlayer) {
-              this.preloadNextSegment();
-            }
-          }
         } else if (msg.type === 'turn_complete') {
-          if (turnId !== this.currentTurnId || (this.receivedChunkCount === 0 && !this.hasStartedPlayback) || !this.isSessionActive) {
+          if (turnId !== this.currentTurnId || (this.receivedChunkCount === 0 && this.accumulatedPcmBinary.length === 0) || !this.isSessionActive) {
             console.log(`[Mobile Audio]: Discarding stray turn_complete frame for Turn #${turnId}`);
             return;
           }
@@ -236,21 +200,15 @@ export class VoiceSession {
 
           this.isTurnComplete = true;
 
-          // 🔊 TAIL FLUSH: Flush any remaining PCM binary buffer into final WAV segment
+          // 🔊 SINGLE CONTINUOUS RESPONSE WAV: Assemble 100% of turn audio into ONE UNIFIED WAV file
           if (this.accumulatedPcmBinary.length > 0) {
-            const tailWav = createWavBase64(this.accumulatedPcmBinary);
+            const singleResponseWav = createWavBase64(this.accumulatedPcmBinary);
             this.accumulatedPcmBinary = '';
-            this.audioQueue.push(`data:audio/wav;base64,${tailWav}`);
-          }
+            this.audioQueue.push(`data:audio/wav;base64,${singleResponseWav}`);
 
-          if (!this.hasStartedPlayback) {
             this.hasStartedPlayback = true;
             this.updateState('speaking');
             this.playNextAudioSegment();
-          } else if (!this.isPlayingQueue) {
-            this.playNextAudioSegment();
-          } else if (!this.preloadedNextPlayer) {
-            this.preloadNextSegment();
           }
         } else if (msg.type === 'text') {
           callbacks.onTranscript?.(msg.data);
@@ -282,6 +240,15 @@ export class VoiceSession {
       this.isSessionReady = false;
       callbacks.onError(e?.message || 'Connection error');
     };
+  }
+
+  cancelCurrentTurn() {
+    console.log(`[Mobile Barge-In] User spoke mid-turn (Turn #${this.currentTurnId}) -> Instantly muting speaker & switching to listening...`);
+    this.stopAudioPlayback();
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'cancel' }));
+    }
+    this.updateState('listening');
   }
 
   sendImageCapture(base64Jpeg: string, caption?: string) {
@@ -438,14 +405,16 @@ export class VoiceSession {
       });
 
       const subResult = ExpoSpeechRecognitionModule.addListener('result', (event: any) => {
-        if (this.voiceState === 'speaking' || this.voiceState === 'thinking' || this.isTurnInFlight || this.isKidskoSpeaking()) {
-          return;
-        }
-
         const transcript = event.results?.[0]?.transcript?.trim();
         const isFinal = event.isFinal || event.results?.[0]?.isFinal;
 
         if (transcript && transcript.length > 0) {
+          // ⚡ REAL-CALL BARGE-IN: If child speaks while AI is playing/thinking, INSTANTLY SILENCE SPEAKER & SWITCH TO LISTENING
+          if (this.voiceState === 'speaking' || this.isKidskoSpeaking()) {
+            console.log(`[Mobile Barge-In] User speech detected mid-stream ("${transcript}") -> Muting speaker & switching to listening!`);
+            this.cancelCurrentTurn();
+          }
+
           this.callbacks?.onTranscript?.(transcript);
 
           if (isFinal) {
@@ -533,9 +502,9 @@ export class VoiceSession {
       }
 
       try {
-        if (typeof (player as any).setPlaybackRate === 'function') (player as any).setPlaybackRate(1.05);
-        else if (typeof (player as any).setRate === 'function') (player as any).setRate(1.05);
-        else (player as any).playbackRate = 1.05;
+        if (typeof (player as any).setPlaybackRate === 'function') (player as any).setPlaybackRate(1.22);
+        else if (typeof (player as any).setRate === 'function') (player as any).setRate(1.22);
+        else (player as any).playbackRate = 1.22;
       } catch {}
 
       this.preloadedNextPlayer = player;
@@ -562,9 +531,9 @@ export class VoiceSession {
       try {
         playerToPlay = createAudioPlayer({ uri: nextSegmentUri });
         try {
-          if (typeof (playerToPlay as any).setPlaybackRate === 'function') (playerToPlay as any).setPlaybackRate(1.05);
-          else if (typeof (playerToPlay as any).setRate === 'function') (playerToPlay as any).setRate(1.05);
-          else (playerToPlay as any).playbackRate = 1.05;
+          if (typeof (playerToPlay as any).setPlaybackRate === 'function') (playerToPlay as any).setPlaybackRate(1.22);
+          else if (typeof (playerToPlay as any).setRate === 'function') (playerToPlay as any).setRate(1.22);
+          else (playerToPlay as any).playbackRate = 1.22;
         } catch {}
       } catch (err) {
         console.error(`[Mobile Playback Error] Turn #${turnId}: Exception playing WAV response:`, err);

@@ -3,7 +3,7 @@ import { Server } from 'http';
 import sharp from 'sharp';
 import { supabase, supabaseAdmin } from './supabase';
 import { checkVoiceEligibility, recordVoiceMinutesUsed, checkSnapshotEligibility, recordSnapshotUsed } from './voiceLimits';
-import { startLiveSession, sendAudioChunk, sendTextPrompt, sendImagePrompt, sendCancel, closeLiveSession } from './geminiLive';
+import { startLiveSession, sendAudioChunk, sendTextPrompt, sendImagePrompt, closeLiveSession } from './geminiLive';
 import { logUsageEvent } from './usageEvents';
 
 const ACCOUNTING_INTERVAL_MS = 10_000;
@@ -130,13 +130,12 @@ export function attachVoiceSocketServer(httpServer: Server) {
               if (msg.isRawPcm) {
                 sendAudioChunk(liveSession, msg.data);
               }
-            } else if (msg.type === 'abort_current_turn' || msg.type === 'cancel') {
-              console.log('[Voice Server] Abort current turn received from client -> Dropping in-flight audio buffer');
-              sendCancel(liveSession);
             } else if (msg.type === 'text_prompt') {
               const currentElapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
               console.log(`[Voice Server User Turn Received]: Prompt="${msg.data}", Elapsed=${currentElapsed}s / ${capSeconds}s, Gemini WS state=${liveSession?.readyState}`);
               sendTextPrompt(liveSession, msg.data);
+            } else if (msg.type === 'cancel') {
+              console.log('[Voice Server] Client sent turn cancel signal -> Discarding active Gemini speech');
             } else if (msg.type === 'image_capture') {
               const snapshotEligibility = await checkSnapshotEligibility(dbClient, parentId, eligibility.isPremium);
               if (!snapshotEligibility.allowed) {
