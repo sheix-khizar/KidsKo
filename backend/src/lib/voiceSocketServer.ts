@@ -57,6 +57,7 @@ export function attachVoiceSocketServer(httpServer: Server) {
       try {
         liveSession = await startLiveSession({
           onTextChunk: (text) => {
+            console.log(`[Voice Server AI Response Text]: "${text}"`);
             if (clientSocket.readyState === WebSocket.OPEN) {
               clientSocket.send(JSON.stringify({ type: 'text', data: text }));
             }

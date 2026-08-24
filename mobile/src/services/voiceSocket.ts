@@ -211,6 +211,7 @@ export class VoiceSession {
             this.playNextAudioSegment();
           }
         } else if (msg.type === 'text') {
+          console.log(`[Mobile AI Spoken Response]: "${msg.data}"`);
           callbacks.onTranscript?.(msg.data);
         } else if (msg.type === 'snapshot_ack') {
           console.log(`[Mobile Snapshot Ack]: ${msg.remaining} remaining this week`);
