@@ -99,14 +99,10 @@ export class VoiceSession {
       this.voiceState = newState;
       this.callbacks?.onStateChange?.(newState);
 
-      // ⚡ REAL-CALL BARGE-IN & STT LIFECYCLE:
+      // ⚡ INSTANT MIC RE-ARM ON USER TURN:
       if (newState === 'listening') {
         this.isTurnInFlight = false;
-      }
-
-      // Keep STT active so when user speaks mid-turn, native speech detection instantly silences speaker
-      if (!this.isMicActive && !this.isStartingSpeech) {
-        this.startSpeechRecognition();
+        this.restartSpeechRecognition('turn_complete');
       }
     }
   }
