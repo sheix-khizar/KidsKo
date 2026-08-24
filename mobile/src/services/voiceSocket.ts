@@ -449,7 +449,10 @@ export class VoiceSession {
         const sinceRestart = this.restartTriggerTime > 0 ? Date.now() - this.restartTriggerTime : 0;
 
         console.log(`[SpeechRec Lifecycle]: Native speech recognition active & listening (session_elapsed=${sessionElapsed}ms, since_restart=${sinceRestart}ms)`);
-        this.updateState('listening');
+        // 🛑 GUARD AGAINST STATE FLICKER: Only update UI to 'listening' if Kidsko is NOT currently speaking or thinking!
+        if (this.voiceState !== 'speaking' && this.voiceState !== 'thinking') {
+          this.updateState('listening');
+        }
       });
 
       const subResult = ExpoSpeechRecognitionModule.addListener('result', (event: any) => {
