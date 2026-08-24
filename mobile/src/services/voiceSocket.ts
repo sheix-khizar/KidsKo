@@ -357,14 +357,14 @@ export class VoiceSession {
       return;
     }
 
-    if (this.isTurnInFlight) {
-      console.log('[Mobile Voice Input] 🛑 Turn in flight. Blocked duplicate submission:', transcript);
+    if (this.isTurnInFlight || this.voiceState === 'thinking') {
+      console.log('[Mobile Voice Input] 🛑 Turn in flight / AI thinking. Blocked duplicate submission:', transcript);
       return;
     }
 
     if (transcript && transcript.length > 0 && transcript !== this.lastSentTranscript && this.ws?.readyState === WebSocket.OPEN) {
-      this.isTurnInFlight = true;
       this.resetTurnState();
+      this.isTurnInFlight = true;
       this.updateState('thinking');
       this.promptSentTime = Date.now();
       console.log(`[Mobile Voice Input] Finalized spoken turn (Turn #${this.currentTurnId}) -> Sending prompt to Gemini Live:`, transcript);
@@ -409,8 +409,8 @@ export class VoiceSession {
         const isFinal = event.isFinal || event.results?.[0]?.isFinal;
 
         if (transcript && transcript.length > 0) {
-          // ⚡ REAL-CALL BARGE-IN: If child speaks while AI is playing/thinking, INSTANTLY SILENCE SPEAKER & SWITCH TO LISTENING
-          if (this.voiceState === 'speaking' || this.isKidskoSpeaking()) {
+          // ⚡ REAL-CALL BARGE-IN: If child speaks while AI is actively speaking audio on speaker, INSTANTLY SILENCE SPEAKER & SWITCH TO LISTENING
+          if (this.voiceState === 'speaking' && this.isKidskoSpeaking()) {
             console.log(`[Mobile Barge-In] User speech detected mid-stream ("${transcript}") -> Muting speaker & switching to listening!`);
             this.cancelCurrentTurn();
           }
