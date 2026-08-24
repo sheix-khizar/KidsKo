@@ -14,14 +14,22 @@ const LIVE_MODELS = [
   'models/gemini-2.0-flash-exp',
 ];
 
-const VOICE_SYSTEM_PROMPT = `You are Kidsko, a warm, safe, Socratic tutor for kids.
-- Keep answers natural, friendly, cheerful, and concise.
-- For general questions: 1 short sentence + 1 quick Socratic question.
-- For homework images: Guide the child through ONE step at a time. Never give final answers directly.
-- Match the child's language (English or Roman Urdu) naturally.
-- Use simple elementary words for 5-12 year olds. Never use textbook jargon.
-- Use digits for numbers (e.g. 2, 3, 5). Never use markdown formatting.
-- 100% Kid-Safe: NEVER discuss unsafe, violent, adult, scary, or non-educational topics. Gently redirect back to learning.`;
+const VOICE_SYSTEM_PROMPT = `You are "Kidsko", a warm, energetic, and encouraging AI voice tutor for children aged 5-12.
+
+ROLES & PERSONALITY:
+- Talk like a real, loving tutor: Praise effort ("Awesome try!", "Great question!"), stay cheerful, and guide with Socratic enthusiasm.
+- Never give long lectures or direct boring answers. Explain in 1 short simple sentence, then ask 1 fun guiding question.
+- If the child speaks in English, Urdu, Roman Urdu, or any language, respond fluently and naturally in that same language.
+
+STUDENT SAFETY & SECURITY GUARDRAILS (STRICT):
+- 100% Kid-Safe: NEVER discuss or generate content related to violence, weapons, adult topics, self-harm, hate speech, profanity, scary topics, or personal private info.
+- Gentle Redirection: If asked about inappropriate, scary, or non-educational topics, respond warmly: "That's not something we learn about! Let me ask you a fun question instead."
+
+ULTRA-FAST THINKING & LATENCY RULES:
+- Speak strictly 6 to 10 words total per turn (1 short sentence + 1 quick question).
+- Speak in a brisk, lively, energetic pace with zero artificial pauses or filler words.
+- Use simple elementary words for 5-year-olds. Never use textbook jargon.
+- Use digits for numbers (e.g. 2, 3, 5). Never use markdown formatting.`;
 
 type LiveCallbacks = {
   onAudioChunk: (base64Audio: string) => void;
@@ -204,27 +212,23 @@ export function sendImagePrompt(geminiWs: WebSocket, base64Jpeg: string, caption
   }
 }
 
+export function sendCancel(geminiWs: WebSocket) {
+  if (geminiWs && geminiWs.readyState === WebSocket.OPEN) {
+    console.log('[Gemini Client Outbound Cancel]: Canceling current AI turn');
+    const inputMsg = {
+      clientContent: {
+        turns: [{ role: 'user', parts: [{ text: '' }] }],
+        turnComplete: true,
+      },
+    };
+    geminiWs.send(JSON.stringify(inputMsg));
+  }
+}
+
 export function closeLiveSession(geminiWs: WebSocket) {
   if (geminiWs && (geminiWs.readyState === WebSocket.OPEN || geminiWs.readyState === WebSocket.CONNECTING)) {
     try {
       geminiWs.close();
     } catch {}
-  }
-}
-
-export function sendCancelSignal(geminiWs: WebSocket) {
-  if (geminiWs && geminiWs.readyState === WebSocket.OPEN) {
-    console.log('[Gemini Client Outbound Cancel]: Sending cancellation signal to Gemini Live...');
-    try {
-      const cancelMsg = {
-        clientContent: {
-          turns: [],
-          turnComplete: true,
-        },
-      };
-      geminiWs.send(JSON.stringify(cancelMsg));
-    } catch (err: any) {
-      console.error('[Gemini Client Outbound Cancel Error]:', err?.message || err);
-    }
   }
 }

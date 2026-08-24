@@ -77,7 +77,7 @@ export class VoiceSession {
   private pendingInitialPrompt: string | null = null;
   private voiceState: 'listening' | 'thinking' | 'speaking' | null = null;
 
-  // Continuous Full-Duplex Audio Queue State
+  // Continuous Real-Time Audio Queue State
   private audioQueue: string[] = [];
   private accumulatedPcmBinary = '';
   private hasStartedPlayback = false;
@@ -105,7 +105,7 @@ export class VoiceSession {
       this.voiceState = newState;
       this.callbacks?.onStateChange?.(newState);
 
-      // ⚡ TURN-BASED STT LIFECYCLE:
+      // ⚡ REAL-WORLD CALLING LIFECYCLE:
       // 1. Stop STT during AI thinking to prevent duplicate triggers
       if (newState === 'thinking') {
         this.stopSpeechRecognition();
@@ -399,7 +399,7 @@ export class VoiceSession {
       return;
     }
 
-    // 🛑 BARGE-IN INTERRUPTION: If child speaks while AI is playing, flush audio buffer and cancel AI turn
+    // 🛑 INSTANT BARGE-IN / SPEECH INTERRUPTION: If child speaks while AI is playing, flush audio buffer & cancel AI turn!
     if (this.voiceState === 'speaking' || this.isKidskoSpeaking()) {
       console.log(`[Mobile Barge-In] Child spoke mid-turn ("${transcript}") -> Canceling current AI response...`);
       this.cancelCurrentTurn();
@@ -457,7 +457,7 @@ export class VoiceSession {
         const isFinal = event.isFinal || event.results?.[0]?.isFinal;
 
         if (transcript && transcript.length > 0) {
-          // ⚡ INSTANT BARGE-IN / SPEECH INTERRUPTION:
+          // ⚡ INSTANT BARGE-IN / SPEECH INTERRUPTION: If user speaks while AI is playing, flush audio buffer & cancel turn!
           if (this.voiceState === 'speaking' || this.isKidskoSpeaking()) {
             console.log(`[Mobile Barge-In] User speech detected mid-stream ("${transcript}") -> Flushing speaker buffer & canceling turn!`);
             this.cancelCurrentTurn();
@@ -584,7 +584,7 @@ export class VoiceSession {
           else (playerToPlay as any).playbackRate = 1.22;
         } catch {}
       } catch (err) {
-        console.error(`[Mobile Playback Error] Turn #${turnId}: Exception playing WAV segment:`, err);
+        console.error(`[Mobile Playback Error] Turn #${turnId}: Exception playing WAV response:`, err);
       }
     }
 
@@ -593,7 +593,7 @@ export class VoiceSession {
       if (this.isTurnComplete && this.isSessionActive) {
         const playbackEndTime = Date.now();
         const totalTurnTime = this.promptSentTime > 0 ? playbackEndTime - this.promptSentTime : 0;
-        console.log(`[Mobile Audio] 🔊 Full-Duplex Stream Turn Playback Finished (+${totalTurnTime} ms total). Session WAITING FOR NEXT USER TURN (Turn #${turnId}).`);
+        console.log(`[Mobile Audio] 🔊 Full-Duplex Continuous Stream Turn Playback Finished (+${totalTurnTime} ms total). Session WAITING FOR NEXT USER TURN (Turn #${turnId}).`);
         this.isTurnInFlight = false;
         this.updateState('listening');
       }
