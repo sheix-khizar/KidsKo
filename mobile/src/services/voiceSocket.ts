@@ -100,6 +100,10 @@ export class VoiceSession {
       this.callbacks?.onStateChange?.(newState);
 
       // ⚡ REAL-CALL BARGE-IN & STT LIFECYCLE:
+      if (newState === 'listening') {
+        this.isTurnInFlight = false;
+      }
+
       // Keep STT active so when user speaks mid-turn, native speech detection instantly silences speaker
       if (!this.isMicActive && !this.isStartingSpeech) {
         this.startSpeechRecognition();
