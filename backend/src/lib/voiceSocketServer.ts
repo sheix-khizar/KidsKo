@@ -125,10 +125,7 @@ export function attachVoiceSocketServer(httpServer: Server) {
         (async () => {
           try {
             const msg = JSON.parse(raw.toString());
-            if (msg.type === 'cancel') {
-              console.log('[Voice Server] Barge-in cancel signal received from client. Stopping Gemini output generation...');
-              sendCancelSignal(liveSession);
-            } else if (msg.type === 'audio_chunk') {
+            if (msg.type === 'audio_chunk') {
               console.log('[Voice Server] Received chunk, bytes:', msg.data.length);
               if (msg.isRawPcm) {
                 sendAudioChunk(liveSession, msg.data);
@@ -137,6 +134,9 @@ export function attachVoiceSocketServer(httpServer: Server) {
               const currentElapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
               console.log(`[Voice Server User Turn Received]: Prompt="${msg.data}", Elapsed=${currentElapsed}s / ${capSeconds}s, Gemini WS state=${liveSession?.readyState}`);
               sendTextPrompt(liveSession, msg.data);
+            } else if (msg.type === 'cancel') {
+              console.log('[Voice Server Barge-In Cancel Received]: Interrupting Gemini Live turn...');
+              sendCancelSignal(liveSession);
             } else if (msg.type === 'image_capture') {
               const snapshotEligibility = await checkSnapshotEligibility(dbClient, parentId, eligibility.isPremium);
               if (!snapshotEligibility.allowed) {
