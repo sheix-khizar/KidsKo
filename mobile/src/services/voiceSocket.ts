@@ -188,24 +188,30 @@ export class VoiceSession {
             const latencyToFirstChunk = this.promptSentTime > 0 ? this.firstChunkTime - this.promptSentTime : 0;
             console.log(`[Mobile Audio] 🚀 First chunk received: +${latencyToFirstChunk} ms after prompt sent (Turn #${turnId})`);
           }
+
+          // Push streaming audio segment into queue
+          const chunkWav = createWavBase64(pcmChunk);
+          this.audioQueue.push(`data:audio/wav;base64,${chunkWav}`);
+
+          // ⚡ INSTANT PLAYBACK (< 750ms): Start playback immediately on initial chunks!
+          if (!this.hasStartedPlayback && (this.receivedChunkCount >= 2 || this.audioQueue.length >= 2)) {
+            this.hasStartedPlayback = true;
+            this.updateState('speaking');
+            this.playNextAudioSegment();
+          }
         } else if (msg.type === 'turn_complete') {
-          if (turnId !== this.currentTurnId || (this.receivedChunkCount === 0 && this.accumulatedPcmBinary.length === 0) || !this.isSessionActive) {
+          if (turnId !== this.currentTurnId || !this.isSessionActive) {
             console.log(`[Mobile Audio]: Discarding stray turn_complete frame for Turn #${turnId}`);
             return;
           }
 
           const turnCompleteTime = Date.now();
           const latencyToTurnComplete = this.promptSentTime > 0 ? turnCompleteTime - this.promptSentTime : 0;
-          console.log(`[Mobile Audio] Turn complete: +${latencyToTurnComplete} ms after prompt sent. Total chunks collected = ${this.receivedChunkCount} (${this.accumulatedPcmBinary.length} bytes PCM) (Turn #${turnId})`);
+          console.log(`[Mobile Audio] Turn complete: +${latencyToTurnComplete} ms after prompt sent. Total chunks collected = ${this.receivedChunkCount} (Turn #${turnId})`);
 
           this.isTurnComplete = true;
 
-          // 🔊 SINGLE CONTINUOUS RESPONSE WAV: Assemble 100% of turn audio into ONE UNIFIED WAV file for studio-smooth audio
-          if (this.accumulatedPcmBinary.length > 0) {
-            const singleResponseWav = createWavBase64(this.accumulatedPcmBinary);
-            this.accumulatedPcmBinary = '';
-            this.audioQueue.push(`data:audio/wav;base64,${singleResponseWav}`);
-
+          if (!this.hasStartedPlayback && this.audioQueue.length > 0) {
             this.hasStartedPlayback = true;
             this.updateState('speaking');
             this.playNextAudioSegment();
@@ -413,24 +419,42 @@ export class VoiceSession {
         const isFinal = event.isFinal || event.results?.[0]?.isFinal;
 
         if (transcript && transcript.length > 0) {
-          // ⚡ LATEST PROMPT OVERRIDE & REAL-CALL BARGE-IN:
-          // If student speaks a new or extended thought while AI is active (thinking, speaking, or in-flight),
-          // INSTANTLY SILENCE SPEAKER & CANCEL OLD TURN so Gemini answers the LATEST complete sentence!
-          if ((this.voiceState === 'speaking' || this.voiceState === 'thinking' || this.isTurnInFlight || this.isKidskoSpeaking()) && transcript !== this.lastSentTranscript) {
-            console.log(`[Mobile Barge-In] New/Extended user speech detected ("${transcript}") -> Canceling previous turn to answer latest prompt!`);
+          // 1. TRANSCRIPT DEDUPLICATION: If STT transcript is a tail addition/prefix match of the active turn, ignore it during AI active states
+          if ((this.voiceState === 'thinking' || this.voiceState === 'speaking' || this.isTurnInFlight || this.isKidskoSpeaking())) {
+            if (this.lastSentTranscript && (transcript.startsWith(this.lastSentTranscript) || this.lastSentTranscript.startsWith(transcript))) {
+              console.log(`[Mobile Voice Input] 🛑 Transcript deduplication: Ignoring tail extension ("${transcript}") of active turn ("${this.lastSentTranscript}").`);
+              return;
+            }
+            // If child speaks a completely new/unrelated thought mid-stream, trigger barge-in cancellation
+            console.log(`[Mobile Barge-In] New distinct user speech detected ("${transcript}") -> Canceling previous turn for latest prompt!`);
             this.cancelCurrentTurn();
           }
 
           this.callbacks?.onTranscript?.(transcript);
 
+          // 2. FREEZE VAD TIMERS: Block new VAD timers if AI is not strictly in 'listening' mode
+          if (this.voiceState !== 'listening' || this.isTurnInFlight) {
+            if (this.speechSilenceTimer) {
+              clearTimeout(this.speechSilenceTimer);
+              this.speechSilenceTimer = null;
+            }
+            return;
+          }
+
           if (isFinal) {
             this.finalizeSpokenTurn(transcript);
           } else {
+            // 3. DYNAMIC VAD TIMEOUT: Increase pause threshold to 1500ms for incomplete sentence markers
+            const INCOMPLETE_MARKERS = ['kaise', 'ki', 'ke', 'ka', 'ko', 'aur', 'what', 'how', 'kya', 'batao', 'or', 'mein', 'me', 'in', 'is', 'a', 'the', 'to', 'so', 'and', 'but', 'why', 'when', 'where', 'kon', 'kisne'];
+            const words = transcript.toLowerCase().split(/\s+/);
+            const lastWord = words[words.length - 1];
+            const vadTimeoutMs = INCOMPLETE_MARKERS.includes(lastWord) ? 1500 : 800;
+
             if (this.speechSilenceTimer) clearTimeout(this.speechSilenceTimer);
             this.speechSilenceTimer = setTimeout(() => {
-              console.log('[Mobile Voice Input] 800ms child pause detected -> Finalizing spoken turn:', transcript);
+              console.log(`[Mobile Voice Input] ${vadTimeoutMs}ms child pause detected (lastWord="${lastWord}") -> Finalizing spoken turn:`, transcript);
               this.finalizeSpokenTurn(transcript);
-            }, 800);
+            }, vadTimeoutMs);
           }
         }
       });
