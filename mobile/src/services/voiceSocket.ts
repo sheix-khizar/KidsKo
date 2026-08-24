@@ -15,10 +15,10 @@ type VoiceCallbacks = {
 };
 
 // 24000 Hz, 16-bit mono PCM = 48000 bytes/sec
-// Launch segment = ~300ms (14,400 bytes) -> Starts audio playback instantly in < 800ms
-const LAUNCH_SEGMENT_BYTES = 14400;
-// Continuous streaming segment buffer = ~300ms (14,400 bytes) -> Ensures 0ms silence gaps while streaming rest of turn
-const STREAM_SEGMENT_BYTES = 14400;
+// Launch segment = ~600ms (28,800 bytes) -> Starts audio playback in ~1.0s with zero initial stutter
+const LAUNCH_SEGMENT_BYTES = 28800;
+// Continuous streaming segment buffer = ~1.0s (48,000 bytes) -> Ensures 100% studio-smooth streaming handoffs
+const STREAM_SEGMENT_BYTES = 48000;
 
 function createWavBase64(pcmBinary: string): string {
   const pcmBytesLength = pcmBinary.length;
@@ -533,9 +533,9 @@ export class VoiceSession {
       }
 
       try {
-        if (typeof (player as any).setPlaybackRate === 'function') (player as any).setPlaybackRate(1.22);
-        else if (typeof (player as any).setRate === 'function') (player as any).setRate(1.22);
-        else (player as any).playbackRate = 1.22;
+        if (typeof (player as any).setPlaybackRate === 'function') (player as any).setPlaybackRate(1.05);
+        else if (typeof (player as any).setRate === 'function') (player as any).setRate(1.05);
+        else (player as any).playbackRate = 1.05;
       } catch {}
 
       this.preloadedNextPlayer = player;
@@ -562,9 +562,9 @@ export class VoiceSession {
       try {
         playerToPlay = createAudioPlayer({ uri: nextSegmentUri });
         try {
-          if (typeof (playerToPlay as any).setPlaybackRate === 'function') (playerToPlay as any).setPlaybackRate(1.22);
-          else if (typeof (playerToPlay as any).setRate === 'function') (playerToPlay as any).setRate(1.22);
-          else (playerToPlay as any).playbackRate = 1.22;
+          if (typeof (playerToPlay as any).setPlaybackRate === 'function') (playerToPlay as any).setPlaybackRate(1.05);
+          else if (typeof (playerToPlay as any).setRate === 'function') (playerToPlay as any).setRate(1.05);
+          else (playerToPlay as any).playbackRate = 1.05;
         } catch {}
       } catch (err) {
         console.error(`[Mobile Playback Error] Turn #${turnId}: Exception playing WAV response:`, err);
