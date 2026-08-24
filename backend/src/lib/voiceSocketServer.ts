@@ -130,8 +130,8 @@ export function attachVoiceSocketServer(httpServer: Server) {
               if (msg.isRawPcm) {
                 sendAudioChunk(liveSession, msg.data);
               }
-            } else if (msg.type === 'cancel') {
-              console.log('[Voice Server] Cancel received from client -> Stopping in-flight turn');
+            } else if (msg.type === 'abort_current_turn' || msg.type === 'cancel') {
+              console.log('[Voice Server] Abort current turn received from client -> Dropping in-flight audio buffer');
               sendCancel(liveSession);
             } else if (msg.type === 'text_prompt') {
               const currentElapsed = Math.floor((Date.now() - sessionStartTime) / 1000);

@@ -296,10 +296,12 @@ export class VoiceSession {
   }
 
   cancelCurrentTurn() {
-    console.log(`[Mobile Barge-In] Flushing speaker buffer & sending cancel frame (Turn #${this.currentTurnId})...`);
+    console.log(`[Mobile Barge-In] Flushing speaker buffer & sending abort_current_turn frame (Turn #${this.currentTurnId})...`);
+    this.currentTurnId++;
+    this.isTurnInFlight = false;
     this.stopAudioPlayback();
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'cancel' }));
+      this.ws.send(JSON.stringify({ type: 'abort_current_turn' }));
     }
     this.updateState('listening');
   }
@@ -375,7 +377,7 @@ export class VoiceSession {
             }
           }, 3000);
 
-          ExpoSpeechRecognitionModule.start({ lang: 'en-US', interimResults: true, continuous: true });
+          ExpoSpeechRecognitionModule.start({ lang: 'en-US', interimResults: true, continuous: true, audioSource: { type: 'VOICE_COMMUNICATION' } as any });
         } catch (err: any) {
           console.error('[SpeechRec Lifecycle]: Error restarting speech recognition:', err?.message || err);
         } finally {
@@ -465,9 +467,14 @@ export class VoiceSession {
             return;
           }
 
-          // ⚡ INSTANT BARGE-IN / SPEECH INTERRUPTION: If NEW user speech detected while AI is playing, flush speaker buffer & cancel turn!
+          // ⚡ BARGE-IN THRESHOLD GUARD: Only trigger interruption if transcript word count >= 2 (do not interrupt on 1 soft word)
           if (this.voiceState === 'speaking' || this.isKidskoSpeaking()) {
-            console.log(`[Mobile Barge-In] NEW user speech detected mid-stream ("${transcript}") -> Flushing speaker buffer & canceling turn!`);
+            const wordCount = transcript.trim().split(/\s+/).length;
+            if (wordCount < 2) {
+              console.log(`[Mobile Barge-In Guard] Suppressed 1-word echo/soft speech during speaking ("${transcript}", words=${wordCount})`);
+              return;
+            }
+            console.log(`[Mobile Barge-In] NEW multi-word user speech detected mid-stream ("${transcript}", words=${wordCount}) -> Flushing speaker buffer & canceling turn!`);
             this.cancelCurrentTurn();
           }
 
@@ -510,6 +517,7 @@ export class VoiceSession {
         lang: 'en-US',
         interimResults: true,
         continuous: true,
+        audioSource: { type: 'VOICE_COMMUNICATION' } as any,
       });
     } catch (err: any) {
       console.error('[SpeechRec Lifecycle]: Start exception =', err?.message || err);
