@@ -15,8 +15,10 @@ type VoiceCallbacks = {
 };
 
 // 24000 Hz, 16-bit mono PCM = 48000 bytes/sec
-// Launch Segment 1 = ~1.0 second (48,000 bytes) -> Plays initial speech in ~800ms while Gemini finishes turn in background
-const LAUNCH_SEGMENT_BYTES = 48000;
+// Launch segment = ~150ms (7,200 bytes) -> Starts audio playback instantly on Chunk #1/#2 in < 500ms
+const LAUNCH_SEGMENT_BYTES = 7200;
+// Continuous streaming segment buffer = ~300ms (14,400 bytes) -> Ensures 0ms silence gaps while streaming rest of turn
+const STREAM_SEGMENT_BYTES = 14400;
 
 function createWavBase64(pcmBinary: string): string {
   const pcmBytesLength = pcmBinary.length;
@@ -75,7 +77,7 @@ export class VoiceSession {
   private pendingInitialPrompt: string | null = null;
   private voiceState: 'listening' | 'thinking' | 'speaking' | null = null;
 
-  // 2-Segment Pre-Buffer Streaming Queue State
+  // Continuous Real-Time Audio Queue State
   private audioQueue: string[] = [];
   private accumulatedPcmBinary = '';
   private hasStartedPlayback = false;
@@ -103,7 +105,7 @@ export class VoiceSession {
       this.voiceState = newState;
       this.callbacks?.onStateChange?.(newState);
 
-      // REAL-WORLD CALLING LIFECYCLE:
+      // ⚡ REAL-WORLD CALLING LIFECYCLE:
       // 1. Stop STT during AI thinking to prevent duplicate triggers
       if (newState === 'thinking') {
         this.stopSpeechRecognition();
@@ -142,6 +144,7 @@ export class VoiceSession {
 
     console.log(`[Voice Lifecycle]: ⚡ Parallel initiation -> Opening WebSocket & starting speech recognition in parallel at +${Date.now() - this.sessionStartTime} ms`);
 
+    // Parallelize session open and native speech recognition startup
     this.startSpeechRecognition();
 
     this.ws = new WebSocket(socketUrl);
@@ -195,7 +198,7 @@ export class VoiceSession {
 
           this.accumulatedPcmBinary += atob(msg.data);
 
-          // ⚡ INSTANT PRE-BUFFER LAUNCH (Segment 1): Launch playback as soon as ~1.0s (48,000 bytes) arrives
+          // ⚡ INSTANT SUB-500MS LAUNCH (Segment 1): Launch playback as soon as 7,200 bytes (~150ms buffer) arrives
           if (!this.hasStartedPlayback && this.accumulatedPcmBinary.length >= LAUNCH_SEGMENT_BYTES) {
             const launchPcm = this.accumulatedPcmBinary.slice(0, LAUNCH_SEGMENT_BYTES);
             this.accumulatedPcmBinary = this.accumulatedPcmBinary.slice(LAUNCH_SEGMENT_BYTES);
@@ -206,6 +209,20 @@ export class VoiceSession {
             this.hasStartedPlayback = true;
             this.updateState('speaking');
             this.playNextAudioSegment();
+          }
+          // ⚡ CONTINUOUS REAL-TIME STREAMING: Queue ~300ms segments in real-time as chunks arrive
+          else if (this.hasStartedPlayback && this.accumulatedPcmBinary.length >= STREAM_SEGMENT_BYTES) {
+            const streamPcm = this.accumulatedPcmBinary.slice(0, STREAM_SEGMENT_BYTES);
+            this.accumulatedPcmBinary = this.accumulatedPcmBinary.slice(STREAM_SEGMENT_BYTES);
+
+            const streamWav = createWavBase64(streamPcm);
+            this.audioQueue.push(`data:audio/wav;base64,${streamWav}`);
+
+            if (!this.isPlayingQueue) {
+              this.playNextAudioSegment();
+            } else if (!this.preloadedNextPlayer) {
+              this.preloadNextSegment();
+            }
           }
         } else if (msg.type === 'turn_complete') {
           if (turnId !== this.currentTurnId || (this.receivedChunkCount === 0 && !this.hasStartedPlayback) || !this.isSessionActive) {
@@ -219,11 +236,11 @@ export class VoiceSession {
 
           this.isTurnComplete = true;
 
-          // 🔊 UNIFIED SEGMENT 2: Merge 100% of remaining PCM chunks into Segment 2 WAV for seamless 0ms handoff
+          // 🔊 TAIL FLUSH: Flush any remaining PCM binary buffer into final WAV segment
           if (this.accumulatedPcmBinary.length > 0) {
-            const segment2Wav = createWavBase64(this.accumulatedPcmBinary);
+            const tailWav = createWavBase64(this.accumulatedPcmBinary);
             this.accumulatedPcmBinary = '';
-            this.audioQueue.push(`data:audio/wav;base64,${segment2Wav}`);
+            this.audioQueue.push(`data:audio/wav;base64,${tailWav}`);
           }
 
           if (!this.hasStartedPlayback) {
@@ -382,6 +399,12 @@ export class VoiceSession {
       return;
     }
 
+    // 🛑 INSTANT BARGE-IN / SPEECH INTERRUPTION: If child speaks while AI is playing, flush audio buffer & cancel AI turn!
+    if (this.voiceState === 'speaking' || this.isKidskoSpeaking()) {
+      console.log(`[Mobile Barge-In] Child spoke mid-turn ("${transcript}") -> Canceling current AI response...`);
+      this.cancelCurrentTurn();
+    }
+
     if (this.isTurnInFlight) {
       console.log('[Mobile Voice Input] 🛑 Turn in flight. Blocked duplicate submission:', transcript);
       return;
@@ -437,12 +460,12 @@ export class VoiceSession {
         const isFinal = event.isFinal || event.results?.[0]?.isFinal;
 
         if (transcript && transcript.length > 0) {
-          // 🛑 DEDUP PREVIOUS TRANSCRIPT ECHO: Ignore if transcript matches the exact previous sent prompt!
-          if (transcript.toLowerCase().trim() === this.lastSentTranscript.toLowerCase().trim()) {
+          // 🛑 DEDUP PREVIOUS TRANSCRIPT ECHO: Ignore if STT emits exact previous sent transcript
+          if (this.lastSentTranscript && transcript.toLowerCase() === this.lastSentTranscript.toLowerCase()) {
             return;
           }
 
-          // ⚡ INSTANT REAL SPEECH BARGE-IN: If user speaks NEW words while AI is playing, flush audio buffer & cancel turn!
+          // ⚡ INSTANT BARGE-IN / SPEECH INTERRUPTION: If NEW user speech detected while AI is playing, flush speaker buffer & cancel turn!
           if (this.voiceState === 'speaking' || this.isKidskoSpeaking()) {
             console.log(`[Mobile Barge-In] NEW user speech detected mid-stream ("${transcript}") -> Flushing speaker buffer & canceling turn!`);
             this.cancelCurrentTurn();
@@ -592,7 +615,7 @@ export class VoiceSession {
     if (this.promptSentTime > 0 && !this.hasLoggedPlaybackStart) {
       this.hasLoggedPlaybackStart = true;
       const timeToFirstAudio = playbackStartTime - this.promptSentTime;
-      console.log(`[Mobile Audio] 🔊 Stream-Optimized Playback Started (Segment 1 Launch): +${timeToFirstAudio} ms after prompt sent (Turn #${turnId})`);
+      console.log(`[Mobile Audio] 🔊 Full-Duplex Continuous Playback Started (Segment 1 Launch): +${timeToFirstAudio} ms after prompt sent (Turn #${turnId})`);
     }
 
     const previousPlayer = this.activePlayer;
