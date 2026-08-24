@@ -245,6 +245,7 @@ export class VoiceSession {
   cancelCurrentTurn() {
     console.log(`[Mobile Barge-In] User spoke mid-turn (Turn #${this.currentTurnId}) -> Instantly muting speaker & switching to listening...`);
     this.stopAudioPlayback();
+    this.isTurnInFlight = false;
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'cancel' }));
     }
@@ -409,9 +410,9 @@ export class VoiceSession {
         const isFinal = event.isFinal || event.results?.[0]?.isFinal;
 
         if (transcript && transcript.length > 0) {
-          // ⚡ REAL-CALL BARGE-IN: If child speaks while AI is actively speaking audio on speaker, INSTANTLY SILENCE SPEAKER & SWITCH TO LISTENING
-          if (this.voiceState === 'speaking' && this.isKidskoSpeaking()) {
-            console.log(`[Mobile Barge-In] User speech detected mid-stream ("${transcript}") -> Muting speaker & switching to listening!`);
+          // ⚡ REAL-CALL BARGE-IN: If child speaks while AI is active (thinking, speaking, or in-flight), INSTANTLY SILENCE SPEAKER & SWITCH TO LISTENING
+          if ((this.voiceState === 'speaking' || this.voiceState === 'thinking' || this.isTurnInFlight || this.isKidskoSpeaking()) && transcript !== this.lastSentTranscript) {
+            console.log(`[Mobile Barge-In] User speech detected while AI active ("${transcript}") -> Muting speaker & switching to listening!`);
             this.cancelCurrentTurn();
           }
 
