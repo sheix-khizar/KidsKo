@@ -362,8 +362,9 @@ export class VoiceSession {
       return;
     }
 
-    if (this.isTurnInFlight || this.voiceState === 'thinking' || this.voiceState === 'speaking') {
-      console.log('[Mobile Voice Input] 🛑 Turn in flight / AI active. Blocked duplicate submission:', transcript);
+    // Block duplicate submissions if audio chunks have already started arriving or if AI is speaking
+    if (this.isTurnInFlight && (this.receivedChunkCount > 0 || this.voiceState === 'speaking')) {
+      console.log('[Mobile Voice Input] 🛑 Turn audio streaming / speaking. Blocked duplicate submission:', transcript);
       return;
     }
 
@@ -427,9 +428,9 @@ export class VoiceSession {
           } else {
             if (this.speechSilenceTimer) clearTimeout(this.speechSilenceTimer);
             this.speechSilenceTimer = setTimeout(() => {
-              console.log('[Mobile Voice Input] 500ms child pause detected -> Finalizing spoken turn:', transcript);
+              console.log('[Mobile Voice Input] 800ms child pause detected -> Finalizing spoken turn:', transcript);
               this.finalizeSpokenTurn(transcript);
-            }, 500);
+            }, 800);
           }
         }
       });
