@@ -55,6 +55,8 @@ export function attachVoiceSocketServer(httpServer: Server) {
       let hardCapTimer: NodeJS.Timeout;
 
       let serverTurnId = 1;
+      let promptStartTime = 0;
+      let isFirstChunkForTurn = true;
 
       try {
         liveSession = await startLiveSession({
@@ -65,6 +67,11 @@ export function attachVoiceSocketServer(httpServer: Server) {
             }
           },
           onAudioChunk: (base64Audio) => {
+            if (isFirstChunkForTurn && promptStartTime > 0) {
+              isFirstChunkForTurn = false;
+              const relayLatencyMs = Date.now() - promptStartTime;
+              console.log(`[Relay Latency Diagnostics]: 🚀 Gemini -> Relay initial audio chunk returned in +${relayLatencyMs} ms (Turn #${serverTurnId})`);
+            }
             if (clientSocket.readyState === WebSocket.OPEN) {
               console.log(`[Backend Outbound Audio Chunk to Mobile]: bytes=${base64Audio.length} (Turn #${serverTurnId})`);
               clientSocket.send(JSON.stringify({ type: 'audio', data: base64Audio, turnId: serverTurnId }));
@@ -145,6 +152,8 @@ export function attachVoiceSocketServer(httpServer: Server) {
               }
             } else if (msg.type === 'text_prompt') {
               serverTurnId = msg.turnId !== undefined ? msg.turnId : serverTurnId + 1;
+              promptStartTime = Date.now();
+              isFirstChunkForTurn = true;
               const currentElapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
               console.log(`[Voice Server User Turn #${serverTurnId} Received]: Prompt="${msg.data}", Elapsed=${currentElapsed}s / ${capSeconds}s`);
               sendTextPrompt(liveSession, msg.data);
@@ -153,6 +162,8 @@ export function attachVoiceSocketServer(httpServer: Server) {
               console.log(`[Voice Server] Client sent turn cancel signal -> Discarding active Gemini speech (Incremented serverTurnId to #${serverTurnId})`);
             } else if (msg.type === 'image_capture') {
               if (msg.turnId !== undefined) serverTurnId = msg.turnId;
+              promptStartTime = Date.now();
+              isFirstChunkForTurn = true;
               const snapshotEligibility = await checkSnapshotEligibility(dbClient, parentId, eligibility.isPremium);
               if (!snapshotEligibility.allowed) {
                 console.log(`[Voice Server Snapshot Blocked]: ${snapshotEligibility.reason}`);

@@ -454,11 +454,11 @@ export class VoiceSession {
           if (isFinal) {
             this.finalizeSpokenTurn(transcript);
           } else {
-            // 3. DYNAMIC VAD TIMEOUT: Increase pause threshold to 1500ms for incomplete sentence markers
+            // 3. DYNAMIC VAD TIMEOUT: Fine-tuned pause threshold (1000ms for incomplete markers, 700ms for standard phrases)
             const INCOMPLETE_MARKERS = ['kaise', 'ki', 'ke', 'ka', 'ko', 'aur', 'what', 'how', 'kya', 'batao', 'or', 'mein', 'me', 'in', 'is', 'a', 'the', 'to', 'so', 'and', 'but', 'why', 'when', 'where', 'kon', 'kisne'];
             const words = transcript.toLowerCase().split(/\s+/);
             const lastWord = words[words.length - 1];
-            const vadTimeoutMs = INCOMPLETE_MARKERS.includes(lastWord) ? 1500 : 800;
+            const vadTimeoutMs = INCOMPLETE_MARKERS.includes(lastWord) ? 1000 : 700;
 
             if (this.speechSilenceTimer) clearTimeout(this.speechSilenceTimer);
             this.speechSilenceTimer = setTimeout(() => {
