@@ -203,25 +203,11 @@ export class VoiceSession {
 
           this.receivedChunkCount++;
           this.accumulatedPcmBinary += pcmChunk;
-          this.unplayedPcmBuffer += pcmChunk;
 
           if (this.receivedChunkCount === 1) {
             this.firstChunkTime = Date.now();
             const latencyToFirstChunk = this.promptSentTime > 0 ? this.firstChunkTime - this.promptSentTime : 0;
             console.log(`[Mobile Audio] 🚀 First chunk received: +${latencyToFirstChunk} ms after prompt sent (Turn #${turnId})`);
-          }
-
-          // ⚡ 2. 500MS SEGMENT BATCHING: Accumulate 24,000 bytes (0.5s of 24kHz audio) to prevent native player gap overhead
-          if (this.unplayedPcmBuffer.length >= 24000) {
-            const segmentWav = createWavBase64(this.unplayedPcmBuffer);
-            this.unplayedPcmBuffer = '';
-            this.audioQueue.push(`data:audio/wav;base64,${segmentWav}`);
-
-            if (!this.hasStartedPlayback) {
-              this.hasStartedPlayback = true;
-              this.updateState('speaking');
-              this.playNextAudioSegment();
-            }
           }
         } else if (msg.type === 'turn_complete') {
           if (!this.isSessionActive) {
@@ -235,14 +221,10 @@ export class VoiceSession {
 
           this.isTurnComplete = true;
 
-          // ⚡ Flush remaining unplayed PCM bytes on turn complete
-          if (this.unplayedPcmBuffer.length > 0) {
-            const finalWav = createWavBase64(this.unplayedPcmBuffer);
-            this.unplayedPcmBuffer = '';
-            this.audioQueue.push(`data:audio/wav;base64,${finalWav}`);
-          }
-
-          if (!this.hasStartedPlayback && this.audioQueue.length > 0) {
+          // ⚡ SINGLE FULL-TURN WAV PLAYBACK: Build 1 single unbroken WAV file for 100% gapless continuous speech
+          if (this.accumulatedPcmBinary.length > 0 && !this.hasStartedPlayback) {
+            const singleTurnWav = createWavBase64(this.accumulatedPcmBinary);
+            this.audioQueue = [`data:audio/wav;base64,${singleTurnWav}`];
             this.hasStartedPlayback = true;
             this.updateState('speaking');
             this.playNextAudioSegment();
