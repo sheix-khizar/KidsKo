@@ -429,9 +429,16 @@ export class VoiceSession {
         const isFinal = event.isFinal || event.results?.[0]?.isFinal;
 
         if (transcript && transcript.length > 0) {
-          // 1. TRANSCRIPT DEDUPLICATION: If STT transcript is a tail addition/prefix match of the active turn, ignore it during AI active states
+          // 1. TRANSCRIPT DEDUPLICATION & TAIL EXTENSION REPAIR
           if ((this.voiceState === 'thinking' || this.voiceState === 'speaking' || this.isTurnInFlight || this.isKidskoSpeaking())) {
             if (this.lastSentTranscript && (transcript.startsWith(this.lastSentTranscript) || this.lastSentTranscript.startsWith(transcript))) {
+              // ⚡ IN-FLIGHT TAIL-EXTENSION REPAIR: If turn was sent prematurely and child just finished sentence before audio starts, cancel & update with full question!
+              if (this.voiceState === 'thinking' && this.receivedChunkCount === 0 && !this.hasStartedPlayback && transcript.length > this.lastSentTranscript.length) {
+                console.log(`[Mobile Voice Input] ⚡ Repairing cut-off turn! Child finished sentence ("${transcript}"). Canceling premature turn and sending complete prompt!`);
+                this.cancelCurrentTurn();
+                this.finalizeSpokenTurn(transcript);
+                return;
+              }
               console.log(`[Mobile Voice Input] 🛑 Transcript deduplication: Ignoring tail extension ("${transcript}") of active turn ("${this.lastSentTranscript}").`);
               return;
             }
@@ -454,11 +461,15 @@ export class VoiceSession {
           if (isFinal) {
             this.finalizeSpokenTurn(transcript);
           } else {
-            // 3. DYNAMIC VAD TIMEOUT: Fine-tuned pause threshold (1000ms for incomplete markers, 700ms for standard phrases)
-            const INCOMPLETE_MARKERS = ['kaise', 'ki', 'ke', 'ka', 'ko', 'aur', 'what', 'how', 'kya', 'batao', 'or', 'mein', 'me', 'in', 'is', 'a', 'the', 'to', 'so', 'and', 'but', 'why', 'when', 'where', 'kon', 'kisne'];
+            // 3. DYNAMIC VAD TIMEOUT: Child-optimized pause threshold (1600ms for incomplete markers/hesitations, 1100ms for standard phrases)
+            const INCOMPLETE_MARKERS = [
+              'kaise', 'ki', 'ke', 'ka', 'ko', 'aur', 'what', 'how', 'kya', 'batao', 'or', 'mein', 'me', 'in', 'is', 'a',
+              'the', 'to', 'so', 'and', 'but', 'why', 'when', 'where', 'kon', 'kisne', 'picture', 'photo', 'image', 'step',
+              'help', 'solution', 'page', 'ques', 'question', 'answer', 'tell', 'show', 'can'
+            ];
             const words = transcript.toLowerCase().split(/\s+/);
             const lastWord = words[words.length - 1];
-            const vadTimeoutMs = INCOMPLETE_MARKERS.includes(lastWord) ? 1000 : 700;
+            const vadTimeoutMs = INCOMPLETE_MARKERS.includes(lastWord) ? 1600 : 1100;
 
             if (this.speechSilenceTimer) clearTimeout(this.speechSilenceTimer);
             this.speechSilenceTimer = setTimeout(() => {
