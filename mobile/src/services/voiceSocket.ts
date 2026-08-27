@@ -272,12 +272,12 @@ export class VoiceSession {
 
   sendImageCapture(base64Jpeg: string, caption?: string) {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      console.log('[Mobile Sending Image Capture]:', base64Jpeg.length, 'base64 chars, caption:', caption || '(none)');
       this.isTurnInFlight = true;
       this.resetTurnState();
+      console.log('[Mobile Sending Image Capture]:', base64Jpeg.length, 'base64 chars, caption:', caption || '(none)', 'Turn #', this.currentTurnId);
       this.updateState('thinking');
       this.promptSentTime = Date.now();
-      this.ws.send(JSON.stringify({ type: 'image_capture', data: base64Jpeg, caption }));
+      this.ws.send(JSON.stringify({ type: 'image_capture', data: base64Jpeg, caption, turnId: this.currentTurnId }));
     }
   }
 
@@ -389,7 +389,7 @@ export class VoiceSession {
       this.promptSentTime = Date.now();
       console.log(`[Mobile Voice Input] Finalized spoken turn (Turn #${this.currentTurnId}) -> Sending prompt to Gemini Live:`, transcript);
       this.lastSentTranscript = transcript;
-      this.ws.send(JSON.stringify({ type: 'text_prompt', data: transcript }));
+      this.ws.send(JSON.stringify({ type: 'text_prompt', data: transcript, turnId: this.currentTurnId }));
     }
   }
 
