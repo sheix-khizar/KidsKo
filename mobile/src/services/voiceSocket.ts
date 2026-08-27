@@ -75,6 +75,7 @@ export class VoiceSession {
   // Single Continuous Response State
   private audioQueue: string[] = [];
   private accumulatedPcmBinary = '';
+  private unplayedPcmBuffer = '';
   private hasStartedPlayback = false;
   private isPlayingQueue = false;
   private receivedChunkCount = 0;
@@ -192,6 +193,7 @@ export class VoiceSession {
           this.receivedChunkCount++;
           const pcmChunk = atob(msg.data);
           this.accumulatedPcmBinary += pcmChunk;
+          this.unplayedPcmBuffer += pcmChunk;
 
           if (this.receivedChunkCount === 1) {
             this.firstChunkTime = Date.now();
@@ -199,15 +201,17 @@ export class VoiceSession {
             console.log(`[Mobile Audio] 🚀 First chunk received: +${latencyToFirstChunk} ms after prompt sent (Turn #${turnId})`);
           }
 
-          // ⚡ INCREMENTAL STREAMING AUDIO QUEUE: Convert incoming PCM chunk into small audio segment
-          const chunkWav = createWavBase64(pcmChunk);
-          this.audioQueue.push(`data:audio/wav;base64,${chunkWav}`);
+          // ⚡ 500MS SEGMENT BATCHING: Accumulate 16,000 bytes (0.5s of 24kHz 16-bit mono PCM) before building segment
+          if (this.unplayedPcmBuffer.length >= 16000) {
+            const segmentWav = createWavBase64(this.unplayedPcmBuffer);
+            this.unplayedPcmBuffer = '';
+            this.audioQueue.push(`data:audio/wav;base64,${segmentWav}`);
 
-          // Start playback immediately when initial buffer (~200ms) arrives!
-          if (!this.hasStartedPlayback && (this.receivedChunkCount >= 2 || this.audioQueue.length >= 2)) {
-            this.hasStartedPlayback = true;
-            this.updateState('speaking');
-            this.playNextAudioSegment();
+            if (!this.hasStartedPlayback) {
+              this.hasStartedPlayback = true;
+              this.updateState('speaking');
+              this.playNextAudioSegment();
+            }
           }
         } else if (msg.type === 'turn_complete') {
           if (!this.isSessionActive) {
@@ -220,6 +224,13 @@ export class VoiceSession {
           console.log(`[Mobile Audio] Turn complete: +${latencyToTurnComplete} ms after prompt sent. Total chunks collected = ${this.receivedChunkCount} (${this.accumulatedPcmBinary.length} bytes PCM) (Turn #${turnId})`);
 
           this.isTurnComplete = true;
+
+          // Flush any remaining unplayed PCM bytes into final tail segment
+          if (this.unplayedPcmBuffer.length > 0) {
+            const finalSegmentWav = createWavBase64(this.unplayedPcmBuffer);
+            this.unplayedPcmBuffer = '';
+            this.audioQueue.push(`data:audio/wav;base64,${finalSegmentWav}`);
+          }
 
           if (!this.hasStartedPlayback && this.audioQueue.length > 0) {
             this.hasStartedPlayback = true;
@@ -292,6 +303,7 @@ export class VoiceSession {
     this.firstChunkTime = 0;
     this.receivedChunkCount = 0;
     this.accumulatedPcmBinary = '';
+    this.unplayedPcmBuffer = '';
     this.audioQueue = [];
     this.hasStartedPlayback = false;
     this.isPlayingQueue = false;
@@ -306,6 +318,7 @@ export class VoiceSession {
     }
     this.audioQueue = [];
     this.accumulatedPcmBinary = '';
+    this.unplayedPcmBuffer = '';
     this.hasStartedPlayback = false;
     this.isPlayingQueue = false;
     this.isTurnInFlight = false;
