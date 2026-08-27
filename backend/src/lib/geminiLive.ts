@@ -50,7 +50,7 @@ async function connectSingleModel(modelName: string, callbacks: LiveCallbacks): 
         console.log(`[Gemini Live WS] Setup accepted for model: ${modelName}`);
         resolve(geminiWs);
       }
-    }, 1500);
+    }, 2000);
 
     geminiWs.on('open', () => {
       console.log(`[Gemini Live WS] Trying Live API model: ${modelName} via v1beta...`);
