@@ -336,6 +336,9 @@ export class VoiceSession {
 
     if (this.activePlayer) {
       try {
+        if (typeof (this.activePlayer as any).removeAllListeners === 'function') {
+          (this.activePlayer as any).removeAllListeners();
+        }
         this.activePlayer.remove();
       } catch {}
       this.activePlayer = null;
@@ -343,6 +346,9 @@ export class VoiceSession {
 
     if (this.preloadedNextPlayer) {
       try {
+        if (typeof (this.preloadedNextPlayer as any).removeAllListeners === 'function') {
+          (this.preloadedNextPlayer as any).removeAllListeners();
+        }
         this.preloadedNextPlayer.remove();
       } catch {}
       this.preloadedNextPlayer = null;
@@ -605,7 +611,7 @@ export class VoiceSession {
 
     if (!playerToPlay) {
       this.isPlayingQueue = false;
-      if (this.isTurnComplete && this.isSessionActive) {
+      if (this.currentTurnId === turnId && this.isTurnComplete && this.isSessionActive) {
         const playbackEndTime = Date.now();
         const totalTurnTime = this.promptSentTime > 0 ? playbackEndTime - this.promptSentTime : 0;
         console.log(`[Mobile Audio] 🔊 Single Continuous Response Playback Finished (+${totalTurnTime} ms total). Session WAITING FOR NEXT USER TURN (Turn #${turnId}).`);
