@@ -6,6 +6,7 @@ import { WS_URL } from './config';
 type VoiceCallbacks = {
   onReady: (capSeconds: number) => void;
   onCapReached: () => void;
+  onWarning?: (remainingSeconds: number) => void;
   onError: (reason: string) => void;
   onClose: (reason?: string | number) => void;
   onTranscript?: (text: string) => void;
@@ -149,10 +150,16 @@ export class VoiceSession {
         const msg = JSON.parse(event.data);
         const turnId = this.currentTurnId;
 
+        // ⚡ STRICT TURN-ID GUARD: Drop any frame (audio, text, turn_complete) from stale/cancelled turns
+        if (msg.turnId !== undefined && msg.turnId !== turnId) {
+          console.log(`[Mobile WS Frame Discarded]: Dropped stale message type="${msg.type}" for turn #${msg.turnId} (active turn is #${turnId})`);
+          return;
+        }
+
         if (msg.type === 'ready') {
           this.wsReadyTime = Date.now();
           this.isSessionReady = true;
-          const setupLatency = this.wsOpenTime > 0 ? this.wsReadyTime - this.wsOpenTime : 0;
+          const setupLatency = this.wsOpenTime > 0 ? this.wsReadyTime - this.sessionStartTime : 0;
           console.log(`[Voice Lifecycle]: [WS Ready Frame]: Handshake complete in +${this.wsReadyTime - this.sessionStartTime} ms total (+${setupLatency} ms setup gap). Cap = ${msg.capSeconds}s`);
 
           callbacks.onReady(msg.capSeconds);
@@ -163,6 +170,9 @@ export class VoiceSession {
             console.log(`[Voice Lifecycle]: ⚡ Fast-talker prompt unqueued & dispatched at handshake completion: "${queuedPrompt}"`);
             this.finalizeSpokenTurn(queuedPrompt);
           }
+        } else if (msg.type === 'warning') {
+          console.log(`[Mobile WS Warning Frame]: Session expiring in ${msg.remainingSeconds}s`);
+          callbacks.onWarning?.(msg.remainingSeconds);
         } else if (msg.type === 'cap_reached') {
           console.log('[Mobile WS Cap Reached Frame]: Server sent cap_reached signal.');
           this.isSessionActive = false;
@@ -177,7 +187,7 @@ export class VoiceSession {
           this.isSessionReady = false;
           callbacks.onError(msg.reason);
         } else if (msg.type === 'audio') {
-          if (turnId !== this.currentTurnId || !this.isSessionActive) return;
+          if (!this.isSessionActive) return;
 
           this.receivedChunkCount++;
           const pcmChunk = atob(msg.data);
@@ -188,8 +198,19 @@ export class VoiceSession {
             const latencyToFirstChunk = this.promptSentTime > 0 ? this.firstChunkTime - this.promptSentTime : 0;
             console.log(`[Mobile Audio] 🚀 First chunk received: +${latencyToFirstChunk} ms after prompt sent (Turn #${turnId})`);
           }
+
+          // ⚡ INCREMENTAL STREAMING AUDIO QUEUE: Convert incoming PCM chunk into small audio segment
+          const chunkWav = createWavBase64(pcmChunk);
+          this.audioQueue.push(`data:audio/wav;base64,${chunkWav}`);
+
+          // Start playback immediately when initial buffer (~200ms) arrives!
+          if (!this.hasStartedPlayback && (this.receivedChunkCount >= 2 || this.audioQueue.length >= 2)) {
+            this.hasStartedPlayback = true;
+            this.updateState('speaking');
+            this.playNextAudioSegment();
+          }
         } else if (msg.type === 'turn_complete') {
-          if (turnId !== this.currentTurnId || (this.receivedChunkCount === 0 && this.accumulatedPcmBinary.length === 0) || !this.isSessionActive) {
+          if (!this.isSessionActive) {
             console.log(`[Mobile Audio]: Discarding stray turn_complete frame for Turn #${turnId}`);
             return;
           }
@@ -200,18 +221,13 @@ export class VoiceSession {
 
           this.isTurnComplete = true;
 
-          // 🔊 SINGLE CONTINUOUS UNIFIED WAV: Assemble 100% of turn audio into 1 single unified WAV file for studio-smooth playback
-          if (this.accumulatedPcmBinary.length > 0) {
-            const singleResponseWav = createWavBase64(this.accumulatedPcmBinary);
-            this.accumulatedPcmBinary = '';
-            this.audioQueue = [`data:audio/wav;base64,${singleResponseWav}`];
-
+          if (!this.hasStartedPlayback && this.audioQueue.length > 0) {
             this.hasStartedPlayback = true;
             this.updateState('speaking');
             this.playNextAudioSegment();
           }
         } else if (msg.type === 'text') {
-          console.log(`[Mobile AI Spoken Response]: "${msg.data}"`);
+          console.log(`[Mobile AI Spoken Response]: "${msg.data}" (Turn #${turnId})`);
           callbacks.onTranscript?.(msg.data);
         } else if (msg.type === 'snapshot_ack') {
           console.log(`[Mobile Snapshot Ack]: ${msg.remaining} remaining this week`);

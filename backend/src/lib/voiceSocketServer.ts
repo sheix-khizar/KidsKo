@@ -100,6 +100,8 @@ export function attachVoiceSocketServer(httpServer: Server) {
       clientSocket.send(JSON.stringify({ type: 'ready', capSeconds }));
       console.log(`[Voice Server] Voice session ready for parent ${parentId}, student ${studentId || 'default'}. Awaiting student spoken turn...`);
 
+      let warningSent = false;
+
       accountingTimer = setInterval(async () => {
         try {
           elapsedMs += ACCOUNTING_INTERVAL_MS;
@@ -107,6 +109,14 @@ export function attachVoiceSocketServer(httpServer: Server) {
           const remainingSec = Math.max(0, capSeconds - elapsedSec);
           console.log(`[Voice Accounting Check]: Elapsed=${elapsedSec}s, Remaining=${remainingSec}s, DB update (+${ACCOUNTING_INTERVAL_MS / 60000} min)`);
           await recordVoiceMinutesUsed(dbClient, parentId, ACCOUNTING_INTERVAL_MS / 60000);
+
+          if (remainingSec <= 30 && remainingSec > 0 && !warningSent) {
+            warningSent = true;
+            console.log(`[Voice Warning Frame]: Session has ${remainingSec}s remaining. Sending warning frame to client.`);
+            if (clientSocket.readyState === WebSocket.OPEN) {
+              clientSocket.send(JSON.stringify({ type: 'warning', remainingSeconds: remainingSec }));
+            }
+          }
         } catch (err) {
           console.error('[Voice Socket] Error recording voice minutes:', err);
         }
