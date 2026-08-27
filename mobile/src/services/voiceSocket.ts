@@ -458,22 +458,30 @@ export class VoiceSession {
         const isFinal = event.isFinal || event.results?.[0]?.isFinal;
 
         if (transcript && transcript.length > 0) {
-          // 1. TRANSCRIPT DEDUPLICATION & TAIL EXTENSION REPAIR
-          if ((this.voiceState === 'thinking' || this.voiceState === 'speaking' || this.isTurnInFlight || this.isKidskoSpeaking())) {
+          // 1. TRANSCRIPT DEDUPLICATION & BARGE-IN GUARD
+          if (this.voiceState === 'thinking' || this.isTurnInFlight) {
+            // ⚡ IN-FLIGHT TAIL-EXTENSION REPAIR: If turn was sent prematurely and child just finished sentence before audio starts, cancel & update with full question!
+            if (this.lastSentTranscript && transcript.startsWith(this.lastSentTranscript) && transcript.length > this.lastSentTranscript.length && this.receivedChunkCount === 0 && !this.hasStartedPlayback) {
+              console.log(`[Mobile Voice Input] ⚡ Repairing cut-off turn! Child finished sentence ("${transcript}"). Canceling premature turn and sending complete prompt!`);
+              this.cancelCurrentTurn();
+              this.finalizeSpokenTurn(transcript);
+              return;
+            }
+            // Ignore residual mic transcripts / echo while model is thinking
+            return;
+          }
+
+          if (this.voiceState === 'speaking' && this.hasStartedPlayback) {
             if (this.lastSentTranscript && (transcript.startsWith(this.lastSentTranscript) || this.lastSentTranscript.startsWith(transcript))) {
-              // ⚡ IN-FLIGHT TAIL-EXTENSION REPAIR: If turn was sent prematurely and child just finished sentence before audio starts, cancel & update with full question!
-              if (this.voiceState === 'thinking' && this.receivedChunkCount === 0 && !this.hasStartedPlayback && transcript.length > this.lastSentTranscript.length) {
-                console.log(`[Mobile Voice Input] ⚡ Repairing cut-off turn! Child finished sentence ("${transcript}"). Canceling premature turn and sending complete prompt!`);
-                this.cancelCurrentTurn();
-                this.finalizeSpokenTurn(transcript);
-                return;
-              }
               console.log(`[Mobile Voice Input] 🛑 Transcript deduplication: Ignoring tail extension ("${transcript}") of active turn ("${this.lastSentTranscript}").`);
               return;
             }
-            // If child speaks a completely new/unrelated thought mid-stream, trigger barge-in cancellation
-            console.log(`[Mobile Barge-In] New distinct user speech detected ("${transcript}") -> Canceling previous turn for latest prompt!`);
-            this.cancelCurrentTurn();
+            // Trigger barge-in cancellation ONLY when AI is actively speaking audio and distinct speech is spoken
+            const words = transcript.trim().split(/\s+/);
+            if (words.length >= 2) {
+              console.log(`[Mobile Barge-In] New distinct user speech detected ("${transcript}") -> Canceling active turn for latest prompt!`);
+              this.cancelCurrentTurn();
+            }
           }
 
           this.callbacks?.onTranscript?.(transcript);
