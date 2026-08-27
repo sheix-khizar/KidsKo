@@ -193,7 +193,6 @@ export class VoiceSession {
           this.receivedChunkCount++;
           const pcmChunk = atob(msg.data);
           this.accumulatedPcmBinary += pcmChunk;
-          this.unplayedPcmBuffer += pcmChunk;
 
           if (this.receivedChunkCount === 1) {
             this.firstChunkTime = Date.now();
@@ -201,17 +200,15 @@ export class VoiceSession {
             console.log(`[Mobile Audio] 🚀 First chunk received: +${latencyToFirstChunk} ms after prompt sent (Turn #${turnId})`);
           }
 
-          // ⚡ 500MS SEGMENT BATCHING: Accumulate 16,000 bytes (0.5s of 24kHz 16-bit mono PCM) before building segment
-          if (this.unplayedPcmBuffer.length >= 16000) {
-            const segmentWav = createWavBase64(this.unplayedPcmBuffer);
-            this.unplayedPcmBuffer = '';
-            this.audioQueue.push(`data:audio/wav;base64,${segmentWav}`);
+          // ⚡ DIRECT STREAM INGESTION: Convert binary PCM chunk directly to streaming WAV segment
+          const chunkWav = createWavBase64(pcmChunk);
+          this.audioQueue.push(`data:audio/wav;base64,${chunkWav}`);
 
-            if (!this.hasStartedPlayback) {
-              this.hasStartedPlayback = true;
-              this.updateState('speaking');
-              this.playNextAudioSegment();
-            }
+          // ⚡ INSTANT PLAYBACK LAUNCH AT CHUNK #2 (~200ms): Do NOT wait for turn_complete or batch accumulation
+          if (!this.hasStartedPlayback && (this.receivedChunkCount >= 2 || this.audioQueue.length >= 2)) {
+            this.hasStartedPlayback = true;
+            this.updateState('speaking');
+            this.playNextAudioSegment();
           }
         } else if (msg.type === 'turn_complete') {
           if (!this.isSessionActive) {
@@ -224,13 +221,6 @@ export class VoiceSession {
           console.log(`[Mobile Audio] Turn complete: +${latencyToTurnComplete} ms after prompt sent. Total chunks collected = ${this.receivedChunkCount} (${this.accumulatedPcmBinary.length} bytes PCM) (Turn #${turnId})`);
 
           this.isTurnComplete = true;
-
-          // Flush any remaining unplayed PCM bytes into final tail segment
-          if (this.unplayedPcmBuffer.length > 0) {
-            const finalSegmentWav = createWavBase64(this.unplayedPcmBuffer);
-            this.unplayedPcmBuffer = '';
-            this.audioQueue.push(`data:audio/wav;base64,${finalSegmentWav}`);
-          }
 
           if (!this.hasStartedPlayback && this.audioQueue.length > 0) {
             this.hasStartedPlayback = true;
