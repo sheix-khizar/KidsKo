@@ -188,30 +188,24 @@ export class VoiceSession {
             const latencyToFirstChunk = this.promptSentTime > 0 ? this.firstChunkTime - this.promptSentTime : 0;
             console.log(`[Mobile Audio] 🚀 First chunk received: +${latencyToFirstChunk} ms after prompt sent (Turn #${turnId})`);
           }
-
-          // Push streaming audio segment into queue
-          const chunkWav = createWavBase64(pcmChunk);
-          this.audioQueue.push(`data:audio/wav;base64,${chunkWav}`);
-
-          // ⚡ INSTANT PLAYBACK (< 750ms): Start playback immediately on initial chunks!
-          if (!this.hasStartedPlayback && (this.receivedChunkCount >= 2 || this.audioQueue.length >= 2)) {
-            this.hasStartedPlayback = true;
-            this.updateState('speaking');
-            this.playNextAudioSegment();
-          }
         } else if (msg.type === 'turn_complete') {
-          if (turnId !== this.currentTurnId || !this.isSessionActive) {
+          if (turnId !== this.currentTurnId || (this.receivedChunkCount === 0 && this.accumulatedPcmBinary.length === 0) || !this.isSessionActive) {
             console.log(`[Mobile Audio]: Discarding stray turn_complete frame for Turn #${turnId}`);
             return;
           }
 
           const turnCompleteTime = Date.now();
           const latencyToTurnComplete = this.promptSentTime > 0 ? turnCompleteTime - this.promptSentTime : 0;
-          console.log(`[Mobile Audio] Turn complete: +${latencyToTurnComplete} ms after prompt sent. Total chunks collected = ${this.receivedChunkCount} (Turn #${turnId})`);
+          console.log(`[Mobile Audio] Turn complete: +${latencyToTurnComplete} ms after prompt sent. Total chunks collected = ${this.receivedChunkCount} (${this.accumulatedPcmBinary.length} bytes PCM) (Turn #${turnId})`);
 
           this.isTurnComplete = true;
 
-          if (!this.hasStartedPlayback && this.audioQueue.length > 0) {
+          // 🔊 SINGLE CONTINUOUS UNIFIED WAV: Assemble 100% of turn audio into 1 single unified WAV file for studio-smooth playback
+          if (this.accumulatedPcmBinary.length > 0) {
+            const singleResponseWav = createWavBase64(this.accumulatedPcmBinary);
+            this.accumulatedPcmBinary = '';
+            this.audioQueue = [`data:audio/wav;base64,${singleResponseWav}`];
+
             this.hasStartedPlayback = true;
             this.updateState('speaking');
             this.playNextAudioSegment();
