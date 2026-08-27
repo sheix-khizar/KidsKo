@@ -490,7 +490,7 @@ export class VoiceSession {
           if (isFinal) {
             this.finalizeSpokenTurn(transcript);
           } else {
-            // 3. DYNAMIC VAD TIMEOUT: Child-optimized pause threshold (1600ms for incomplete markers/hesitations, 1100ms for standard phrases)
+            // 3. DYNAMIC VAD TIMEOUT: Child-optimized pause threshold (1200ms for incomplete markers/hesitations, 750ms for standard phrases)
             const INCOMPLETE_MARKERS = [
               'kaise', 'ki', 'ke', 'ka', 'ko', 'aur', 'what', 'how', 'kya', 'batao', 'or', 'mein', 'me', 'in', 'is', 'a',
               'the', 'to', 'so', 'and', 'but', 'why', 'when', 'where', 'kon', 'kisne', 'picture', 'photo', 'image', 'step',
@@ -498,7 +498,7 @@ export class VoiceSession {
             ];
             const words = transcript.toLowerCase().split(/\s+/);
             const lastWord = words[words.length - 1];
-            const vadTimeoutMs = INCOMPLETE_MARKERS.includes(lastWord) ? 1600 : 1100;
+            const vadTimeoutMs = INCOMPLETE_MARKERS.includes(lastWord) ? 1200 : 750;
 
             if (this.speechSilenceTimer) clearTimeout(this.speechSilenceTimer);
             this.speechSilenceTimer = setTimeout(() => {
