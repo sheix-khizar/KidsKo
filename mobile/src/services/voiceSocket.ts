@@ -193,8 +193,15 @@ export class VoiceSession {
         } else if (msg.type === 'audio') {
           if (!this.isSessionActive) return;
 
-          this.receivedChunkCount++;
           const pcmChunk = atob(msg.data);
+
+          // ⚡ 1. DUMMY FRAME FILTER: Skip initial 4-byte metadata frame sent by Gemini Live
+          if (pcmChunk.length <= 8) {
+            console.log(`[Mobile Audio]: Skipped dummy metadata frame (${pcmChunk.length} bytes) for Turn #${turnId}`);
+            return;
+          }
+
+          this.receivedChunkCount++;
           this.accumulatedPcmBinary += pcmChunk;
 
           if (this.receivedChunkCount === 1) {
@@ -207,8 +214,8 @@ export class VoiceSession {
           const chunkWav = createWavBase64(pcmChunk);
           this.audioQueue.push(`data:audio/wav;base64,${chunkWav}`);
 
-          // ⚡ INSTANT PLAYBACK LAUNCH AT CHUNK #2 (~200ms): Do NOT wait for turn_complete or batch accumulation
-          if (!this.hasStartedPlayback && (this.receivedChunkCount >= 2 || this.audioQueue.length >= 2)) {
+          // ⚡ 2. 400MS JITTER-BUFFER PLAYBACK LAUNCH (~19,200 bytes PCM): Launch playback when 400ms of actual speech is buffered
+          if (!this.hasStartedPlayback && (this.accumulatedPcmBinary.length >= 19200 || this.audioQueue.length >= 3)) {
             this.hasStartedPlayback = true;
             this.updateState('speaking');
             this.playNextAudioSegment();
