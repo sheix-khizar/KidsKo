@@ -96,6 +96,9 @@ export class VoiceSession {
 
   private updateState(newState: 'listening' | 'thinking' | 'speaking') {
     if (!this.isSessionActive && newState !== 'listening') return;
+    if (newState === 'listening' && this.isKidskoSpeaking()) {
+      return;
+    }
     if (this.voiceState !== newState) {
       console.log(`[VoiceSession State Transition]: ${this.voiceState || 'none'} -> ${newState}`);
       this.voiceState = newState;
@@ -555,12 +558,6 @@ export class VoiceSession {
         return;
       }
 
-      try {
-        if (typeof (player as any).setPlaybackRate === 'function') (player as any).setPlaybackRate(1.22);
-        else if (typeof (player as any).setRate === 'function') (player as any).setRate(1.22);
-        else (player as any).playbackRate = 1.22;
-      } catch {}
-
       this.preloadedNextPlayer = player;
     } catch (err) {
       console.error(`[Mobile Audio Preload Error] Turn #${turnId}: Could not pre-create audio player:`, err);
@@ -584,11 +581,6 @@ export class VoiceSession {
       const nextSegmentUri = this.audioQueue.shift()!;
       try {
         playerToPlay = createAudioPlayer({ uri: nextSegmentUri });
-        try {
-          if (typeof (playerToPlay as any).setPlaybackRate === 'function') (playerToPlay as any).setPlaybackRate(1.22);
-          else if (typeof (playerToPlay as any).setRate === 'function') (playerToPlay as any).setRate(1.22);
-          else (playerToPlay as any).playbackRate = 1.22;
-        } catch {}
       } catch (err) {
         console.error(`[Mobile Playback Error] Turn #${turnId}: Exception playing WAV response:`, err);
       }
