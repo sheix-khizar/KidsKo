@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Modal, ActivityIndicator, Image } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Modal, ActivityIndicator } from 'react-native';
 import { VoiceSession } from '../services/voiceSocket';
 import { pickImageFromGallery, captureImageFromCamera } from '../utils/imageHelper';
 
@@ -19,7 +19,6 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
   const [isSendingSnapshot, setIsSendingSnapshot] = useState(false);
   const [snapshotsRemaining, setSnapshotsRemaining] = useState<number | null>(null);
   const [lastSpokenTranscript, setLastSpokenTranscript] = useState<string>('');
-  const [lastCapturedPhotoBase64, setLastCapturedPhotoBase64] = useState<string | null>(null);
 
   const sessionRef = useRef<VoiceSession | null>(null);
   const timerRef = useRef<any>(null);
@@ -79,51 +78,45 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
-      sessionRef.current?.end('unmount');
+      sessionRef.current?.end();
     };
   }, []);
 
   const handleEnd = async () => {
-    await sessionRef.current?.end('user_tap');
+    await sessionRef.current?.end();
     onBack();
   };
 
   const handlePickGallery = async () => {
     setShowOptionModal(false);
     try {
-      sessionRef.current?.pauseSpeechRecognition();
       const result = await pickImageFromGallery();
       if (result) {
         sendHomeworkPhoto(result.base64);
       }
     } catch (err: any) {
       setErrorReason(err?.message || 'Could not pick image from gallery.');
-    } finally {
-      sessionRef.current?.resumeSpeechRecognition();
     }
   };
 
   const handleTakeCamera = async () => {
     setShowOptionModal(false);
     try {
-      sessionRef.current?.pauseSpeechRecognition();
       const result = await captureImageFromCamera();
       if (result) {
         sendHomeworkPhoto(result.base64);
       }
     } catch (err: any) {
       setErrorReason(err?.message || 'Could not capture image from camera.');
-    } finally {
-      sessionRef.current?.resumeSpeechRecognition();
     }
   };
 
   const sendHomeworkPhoto = (base64: string) => {
     setIsSendingSnapshot(true);
     setErrorReason(null);
-    setLastCapturedPhotoBase64(`data:image/jpeg;base64,${base64}`);
     const activeCaption = lastSpokenTranscript.trim() || sessionRef.current?.getLastTranscript() || 'Please look at this and help me with my homework.';
     console.log('[LiveVoiceScreen] Sending captured homework photo with caption:', activeCaption);
+    setLastSpokenTranscript('');
     sessionRef.current?.sendImageCapture(base64, activeCaption);
   };
 
@@ -160,16 +153,6 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
               <Text style={styles.avatarEmoji}>🎙️</Text>
               <View style={styles.listeningBadge}>
                 <Text style={styles.listeningBadgeText}>🟢 Listening to You...</Text>
-              </View>
-            </View>
-          )}
-
-          {lastCapturedPhotoBase64 && (
-            <View style={styles.photoPreviewCard}>
-              <Image source={{ uri: lastCapturedPhotoBase64 }} style={styles.photoPreviewThumbnail} />
-              <View style={styles.photoPreviewInfo}>
-                <Text style={styles.photoPreviewLabel}>🖼️ Photo Shared with Kidsko</Text>
-                <Text style={styles.photoPreviewStatus}>Kidsko can see your homework sheet!</Text>
               </View>
             </View>
           )}
@@ -266,36 +249,67 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
+    position: 'relative',
   },
-  avatarListening: { backgroundColor: '#1b4332', borderWidth: 2, borderColor: '#4E9F3D' },
-  avatarThinking: { backgroundColor: '#3d3000', borderWidth: 2, borderColor: '#FFD54F' },
-  avatarSpeaking: { backgroundColor: '#1e3a8a', borderWidth: 2, borderColor: '#60A5FA' },
-  avatarEmoji: { fontSize: 48 },
-  listeningBadge: { backgroundColor: '#4E9F3D', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, marginTop: 6 },
-  listeningBadgeText: { color: '#fff', fontSize: 12, fontWeight: '800' },
-  thinkingText: { color: '#FFD54F', fontSize: 12, fontWeight: '800', marginTop: 6 },
-  speakingBadge: { backgroundColor: '#3B82F6', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, marginTop: 6 },
-  speakingBadgeText: { color: '#fff', fontSize: 12, fontWeight: '800' },
-  transcriptBox: { width: '100%', backgroundColor: 'rgba(0,0,0,0.2)', padding: 12, borderRadius: 16, alignItems: 'center' },
-  transcriptLabel: { color: 'rgba(255,255,255,0.5)', fontSize: 11, fontWeight: '700', textTransform: 'uppercase', marginBottom: 4 },
-  transcriptText: { color: '#fff', fontSize: 14, fontWeight: '600', textAlign: 'center', fontStyle: 'italic' },
-  promptHint: { color: 'rgba(255,255,255,0.6)', fontSize: 13, textAlign: 'center', fontStyle: 'italic' },
+  avatarListening: {
+    backgroundColor: '#1b3a2b',
+    borderWidth: 3,
+    borderColor: '#4CAF50',
+  },
+  avatarThinking: {
+    backgroundColor: '#3a351b',
+    borderWidth: 3,
+    borderColor: '#FFC107',
+  },
+  avatarSpeaking: {
+    backgroundColor: '#3a251b',
+    borderWidth: 3,
+    borderColor: '#FF9800',
+  },
+  avatarEmoji: { fontSize: 44 },
+  thinkingText: { color: '#FFD54F', fontWeight: '700', fontSize: 13, marginTop: 6 },
 
-  photoPreviewCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255, 213, 79, 0.15)', borderWidth: 1, borderColor: '#FFD54F', padding: 10, borderRadius: 16, marginBottom: 12, width: '100%', gap: 12 },
-  photoPreviewThumbnail: { width: 52, height: 52, borderRadius: 10, backgroundColor: '#1a1a2e' },
-  photoPreviewInfo: { flex: 1 },
-  photoPreviewLabel: { color: '#FFD54F', fontSize: 13, fontWeight: '800' },
-  photoPreviewStatus: { color: 'rgba(255,255,255,0.8)', fontSize: 11, fontWeight: '600', marginTop: 2 },
+  listeningBadge: {
+    position: 'absolute',
+    bottom: -10,
+    backgroundColor: '#2e7d32',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  listeningBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
 
-  // Modal Styles
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#252542', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, gap: 12 },
-  modalTitle: { fontSize: 18, fontWeight: '800', color: '#fff', textAlign: 'center' },
-  modalSubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.6)', textAlign: 'center', marginBottom: 12 },
-  optionButton: { backgroundColor: '#FFD54F', borderRadius: 16, paddingVertical: 14, alignItems: 'center' },
-  optionButtonText: { color: '#1a1a2e', fontWeight: '800', fontSize: 15 },
-  optionButtonSecondary: { backgroundColor: '#3B82F6' },
-  optionButtonTextSecondary: { color: '#fff', fontWeight: '800', fontSize: 15 },
-  cancelModalButton: { paddingVertical: 12, alignItems: 'center', marginTop: 4 },
-  cancelModalText: { color: 'rgba(255,255,255,0.5)', fontSize: 14, fontWeight: '700' },
+  speakingBadge: {
+    position: 'absolute',
+    bottom: -10,
+    backgroundColor: '#e65100',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  speakingBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
+
+  transcriptBox: {
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    width: '100%',
+    alignItems: 'center',
+  },
+  transcriptLabel: { color: '#FFD54F', fontSize: 11, fontWeight: '700', marginBottom: 2 },
+  transcriptText: { color: '#fff', fontSize: 13, fontWeight: '600', fontStyle: 'italic', textAlign: 'center' },
+  promptHint: { color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: '600', textAlign: 'center' },
+
+  // Modal styles
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: '#22223b', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, alignItems: 'center', gap: 12 },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: '#fff' },
+  modalSubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.7)', marginBottom: 8, textAlign: 'center' },
+  optionButton: { width: '100%', backgroundColor: '#1a73e8', borderRadius: 16, paddingVertical: 14, alignItems: 'center' },
+  optionButtonText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  optionButtonSecondary: { backgroundColor: '#333355', borderWidth: 1, borderColor: '#555577' },
+  optionButtonTextSecondary: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  cancelModalButton: { marginTop: 8, paddingVertical: 10 },
+  cancelModalText: { color: '#FF8A80', fontWeight: '700', fontSize: 15 },
 });

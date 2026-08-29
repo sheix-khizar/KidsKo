@@ -14,18 +14,15 @@ const LIVE_MODELS = [
   'models/gemini-2.0-flash-exp',
 ];
 
-const VOICE_SYSTEM_PROMPT = `You are "Kidsko", a warm, enthusiastic Socratic voice tutor for children aged 5-12.
-
-CRITICAL LATENCY & BREVITY RULES:
-- Speak strictly 1 short, simple sentence, followed immediately by 1 brief Socratic guiding question (10 to 15 words max per turn).
-- Speak in a crisp, brisk, energetic talking pace. Do not drag out words or insert artificial pauses.
-- NEVER give long explanations, multi-step lectures, or long list responses in a single turn.
-- Use simple elementary words. NEVER use textbook jargon (like "Index notation", "multiplication string", "base number", "power number").
-- Use digits for numbers (e.g. 2, 3, 5). Never spell them out as words like "two times two".
-- Address ONLY one single tiny step per turn. Guide toward understanding with simple questions.
-- If the child speaks to you in Urdu, Roman Urdu, English, or any language, respond fluently and naturally in the same language.
-- Never use markdown formatting. Speak naturally directly to a 7-year-old child.
-- Never discuss unsafe topics; gently redirect back to learning if asked.`;
+const VOICE_SYSTEM_PROMPT = `You are "Kidsko", a warm, enthusiastic female voice tutor for children aged 5-12.
+Speak in short, warm, lively, playful sentences at a brisk, energetic talking pace (2-3 short sentences, 25-35 words max per turn).
+Do not drag out words or insert artificial pauses. Speak fluently, quickly, and naturally.
+Use simple elementary words. NEVER use textbook jargon (like "Index notation", "multiplication string", "base number", "power number").
+Use digits for numbers (e.g. 2, 3, 5). Never spell them out as words like "two times two".
+Address ONLY one single step per turn. Guide toward understanding with simple questions.
+If the child speaks to you in Urdu, Roman Urdu, English, or any language, respond fluently and naturally in the same language.
+Never use markdown formatting. Speak naturally directly to a 7-year-old child.
+Never discuss unsafe topics; gently redirect back to learning if asked.`;
 
 type LiveCallbacks = {
   onAudioChunk: (base64Audio: string) => void;
@@ -101,14 +98,8 @@ async function connectSingleModel(modelName: string, callbacks: LiveCallbacks): 
         if (parts && Array.isArray(parts)) {
           for (const part of parts) {
             if (part?.inlineData) {
-              const base64Data = part.inlineData.data || '';
-              const pcmByteLen = Buffer.from(base64Data, 'base64').length;
-              if (pcmByteLen >= 32) {
-                console.log(`[Gemini Audio Chunk]: mimeType=${part.inlineData.mimeType}, bytes=${pcmByteLen}`);
-                callbacks.onAudioChunk(base64Data);
-              } else {
-                console.log(`[Gemini Audio Chunk]: Filtered out tiny warm-up chunk (${pcmByteLen} PCM bytes)`);
-              }
+              console.log(`[Gemini Audio Chunk]: mimeType=${part.inlineData.mimeType}, bytes=${part.inlineData.data?.length || 0}`);
+              callbacks.onAudioChunk(part.inlineData.data);
             }
             if (part?.text) {
               console.log(`[Gemini Text Chunk]: "${part.text}"`);
@@ -199,16 +190,36 @@ export function sendTextPrompt(geminiWs: WebSocket, textPrompt: string) {
 
 export function sendImagePrompt(geminiWs: WebSocket, base64Jpeg: string, caption?: string) {
   if (geminiWs && geminiWs.readyState === WebSocket.OPEN) {
-    const parts: any[] = [{ inlineData: { mimeType: 'image/jpeg', data: base64Jpeg } }];
-    if (caption) parts.push({ text: caption });
-    console.log('[Gemini Client Outbound Image Prompt]: caption =', caption || '(none)');
-    const inputMsg = {
+    const activeCaption = caption && caption.trim().length > 0
+      ? caption.trim()
+      : 'I just shared a homework picture with you. Please look at it and help me.';
+
+    console.log('[Gemini Client Outbound Image Prompt]: Sending image frame via realtimeInput.video, caption =', activeCaption);
+
+    // 1. Send image frame via Gemini Live WS realtimeInput.video
+    const videoFrameMsg = {
+      realtimeInput: {
+        video: {
+          mimeType: 'image/jpeg',
+          data: base64Jpeg,
+        },
+      },
+    };
+    geminiWs.send(JSON.stringify(videoFrameMsg));
+
+    // 2. Send text prompt & mark user turn complete
+    const textPromptMsg = {
       clientContent: {
-        turns: [{ role: 'user', parts }],
+        turns: [
+          {
+            role: 'user',
+            parts: [{ text: activeCaption }],
+          },
+        ],
         turnComplete: true,
       },
     };
-    geminiWs.send(JSON.stringify(inputMsg));
+    geminiWs.send(JSON.stringify(textPromptMsg));
   } else {
     console.warn('[Gemini Client Outbound Warning]: Cannot send image prompt, WebSocket state is', geminiWs?.readyState);
   }
