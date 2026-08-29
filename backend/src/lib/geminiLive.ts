@@ -190,11 +190,17 @@ export function sendTextPrompt(geminiWs: WebSocket, textPrompt: string) {
 
 export function sendImagePrompt(geminiWs: WebSocket, base64Jpeg: string, caption?: string) {
   if (geminiWs && geminiWs.readyState === WebSocket.OPEN) {
-    const activeCaption = caption && caption.trim().length > 0
-      ? caption.trim()
-      : 'I just shared a homework picture with you. Please look at it and help me.';
+    let cleanCaption = caption?.trim() || '';
+    // Filter out conversational permission questions ("can I share image", "can you see it")
+    if (cleanCaption.toLowerCase().includes('can i share') || cleanCaption.toLowerCase().includes('can i send')) {
+      cleanCaption = '';
+    }
 
-    console.log('[Gemini Client Outbound Image Prompt]: Sending image frame via realtimeInput.video, caption =', activeCaption);
+    const explicitPrompt = cleanCaption.length > 0
+      ? `I just captured a photo of my homework. Please read the text and math in this image carefully and answer my question: "${cleanCaption}"`
+      : 'I just captured a photo of my homework. Please read the text, questions, and math problems shown in this image carefully, tell me what you see, and guide me on how to solve it.';
+
+    console.log('[Gemini Client Outbound Image Prompt]: Sending image frame via realtimeInput.video, prompt =', explicitPrompt);
 
     // 1. Send image frame via Gemini Live WS realtimeInput.video
     const videoFrameMsg = {
@@ -213,7 +219,7 @@ export function sendImagePrompt(geminiWs: WebSocket, base64Jpeg: string, caption
         turns: [
           {
             role: 'user',
-            parts: [{ text: activeCaption }],
+            parts: [{ text: explicitPrompt }],
           },
         ],
         turnComplete: true,
