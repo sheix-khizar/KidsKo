@@ -91,24 +91,30 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
   const handlePickGallery = async () => {
     setShowOptionModal(false);
     try {
+      sessionRef.current?.pauseSpeechRecognition();
       const result = await pickImageFromGallery();
       if (result) {
         sendHomeworkPhoto(result.base64);
       }
     } catch (err: any) {
       setErrorReason(err?.message || 'Could not pick image from gallery.');
+    } finally {
+      sessionRef.current?.resumeSpeechRecognition();
     }
   };
 
   const handleTakeCamera = async () => {
     setShowOptionModal(false);
     try {
+      sessionRef.current?.pauseSpeechRecognition();
       const result = await captureImageFromCamera();
       if (result) {
         sendHomeworkPhoto(result.base64);
       }
     } catch (err: any) {
       setErrorReason(err?.message || 'Could not capture image from camera.');
+    } finally {
+      sessionRef.current?.resumeSpeechRecognition();
     }
   };
 
