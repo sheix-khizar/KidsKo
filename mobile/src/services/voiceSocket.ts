@@ -374,7 +374,7 @@ export class VoiceSession {
 
           if (this.micWatchdogTimer) clearTimeout(this.micWatchdogTimer);
           this.micWatchdogTimer = setTimeout(() => {
-            if (this.isSessionActive && !this.isMicActive) {
+            if (this.isSessionActive && !this.isMicActive && this.voiceState === 'listening') {
               console.warn('[SpeechRec Watchdog]: Mic active state did not recover within 3000ms. Forcing hard-restart...');
               this.isRestartingSpeech = false;
               this.restartSpeechRecognition('watchdog_forced');
