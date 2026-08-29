@@ -14,22 +14,18 @@ const LIVE_MODELS = [
   'models/gemini-2.0-flash-exp',
 ];
 
-const VOICE_SYSTEM_PROMPT = `You are "Kidsko", a warm, energetic, and encouraging AI voice tutor for children aged 5-12.
+const VOICE_SYSTEM_PROMPT = `You are "Kidsko", a warm, enthusiastic Socratic voice tutor for children aged 5-12.
 
-ROLES & PERSONALITY:
-- Talk like a real, loving tutor: Praise effort ("Awesome try!", "Great question!"), stay cheerful, and guide with Socratic enthusiasm.
-- Never give long lectures or direct boring answers. Explain in 1 short simple sentence, then ask 1 fun guiding question.
-- If the child speaks in English, Urdu, Roman Urdu, or any language, respond fluently and naturally in that same language.
-
-STUDENT SAFETY & SECURITY GUARDRAILS (STRICT):
-- 100% Kid-Safe: NEVER discuss or generate content related to violence, weapons, adult topics, self-harm, hate speech, profanity, scary topics, or personal private info.
-- Gentle Redirection: If asked about inappropriate, scary, or non-educational topics, respond warmly: "That's not something we learn about! Let me ask you a fun question instead."
-
-ULTRA-FAST THINKING & LATENCY RULES:
-- Speak strictly 6 to 10 words total per turn (1 short sentence + 1 quick guiding question). Maximum 12 words under any circumstance.
-- Speak in a brisk, lively, energetic pace with zero artificial pauses or filler words.
-- Use simple elementary words for 5-year-olds. Never use textbook jargon.
-- Use digits for numbers (e.g. 2, 3, 5). Never use markdown formatting.`;
+CRITICAL LATENCY & BREVITY RULES:
+- Speak strictly 1 short, simple sentence, followed immediately by 1 brief Socratic guiding question (10 to 15 words max per turn).
+- Speak in a crisp, brisk, energetic talking pace. Do not drag out words or insert artificial pauses.
+- NEVER give long explanations, multi-step lectures, or long list responses in a single turn.
+- Use simple elementary words. NEVER use textbook jargon (like "Index notation", "multiplication string", "base number", "power number").
+- Use digits for numbers (e.g. 2, 3, 5). Never spell them out as words like "two times two".
+- Address ONLY one single tiny step per turn. Guide toward understanding with simple questions.
+- If the child speaks to you in Urdu, Roman Urdu, English, or any language, respond fluently and naturally in the same language.
+- Never use markdown formatting. Speak naturally directly to a 7-year-old child.
+- Never discuss unsafe topics; gently redirect back to learning if asked.`;
 
 type LiveCallbacks = {
   onAudioChunk: (base64Audio: string) => void;
@@ -50,7 +46,7 @@ async function connectSingleModel(modelName: string, callbacks: LiveCallbacks): 
         console.log(`[Gemini Live WS] Setup accepted for model: ${modelName}`);
         resolve(geminiWs);
       }
-    }, 2000);
+    }, 1500);
 
     geminiWs.on('open', () => {
       console.log(`[Gemini Live WS] Trying Live API model: ${modelName} via v1beta...`);
@@ -105,8 +101,14 @@ async function connectSingleModel(modelName: string, callbacks: LiveCallbacks): 
         if (parts && Array.isArray(parts)) {
           for (const part of parts) {
             if (part?.inlineData) {
-              console.log(`[Gemini Audio Chunk]: mimeType=${part.inlineData.mimeType}, bytes=${part.inlineData.data?.length || 0}`);
-              callbacks.onAudioChunk(part.inlineData.data);
+              const base64Data = part.inlineData.data || '';
+              const pcmByteLen = Buffer.from(base64Data, 'base64').length;
+              if (pcmByteLen >= 32) {
+                console.log(`[Gemini Audio Chunk]: mimeType=${part.inlineData.mimeType}, bytes=${pcmByteLen}`);
+                callbacks.onAudioChunk(base64Data);
+              } else {
+                console.log(`[Gemini Audio Chunk]: Filtered out tiny warm-up chunk (${pcmByteLen} PCM bytes)`);
+              }
             }
             if (part?.text) {
               console.log(`[Gemini Text Chunk]: "${part.text}"`);
@@ -197,11 +199,8 @@ export function sendTextPrompt(geminiWs: WebSocket, textPrompt: string) {
 
 export function sendImagePrompt(geminiWs: WebSocket, base64Jpeg: string, caption?: string) {
   if (geminiWs && geminiWs.readyState === WebSocket.OPEN) {
-    const promptText = `[STUDENT ATTACHED PHOTO]: The student just shared a photo of their homework page. Examine the image carefully. Read Question 1 or the main problem visible on the page out loud, and ask them a fun guiding question to solve it! ${caption ? `Student said: "${caption}"` : ''}`;
-    const parts: any[] = [
-      { inlineData: { mimeType: 'image/jpeg', data: base64Jpeg } },
-      { text: promptText },
-    ];
+    const parts: any[] = [{ inlineData: { mimeType: 'image/jpeg', data: base64Jpeg } }];
+    if (caption) parts.push({ text: caption });
     console.log('[Gemini Client Outbound Image Prompt]: caption =', caption || '(none)');
     const inputMsg = {
       clientContent: {
