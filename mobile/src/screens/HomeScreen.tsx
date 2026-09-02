@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
-import { createStudent, getStudents, clearToken } from '../services/api';
+import { createStudent, getStudents, clearToken, getSavedUserId } from '../services/api';
+import { configureBilling } from '../services/billing';
 import ParentalGate from '../components/ParentalGate';
 
 type Student = { id: string; student_name: string };
@@ -35,6 +36,12 @@ export default function HomeScreen({ onLoggedOut, onSelectStudent, onScanStudent
   };
 
   useEffect(() => {
+    (async () => {
+      const savedUserId = await getSavedUserId();
+      if (savedUserId) {
+        configureBilling(savedUserId);
+      }
+    })();
     loadStudents();
   }, []);
 

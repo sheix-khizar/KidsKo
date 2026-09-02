@@ -19,8 +19,12 @@ export default function PaywallScreen({ onBack, onPurchased }: Props) {
 
   const handleUpgrade = async () => {
     if (!offering?.availablePackages?.[0]) {
-      Alert.alert('Sandbox Mode', 'Simulating purchase successful for testing.');
-      onPurchased();
+      if (__DEV__) {
+        Alert.alert('Sandbox Mode', 'Simulating purchase successful for dev testing.');
+        onPurchased();
+        return;
+      }
+      Alert.alert('Offerings Unavailable', 'Subscription products could not be loaded. Please try again later.');
       return;
     }
     setPurchasing(true);

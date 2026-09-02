@@ -233,6 +233,11 @@ router.post('/', requireAuth, userRateLimit, async (req: Request, res: Response)
         aiReply = sanitizeChatResponse(cached);
         servedFromCache = true;
         await logUsageEvent(req.supabase!, req.user!.id, studentId, 'cache_hit');
+        // Persist user & cached assistant messages to thread history for transcript view
+        await req.supabase!.from('messages').insert([
+          { thread_id: activeThreadId, student_id: studentId, role: 'user', content: message },
+          { thread_id: activeThreadId, student_id: studentId, role: 'assistant', content: aiReply },
+        ]);
       }
     }
 

@@ -1,11 +1,22 @@
 import * as SecureStore from 'expo-secure-store';
 import { API_URL } from './config';
 
+import { configureBilling } from './billing';
+
 const TOKEN_KEY = 'kidsko_access_token';
+const USER_ID_KEY = 'kidsko_user_id';
 
 // ---- Token storage helpers ----
-export async function saveToken(token: string) {
+export async function saveToken(token: string, userId?: string) {
   await SecureStore.setItemAsync(TOKEN_KEY, token);
+  if (userId) {
+    await SecureStore.setItemAsync(USER_ID_KEY, userId);
+    configureBilling(userId);
+  }
+}
+
+export async function getSavedUserId(): Promise<string | null> {
+  return SecureStore.getItemAsync(USER_ID_KEY);
 }
 
 export async function getToken(): Promise<string | null> {
@@ -14,6 +25,7 @@ export async function getToken(): Promise<string | null> {
 
 export async function clearToken() {
   await SecureStore.deleteItemAsync(TOKEN_KEY);
+  await SecureStore.deleteItemAsync(USER_ID_KEY);
 }
 
 // ---- Auth endpoints ----

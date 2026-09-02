@@ -22,7 +22,7 @@ export default function RegisterScreen({ onRegistered, onGoToLogin }: Props) {
     setLoading(true);
     try {
       const result = await register(email, password);
-      await saveToken(result.session.access_token);
+      await saveToken(result.session.access_token, result.userId);
       onRegistered();
     } catch (err: any) {
       setErrorMsg(err.message);

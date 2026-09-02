@@ -22,7 +22,7 @@ export default function LoginScreen({ onLoggedIn, onGoToRegister }: Props) {
     setLoading(true);
     try {
       const result = await login(email, password);
-      await saveToken(result.session.access_token);
+      await saveToken(result.session.access_token, result.userId);
       onLoggedIn();
     } catch (err: any) {
       setErrorMsg(err.message);

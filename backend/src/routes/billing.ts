@@ -24,7 +24,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
   // configures RevenueCat — that's what makes this lookup work.
   const parentId = event.app_user_id;
   const activatingTypes = ['INITIAL_PURCHASE', 'RENEWAL', 'UNCANCELLATION', 'PRODUCT_CHANGE'];
-  const deactivatingTypes = ['CANCELLATION', 'EXPIRATION', 'BILLING_ISSUE'];
+  const deactivatingTypes = ['EXPIRATION', 'BILLING_ISSUE'];
 
   try {
     if (activatingTypes.includes(event.type)) {

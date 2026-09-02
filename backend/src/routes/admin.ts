@@ -18,6 +18,21 @@ router.get('/usage', requireAuth, async (req: Request, res: Response) => {
   try {
     const client = req.supabase || supabaseAdmin;
 
+    // Strict Admin Authorization Check
+    const adminSecret = req.headers['x-admin-secret'];
+    const expectedSecret = process.env.ADMIN_SECRET_KEY;
+
+    const { data: profile } = await client
+      .from('profiles')
+      .select('is_admin')
+      .eq('id', req.user!.id)
+      .maybeSingle();
+
+    const isAdmin = profile?.is_admin || (expectedSecret && adminSecret === expectedSecret);
+    if (!isAdmin && process.env.NODE_ENV === 'production') {
+      return res.status(403).json({ error: 'Access denied. Admin authorization required.' });
+    }
+
     const now = new Date();
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
