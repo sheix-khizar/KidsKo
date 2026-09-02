@@ -15,6 +15,7 @@ const LIVE_MODELS = [
 ];
 
 const VOICE_SYSTEM_PROMPT = `You are "Kidsko", a warm, enthusiastic female voice tutor for children aged 5-12.
+You can see photos, homework pages, problem snapshots, or drawings shared by the child. When an image is shared, warmly acknowledge it, describe what you see in simple child-friendly terms, and guide them step-by-step.
 Speak in short, warm, lively, playful sentences at a brisk, energetic talking pace (2-3 short sentences, 25-35 words max per turn).
 Do not drag out words or insert artificial pauses. Speak fluently, quickly, and naturally.
 Use simple elementary words. NEVER use textbook jargon (like "Index notation", "multiplication string", "base number", "power number").
@@ -190,42 +191,16 @@ export function sendTextPrompt(geminiWs: WebSocket, textPrompt: string) {
 
 export function sendImagePrompt(geminiWs: WebSocket, base64Jpeg: string, caption?: string) {
   if (geminiWs && geminiWs.readyState === WebSocket.OPEN) {
-    let cleanCaption = caption?.trim() || '';
-    // Filter out conversational permission questions ("can I share image", "can you see it")
-    if (cleanCaption.toLowerCase().includes('can i share') || cleanCaption.toLowerCase().includes('can i send')) {
-      cleanCaption = '';
-    }
-
-    const explicitPrompt = cleanCaption.length > 0
-      ? `I just captured a photo of my homework. Please read the text and math in this image carefully and answer my question: "${cleanCaption}"`
-      : 'I just captured a photo of my homework. Please read the text, questions, and math problems shown in this image carefully, tell me what you see, and guide me on how to solve it.';
-
-    console.log('[Gemini Client Outbound Image Prompt]: Sending image frame via realtimeInput.video, prompt =', explicitPrompt);
-
-    // 1. Send image frame via Gemini Live WS realtimeInput.video
-    const videoFrameMsg = {
-      realtimeInput: {
-        video: {
-          mimeType: 'image/jpeg',
-          data: base64Jpeg,
-        },
-      },
-    };
-    geminiWs.send(JSON.stringify(videoFrameMsg));
-
-    // 2. Send text prompt & mark user turn complete
-    const textPromptMsg = {
+    const parts: any[] = [{ inlineData: { mimeType: 'image/jpeg', data: base64Jpeg } }];
+    if (caption) parts.push({ text: caption });
+    console.log('[Gemini Client Outbound Image Prompt]: caption =', caption || '(none)');
+    const inputMsg = {
       clientContent: {
-        turns: [
-          {
-            role: 'user',
-            parts: [{ text: explicitPrompt }],
-          },
-        ],
+        turns: [{ role: 'user', parts }],
         turnComplete: true,
       },
     };
-    geminiWs.send(JSON.stringify(textPromptMsg));
+    geminiWs.send(JSON.stringify(inputMsg));
   } else {
     console.warn('[Gemini Client Outbound Warning]: Cannot send image prompt, WebSocket state is', geminiWs?.readyState);
   }

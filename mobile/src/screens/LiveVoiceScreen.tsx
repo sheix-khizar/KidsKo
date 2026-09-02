@@ -19,6 +19,7 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
   const [isSendingSnapshot, setIsSendingSnapshot] = useState(false);
   const [snapshotsRemaining, setSnapshotsRemaining] = useState<number | null>(null);
   const [lastSpokenTranscript, setLastSpokenTranscript] = useState<string>('');
+  const [networkNotice, setNetworkNotice] = useState<string | null>(null);
 
   const sessionRef = useRef<VoiceSession | null>(null);
   const timerRef = useRef<any>(null);
@@ -57,8 +58,20 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
           }
         },
         onStateChange: (state) => {
-          console.log('[LiveVoiceScreen] Voice state changed:', state);
-          setVoiceState(state);
+          setVoiceState((prevState) => {
+            if (prevState !== state) {
+              console.log('[LiveVoiceScreen] Voice state changed:', state);
+              if (state === 'speaking' || state === 'thinking') {
+                setNetworkNotice(null);
+              }
+              return state;
+            }
+            return prevState;
+          });
+        },
+        onNetworkNotice: (message) => {
+          console.warn('[LiveVoiceScreen] Network notice:', message);
+          setNetworkNotice(message);
         },
         onSnapshotAck: (remaining) => {
           setSnapshotsRemaining(remaining);
@@ -116,7 +129,6 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
     setErrorReason(null);
     const activeCaption = lastSpokenTranscript.trim() || sessionRef.current?.getLastTranscript() || 'Please look at this and help me with my homework.';
     console.log('[LiveVoiceScreen] Sending captured homework photo with caption:', activeCaption);
-    setLastSpokenTranscript('');
     sessionRef.current?.sendImageCapture(base64, activeCaption);
   };
 
@@ -132,6 +144,13 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
 
       {secondsLeft !== null && status === 'live' && (
         <Text style={styles.timer}>{secondsLeft}s remaining</Text>
+      )}
+
+      {networkNotice && status === 'live' && (
+        <Pressable style={styles.noticeBanner} onPress={() => setNetworkNotice(null)}>
+          <Text style={styles.noticeBannerText}>⚡ {networkNotice}</Text>
+          <Text style={styles.noticeDismissText}>Tap to dismiss • Speak anytime</Text>
+        </Pressable>
       )}
 
       {status === 'live' && (
@@ -300,6 +319,20 @@ const styles = StyleSheet.create({
   transcriptLabel: { color: '#FFD54F', fontSize: 11, fontWeight: '700', marginBottom: 2 },
   transcriptText: { color: '#fff', fontSize: 13, fontWeight: '600', fontStyle: 'italic', textAlign: 'center' },
   promptHint: { color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: '600', textAlign: 'center' },
+
+  noticeBanner: {
+    backgroundColor: '#3e2723',
+    borderColor: '#ffb74d',
+    borderWidth: 1.5,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    marginBottom: 12,
+    alignItems: 'center',
+    width: '100%',
+  },
+  noticeBannerText: { color: '#ffe082', fontSize: 13, fontWeight: '700', textAlign: 'center' },
+  noticeDismissText: { color: 'rgba(255,224,130,0.7)', fontSize: 11, fontWeight: '600', marginTop: 3 },
 
   // Modal styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },

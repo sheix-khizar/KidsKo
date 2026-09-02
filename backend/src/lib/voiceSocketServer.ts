@@ -53,41 +53,76 @@ export function attachVoiceSocketServer(httpServer: Server) {
       let elapsedMs = 0;
       let accountingTimer: NodeJS.Timeout;
       let hardCapTimer: NodeJS.Timeout;
+      let activeTurnId = 0;
+      let pcmBuffer = Buffer.alloc(0);
+      const TARGET_CHUNK_BYTES = 14400; // ~300ms PCM audio @ 24kHz 16-bit mono
+
+      const flushPcmBuffer = (forceAll = false) => {
+        while (pcmBuffer.length > 0) {
+          if (!forceAll && pcmBuffer.length < TARGET_CHUNK_BYTES) {
+            break;
+          }
+          const sendLen = forceAll ? pcmBuffer.length : Math.min(TARGET_CHUNK_BYTES, pcmBuffer.length);
+          const chunkToSend = pcmBuffer.subarray(0, sendLen);
+          pcmBuffer = pcmBuffer.subarray(sendLen);
+
+          if (clientSocket.readyState === WebSocket.OPEN) {
+            const base64Data = chunkToSend.toString('base64');
+            console.log(`[Backend Outbound Aggregated Audio Chunk]: bytes=${base64Data.length} (~${Math.round(sendLen / 48)}ms PCM), turnId=${activeTurnId}`);
+            clientSocket.send(JSON.stringify({ type: 'audio', data: base64Data, turnId: activeTurnId }));
+          }
+        }
+      };
+
+      const liveCallbacks = {
+        onTextChunk: (text: string) => {
+          if (clientSocket.readyState === WebSocket.OPEN) {
+            clientSocket.send(JSON.stringify({ type: 'text', data: text }));
+          }
+        },
+        onAudioChunk: (base64Audio: string) => {
+          const incoming = Buffer.from(base64Audio, 'base64');
+          pcmBuffer = Buffer.concat([pcmBuffer, incoming]);
+          flushPcmBuffer(false);
+        },
+        onTurnComplete: () => {
+          flushPcmBuffer(true);
+          if (clientSocket.readyState === WebSocket.OPEN) {
+            const elapsedSec = Math.floor((Date.now() - sessionStartTime) / 1000);
+            console.log(`[Backend Outbound turn_complete Frame]: Gemini turn complete. Session active for ${elapsedSec}s / ${capSeconds}s max. Client WS state=${clientSocket.readyState}, Gemini WS state=${liveSession?.readyState}, turnId=${activeTurnId}`);
+            clientSocket.send(JSON.stringify({ type: 'turn_complete', turnId: activeTurnId }));
+          }
+        },
+        onClose: async (reason?: string) => {
+          console.log(`[Gemini Live WS Session Closed]: Reason=${reason || 'Normal close'}`);
+          if (clientSocket.readyState === WebSocket.OPEN) {
+            const elapsedSec = Math.floor((Date.now() - sessionStartTime) / 1000);
+            const reasonStr = reason || '';
+            const isGoAwayOrLimit = reasonStr.includes('GoAway') || reasonStr.includes('session duration') || reasonStr.includes('Go Away');
+            if (elapsedSec < capSeconds && isGoAwayOrLimit) {
+              console.log('[Voice Socket]: Gemini WS closed due to Google duration limit (GoAway). Transparently auto-reconnecting Gemini Live WS...');
+              try {
+                liveSession = await startLiveSession(liveCallbacks);
+                console.log('[Voice Socket]: Transparent Gemini Live WS auto-reconnect succeeded!');
+                return;
+              } catch (reconnectErr: any) {
+                console.error('[Voice Socket]: Failed to auto-reconnect Gemini Live WS:', reconnectErr.message);
+              }
+            }
+            console.log('[Voice Socket Close]: Forwarding Gemini session close to client with Code 1000');
+            clientSocket.close(1000, reason || 'Gemini session ended');
+          }
+        },
+        onError: (err: any) => {
+          console.error('[Voice Socket] Gemini Live error:', err);
+          if (clientSocket.readyState === WebSocket.OPEN) {
+            clientSocket.send(JSON.stringify({ type: 'error', reason: typeof err === 'string' ? err : 'Voice session error' }));
+          }
+        },
+      };
 
       try {
-        liveSession = await startLiveSession({
-          onTextChunk: (text) => {
-            if (clientSocket.readyState === WebSocket.OPEN) {
-              clientSocket.send(JSON.stringify({ type: 'text', data: text }));
-            }
-          },
-          onAudioChunk: (base64Audio) => {
-            if (clientSocket.readyState === WebSocket.OPEN) {
-              console.log(`[Backend Outbound Audio Chunk to Mobile]: bytes=${base64Audio.length}`);
-              clientSocket.send(JSON.stringify({ type: 'audio', data: base64Audio }));
-            }
-          },
-          onTurnComplete: () => {
-            if (clientSocket.readyState === WebSocket.OPEN) {
-              const elapsedSec = Math.floor((Date.now() - sessionStartTime) / 1000);
-              console.log(`[Backend Outbound turn_complete Frame]: Gemini turn complete. Session active for ${elapsedSec}s / ${capSeconds}s max. Client WS state=${clientSocket.readyState}, Gemini WS state=${liveSession?.readyState}`);
-              clientSocket.send(JSON.stringify({ type: 'turn_complete' }));
-            }
-          },
-          onClose: (reason) => {
-            console.log(`[Gemini Live WS Session Closed]: Reason=${reason || 'Normal close'}`);
-            if (clientSocket.readyState === WebSocket.OPEN) {
-              console.log('[Voice Socket Close]: Forwarding Gemini session close to client with Code 1000');
-              clientSocket.close(1000, reason || 'Gemini session ended');
-            }
-          },
-          onError: (err) => {
-            console.error('[Voice Socket] Gemini Live error:', err);
-            if (clientSocket.readyState === WebSocket.OPEN) {
-              clientSocket.send(JSON.stringify({ type: 'error', reason: typeof err === 'string' ? err : 'Voice session error' }));
-            }
-          },
-        });
+        liveSession = await startLiveSession(liveCallbacks);
       } catch (err: any) {
         console.error('[Voice Socket] Failed to start Gemini Live session:', err.message);
         clientSocket.close(1011, 'Could not start voice session');
@@ -146,11 +181,19 @@ export function attachVoiceSocketServer(httpServer: Server) {
               if (msg.isRawPcm) {
                 sendAudioChunk(liveSession, msg.data);
               }
+            } else if (msg.type === 'interrupt') {
+              activeTurnId = msg.turnId || (activeTurnId + 1);
+              pcmBuffer = Buffer.alloc(0);
+              console.log(`[Voice Server] User interrupt received, cancelled active audio buffer for turnId=${activeTurnId}`);
             } else if (msg.type === 'text_prompt') {
+              activeTurnId = msg.turnId || (activeTurnId + 1);
+              pcmBuffer = Buffer.alloc(0);
               const currentElapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
-              console.log(`[Voice Server User Turn Received]: Prompt="${msg.data}", Elapsed=${currentElapsed}s / ${capSeconds}s, Gemini WS state=${liveSession?.readyState}`);
+              console.log(`[Voice Server User Turn Received]: Prompt="${msg.data}", turnId=${activeTurnId}, Elapsed=${currentElapsed}s / ${capSeconds}s, Gemini WS state=${liveSession?.readyState}`);
               sendTextPrompt(liveSession, msg.data);
             } else if (msg.type === 'image_capture') {
+              activeTurnId = msg.turnId || (activeTurnId + 1);
+              pcmBuffer = Buffer.alloc(0);
               const snapshotEligibility = await checkSnapshotEligibility(dbClient, parentId, eligibility.isPremium);
               if (!snapshotEligibility.allowed) {
                 console.log(`[Voice Server Snapshot Blocked]: ${snapshotEligibility.reason}`);
@@ -160,8 +203,8 @@ export function attachVoiceSocketServer(httpServer: Server) {
 
               const rawBuffer = Buffer.from(msg.data, 'base64');
               const compressedBuffer = await sharp(rawBuffer)
-                .resize({ width: 1024, height: 1024, fit: 'inside', withoutEnlargement: true })
-                .jpeg({ quality: 85 })
+                .resize({ width: 768, height: 768, fit: 'inside' })
+                .jpeg({ quality: 65, progressive: true })
                 .toBuffer();
               const compressedBase64 = compressedBuffer.toString('base64');
 

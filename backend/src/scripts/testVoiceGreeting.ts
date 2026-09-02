@@ -71,7 +71,7 @@ async function testVoiceGreetingForStudent(studentName: string) {
     const timeout = setTimeout(() => {
       ws.close();
       reject(new Error(`Greeting timeout for ${studentName}`));
-    }, 25000);
+    }, 15000);
 
     ws.on('open', () => {
       console.log(`[Test WS Open]: Connected to voice socket for ${studentName}`);
@@ -81,15 +81,14 @@ async function testVoiceGreetingForStudent(studentName: string) {
       try {
         const msg = JSON.parse(raw.toString());
         if (msg.type === 'ready') {
-          console.log(`[Test WS Ready]: CapSeconds = ${msg.capSeconds}s. Sending prompt for ${studentName}...`);
-          ws.send(JSON.stringify({ type: 'text_prompt', data: `Hi Kidsko, I am ${studentName}!` }));
+          console.log(`[Test WS Ready]: CapSeconds = ${msg.capSeconds}s`);
         } else if (msg.type === 'audio') {
           audioChunkCount++;
           if (audioChunkCount === 1) {
             console.log(`🔊 [Test Audio Received]: First audio chunk streamed back for ${studentName}!`);
           }
         } else if (msg.type === 'turn_complete') {
-          console.log(`🎉 [Test Turn Complete]: Streamed ${audioChunkCount} audio chunks for ${studentName}'s spoken turn!`);
+          console.log(`🎉 [Test Greeting Complete]: Streamed ${audioChunkCount} audio chunks for ${studentName}'s initial greeting turn!`);
           clearTimeout(timeout);
           ws.close();
           resolve();
