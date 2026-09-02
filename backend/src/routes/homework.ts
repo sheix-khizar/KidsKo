@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import sharp from 'sharp';
 import { requireAuth } from '../middleware/auth';
+import { imageRateLimit } from '../middleware/userRateLimit';
 import { generateHomeworkExplanation, sanitizeChatResponse } from '../lib/gemini';
 import { uploadHomeworkImageToStorage } from '../lib/homeworkStorage';
 import { setThreadImage, setThreadStoragePath, registerPendingUpload } from '../lib/threadImageStore';
@@ -19,7 +20,7 @@ try {
 const router = Router();
 
 // POST /api/homework/analyze — Uploads and analyzes a homework image snapshot (supports multipart file & JSON imageBase64)
-router.post('/analyze', requireAuth, uploadMiddleware, async (req: Request, res: Response) => {
+router.post('/analyze', requireAuth, imageRateLimit, uploadMiddleware, async (req: Request, res: Response) => {
   const { studentId, imageBase64, threadId, prompt } = req.body;
 
   if (!studentId) {

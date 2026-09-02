@@ -220,8 +220,15 @@ router.post('/', requireAuth, userRateLimit, async (req: Request, res: Response)
     let aiReply = '';
     let servedFromCache = false;
 
+    const { data: student } = await req.supabase!
+      .from('students')
+      .select('grade_band')
+      .eq('id', studentId)
+      .maybeSingle();
+    const gradeBand = student?.grade_band || 'Grade 3';
+
     if (isFreshThread) {
-      const cached = await getCachedAnswer(message);
+      const cached = await getCachedAnswer(message, gradeBand);
       if (cached) {
         aiReply = sanitizeChatResponse(cached);
         servedFromCache = true;
@@ -231,7 +238,7 @@ router.post('/', requireAuth, userRateLimit, async (req: Request, res: Response)
 
     if (!servedFromCache) {
       aiReply = await processChatTurnCore(req.supabase!, activeThreadId, studentId, message);
-      if (isFreshThread) await setCachedAnswer(message, aiReply);
+      if (isFreshThread) await setCachedAnswer(message, aiReply, gradeBand);
     }
 
     await logUsageEvent(req.supabase!, req.user!.id, studentId, 'message');

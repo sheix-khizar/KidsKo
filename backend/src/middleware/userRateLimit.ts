@@ -8,7 +8,7 @@ const MAX_REQUESTS = 10;
 
 function rateLimitFactory(store: Map<string, number[]>, max: number) {
   return function (req: Request, res: Response, next: NextFunction) {
-    const userId = req.user?.id;
+    const userId = (req as any).user?.id;
     if (!userId) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
