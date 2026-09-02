@@ -16,22 +16,23 @@ const EVENT_COSTS: Record<string, number> = {
 // GET /api/admin/usage — Analytics endpoint returning DAU, MAU, and cost breakdown per feature
 router.get('/usage', requireAuth, async (req: Request, res: Response) => {
   try {
-    const client = req.supabase || supabaseAdmin;
-
-    // Strict Admin Authorization Check
+    // 1. Strict Unconditional Admin Authorization Check
     const adminSecret = req.headers['x-admin-secret'];
     const expectedSecret = process.env.ADMIN_SECRET_KEY;
 
-    const { data: profile } = await client
+    const { data: profile } = await supabaseAdmin
       .from('profiles')
       .select('is_admin')
       .eq('id', req.user!.id)
       .maybeSingle();
 
-    const isAdmin = profile?.is_admin || (expectedSecret && adminSecret === expectedSecret);
-    if (!isAdmin && process.env.NODE_ENV === 'production') {
+    const isAdmin = profile?.is_admin === true || (expectedSecret && adminSecret === expectedSecret);
+    if (!isAdmin) {
       return res.status(403).json({ error: 'Access denied. Admin authorization required.' });
     }
+
+    // 2. Use service-role client (supabaseAdmin) to bypass RLS for global cross-account analytics
+    const client = supabaseAdmin;
 
     const now = new Date();
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
