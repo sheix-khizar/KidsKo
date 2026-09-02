@@ -378,10 +378,10 @@ export class VoiceSession {
           if (isFinal) {
             this.finalizeSpokenTurn(transcript);
           } else {
-            // ⚡ Fast 1.0s (1000ms) silence timer: Snappy speech pause detection for all spoken turns
+            // ⚡ Fast 3.0s (3000ms) (1000ms old) silence timer: Snappy speech pause detection for all spoken turns
             if (this.speechSilenceTimer) clearTimeout(this.speechSilenceTimer);
             this.speechSilenceTimer = setTimeout(() => {
-              console.log('[Mobile Voice Input] 1000ms speech pause detected -> Finalizing spoken turn:', transcript);
+              console.log('[Mobile Voice Input] 3000ms speech pause detected -> Finalizing spoken turn:', transcript);
               this.finalizeSpokenTurn(transcript);
             }, 3000);
           }
