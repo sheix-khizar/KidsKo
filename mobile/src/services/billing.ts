@@ -35,3 +35,33 @@ export async function isPremiumActive(): Promise<boolean> {
     return false;
   }
 }
+
+export function getMonthlyPackage(offering: PurchasesOffering | null): any {
+  if (!offering?.availablePackages) return null;
+  return (
+    offering.monthly ||
+    offering.availablePackages.find(
+      (p) =>
+        p.packageType === 'MONTHLY' ||
+        p.identifier.toLowerCase().includes('monthly') ||
+        p.product?.identifier?.toLowerCase().includes('monthly')
+    ) ||
+    offering.availablePackages[0] ||
+    null
+  );
+}
+
+export function getAnnualPackage(offering: PurchasesOffering | null): any {
+  if (!offering?.availablePackages) return null;
+  return (
+    offering.annual ||
+    offering.availablePackages.find(
+      (p) =>
+        p.packageType === 'ANNUAL' ||
+        p.identifier.toLowerCase().includes('annual') ||
+        p.identifier.toLowerCase().includes('yearly') ||
+        p.product?.identifier?.toLowerCase().includes('yearly')
+    ) ||
+    (offering.availablePackages.length > 1 ? offering.availablePackages[1] : null)
+  );
+}

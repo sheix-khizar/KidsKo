@@ -1,7 +1,7 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 
 export const FREE_WEEKLY_VOICE_MINUTES = 5;
-export const PREMIUM_WEEKLY_VOICE_MINUTES = 100;
+export const PREMIUM_WEEKLY_VOICE_MINUTES = 25;
 
 export const FREE_WEEKLY_LIVE_SNAPSHOTS = 3;
 export const PREMIUM_WEEKLY_LIVE_SNAPSHOTS = 20;
