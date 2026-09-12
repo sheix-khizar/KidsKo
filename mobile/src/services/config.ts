@@ -10,7 +10,7 @@ import { Platform } from 'react-native';
  */
 const getDefaultDevApiUrl = (): string => {
   if (Platform.OS === 'android') {
-    return 'http://10.0.2.2:3003';
+    return 'http://192.168.18.95:3003';
   }
   return 'http://localhost:3003';
 };
