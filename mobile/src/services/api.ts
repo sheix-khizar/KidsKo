@@ -1,5 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
-import { API_URL } from './config';
+import { getApiUrl } from './config';
 
 import { configureBilling } from './billing';
 
@@ -30,7 +30,7 @@ export async function clearToken() {
 
 // ---- Auth endpoints ----
 export async function register(email: string, password: string) {
-  const res = await fetch(`${API_URL}/api/auth/register`, {
+  const res = await fetch(`${getApiUrl()}/api/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
@@ -41,7 +41,7 @@ export async function register(email: string, password: string) {
 }
 
 export async function login(email: string, password: string) {
-  const res = await fetch(`${API_URL}/api/auth/login`, {
+  const res = await fetch(`${getApiUrl()}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
@@ -54,7 +54,7 @@ export async function login(email: string, password: string) {
 // ---- Student endpoints (require a token) ----
 export async function createStudent(studentName: string) {
   const token = await getToken();
-  const res = await fetch(`${API_URL}/api/students`, {
+  const res = await fetch(`${getApiUrl()}/api/students`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -69,7 +69,7 @@ export async function createStudent(studentName: string) {
 
 export async function getStudents() {
   const token = await getToken();
-  const res = await fetch(`${API_URL}/api/students`, {
+  const res = await fetch(`${getApiUrl()}/api/students`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   const data = await res.json();
@@ -79,7 +79,7 @@ export async function getStudents() {
 
 export async function getTranscript(studentId: string) {
   const token = await getToken();
-  const res = await fetch(`${API_URL}/api/transcript/${studentId}`, {
+  const res = await fetch(`${getApiUrl()}/api/transcript/${studentId}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   const data = await res.json();

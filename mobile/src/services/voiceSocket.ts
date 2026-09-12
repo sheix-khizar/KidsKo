@@ -1,7 +1,7 @@
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import { ExpoSpeechRecognitionModule } from 'expo-speech-recognition';
 import { getToken } from './api';
-import { WS_URL } from './config';
+import { getWsUrl } from './config';
 
 export async function forceLoudspeakerAudio(): Promise<void> {
   try {
@@ -126,7 +126,7 @@ export class VoiceSession {
     this.isSessionActive = true;
     forceLoudspeakerAudio().catch(() => {});
     const studentParam = studentId ? `&studentId=${studentId}` : '';
-    const socketUrl = `${WS_URL}/ws/voice?token=${token}${studentParam}`;
+    const socketUrl = `${getWsUrl()}/ws/voice?token=${token}${studentParam}`;
     console.log('Connecting Voice WebSocket to:', socketUrl);
     this.ws = new WebSocket(socketUrl);
 

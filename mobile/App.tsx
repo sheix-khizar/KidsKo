@@ -10,6 +10,7 @@ import TranscriptScreen from './src/screens/TranscriptScreen';
 import LiveVoiceScreen from './src/screens/LiveVoiceScreen';
 import ParentalGate from './src/components/ParentalGate';
 import { getToken } from './src/services/api';
+import { loadSavedApiUrl } from './src/services/config';
 
 type Student = { id: string; student_name: string };
 type Screen = 'checking' | 'register' | 'login' | 'home' | 'chat' | 'homework' | 'paywall' | 'transcript' | 'liveVoice';
@@ -23,6 +24,7 @@ export default function App() {
 
   useEffect(() => {
     (async () => {
+      await loadSavedApiUrl();
       const token = await getToken();
       if (token) {
         setScreen('home');
