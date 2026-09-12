@@ -210,12 +210,10 @@ export function sendRealtimeMediaChunk(geminiWs: WebSocket, base64Jpeg: string) 
   if (geminiWs && geminiWs.readyState === WebSocket.OPEN) {
     const inputMsg = {
       realtimeInput: {
-        mediaChunks: [
-          {
-            mimeType: 'image/jpeg',
-            data: base64Jpeg,
-          },
-        ],
+        video: {
+          mimeType: 'image/jpeg',
+          data: base64Jpeg,
+        },
       },
     };
     geminiWs.send(JSON.stringify(inputMsg));
