@@ -5,11 +5,16 @@ backend/node_modules/
 
 # Environment secrets — NEVER commit these
 .env
-.env.local
-.env.development
-.env.production
-backend/.env
-backend/.env.local
+.env.*
+*.env
+*.env.*
+**/.env
+**/.env.*
+backend/.env*
+mobile/.env*
+*.pem
+*.key
+*.cert
 
 # Build outputs
 dist/
