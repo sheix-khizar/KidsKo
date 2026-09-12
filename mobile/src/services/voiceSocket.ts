@@ -1,7 +1,20 @@
-import { createAudioPlayer } from 'expo-audio';
+import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import { ExpoSpeechRecognitionModule } from 'expo-speech-recognition';
 import { getToken } from './api';
 import { WS_URL } from './config';
+
+export async function forceLoudspeakerAudio(): Promise<void> {
+  try {
+    await setAudioModeAsync({
+      playsInSilentMode: true,
+      shouldRouteThroughEarpiece: false,
+      interruptionMode: 'doNotMix',
+    });
+    console.log('[Mobile Audio Mode]: Audio mode forced to loudspeaker & exclusive focus.');
+  } catch (err: any) {
+    console.warn('[Mobile Audio Mode]: Could not set audio mode:', err?.message || err);
+  }
+}
 
 type VoiceCallbacks = {
   onReady: (capSeconds: number) => void;
@@ -16,9 +29,9 @@ type VoiceCallbacks = {
 };
 
 // 24000 Hz, 16-bit mono PCM = 48000 bytes/sec
-// ~600ms initial buffer = 28800 bytes -> early playback start for continuous responses
-const INITIAL_BUFFER_BYTES = 28800;
-// ~1.2s chunk buffer = 57600 bytes -> unifies turn chunks into single smooth WAV tracks like Google Voice Assistant
+// ~300ms initial buffer = 14400 bytes -> instant early playback start on first burst
+const INITIAL_BUFFER_BYTES = 14400;
+// ~1.2s chunk buffer = 57600 bytes -> unifies turn chunks into single smooth WAV tracks
 const CHUNK_BUFFER_BYTES = 57600;
 
 function createWavBase64(pcmBinary: string): string {
@@ -111,6 +124,7 @@ export class VoiceSession {
 
     this.callbacks = callbacks;
     this.isSessionActive = true;
+    forceLoudspeakerAudio().catch(() => {});
     const studentParam = studentId ? `&studentId=${studentId}` : '';
     const socketUrl = `${WS_URL}/ws/voice?token=${token}${studentParam}`;
     console.log('Connecting Voice WebSocket to:', socketUrl);
@@ -236,7 +250,9 @@ export class VoiceSession {
       this.resetTurnState();
       this.callbacks?.onStateChange?.('thinking');
       this.promptSentTime = Date.now();
-      this.startThinkingWatchdog();
+      // Allow up to 25s for image upload, Sharp compression, and Gemini multimodal vision reasoning
+      this.startThinkingWatchdog(25000);
+      forceLoudspeakerAudio().catch(() => {});
       this.ws.send(JSON.stringify({ type: 'image_capture', data: base64Jpeg, caption, turnId: this.currentTurnId }));
     }
   }
@@ -279,17 +295,17 @@ export class VoiceSession {
     this.hasLoggedPlaybackStart = false;
   }
 
-  private startThinkingWatchdog() {
+  private startThinkingWatchdog(timeoutMs = 8000) {
     if (this.thinkingWatchdogTimer) clearTimeout(this.thinkingWatchdogTimer);
     this.thinkingWatchdogTimer = setTimeout(() => {
       if (this.isSessionActive && !this.hasStartedPlayback && !this.isTurnComplete) {
-        console.warn('[Mobile Voice Input] ⚠️ 8s Thinking Watchdog Timer fired: Gemini response stalled.');
+        console.warn(`[Mobile Voice Input] ⚠️ ${Math.round(timeoutMs / 1000)}s Thinking Watchdog Timer fired: Gemini response stalled.`);
         this.promptSentTime = 0;
         this.callbacks?.onStateChange?.('listening');
         this.callbacks?.onNetworkNotice?.('Network response taking longer than usual. Speak again or tap End Call.');
         this.restartSpeechRecognition();
       }
-    }, 8000);
+    }, timeoutMs);
   }
 
   private stopAudioPlayback() {
@@ -505,6 +521,7 @@ export class VoiceSession {
     if (this.isPlayingQueue) return;
     this.hasStartedPlayback = true;
     this.callbacks?.onStateChange?.('speaking');
+    forceLoudspeakerAudio().catch(() => {});
     this.playNextAudioSegment();
   }
 
@@ -515,6 +532,7 @@ export class VoiceSession {
     try {
       const player = createAudioPlayer({ uri: nextSegmentUri });
       try {
+        player.volume = 1.0;
         if (typeof (player as any).setPlaybackRate === 'function') (player as any).setPlaybackRate(1.0);
         else if (typeof (player as any).setRate === 'function') (player as any).setRate(1.0);
         else (player as any).playbackRate = 1.0;
@@ -539,6 +557,7 @@ export class VoiceSession {
       try {
         playerToPlay = createAudioPlayer({ uri: nextSegmentUri });
         try {
+          playerToPlay.volume = 1.0;
           if (typeof (playerToPlay as any).setPlaybackRate === 'function') (playerToPlay as any).setPlaybackRate(1.0);
           else if (typeof (playerToPlay as any).setRate === 'function') (playerToPlay as any).setRate(1.0);
           else (playerToPlay as any).playbackRate = 1.0;

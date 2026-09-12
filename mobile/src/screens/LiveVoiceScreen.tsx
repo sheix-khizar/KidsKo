@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Modal, ActivityIndicator } from 'react-native';
-import { VoiceSession } from '../services/voiceSocket';
+import { VoiceSession, forceLoudspeakerAudio } from '../services/voiceSocket';
 import { pickImageFromGallery, captureImageFromCamera } from '../utils/imageHelper';
 
 type Props = {
@@ -104,6 +104,7 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
     setShowOptionModal(false);
     try {
       const result = await pickImageFromGallery();
+      await forceLoudspeakerAudio().catch(() => {});
       if (result) {
         sendHomeworkPhoto(result.base64);
       }
@@ -116,6 +117,7 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
     setShowOptionModal(false);
     try {
       const result = await captureImageFromCamera();
+      await forceLoudspeakerAudio().catch(() => {});
       if (result) {
         sendHomeworkPhoto(result.base64);
       }
@@ -127,7 +129,9 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
   const sendHomeworkPhoto = (base64: string) => {
     setIsSendingSnapshot(true);
     setErrorReason(null);
-    const activeCaption = lastSpokenTranscript.trim() || 'Please look at this and help me with my homework.';
+    const activeCaption = lastSpokenTranscript.trim()
+      ? `${lastSpokenTranscript.trim()}. Please look at my homework photo and guide me step-by-step.`
+      : 'Please look at my homework photo and guide me step-by-step.';
     console.log('[LiveVoiceScreen] Sending captured homework photo with caption:', activeCaption);
     sessionRef.current?.sendImageCapture(base64, activeCaption);
     setLastSpokenTranscript('');
