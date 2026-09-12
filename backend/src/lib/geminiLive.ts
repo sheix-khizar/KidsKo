@@ -11,7 +11,6 @@ const GEMINI_WS_URL = `wss://generativelanguage.googleapis.com/ws/google.ai.gene
 const LIVE_MODELS = [
   'models/gemini-3.1-flash-live-preview',
   'models/gemini-live-2.5-flash-preview',
-  'models/gemini-2.0-flash-exp',
 ];
 
 const VOICE_SYSTEM_PROMPT = `You are "Kidsko", a warm, enthusiastic female voice tutor for children aged 5-12.

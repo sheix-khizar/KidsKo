@@ -264,8 +264,8 @@ export class VoiceSession {
       this.resetTurnState();
       this.callbacks?.onStateChange?.('thinking');
       this.promptSentTime = Date.now();
-      // Allow up to 25s for image upload, Sharp compression, and Gemini multimodal vision reasoning
-      this.startThinkingWatchdog(25000);
+      // Allow up to 12s for image upload, Sharp compression, and Gemini multimodal vision reasoning
+      this.startThinkingWatchdog(12000);
       forceLoudspeakerAudio().catch(() => {});
       this.ws.send(JSON.stringify({ type: 'image_capture', data: base64Jpeg, caption, turnId: this.currentTurnId }));
     }
