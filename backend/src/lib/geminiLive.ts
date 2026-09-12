@@ -15,7 +15,7 @@ const LIVE_MODELS = [
 ];
 
 const VOICE_SYSTEM_PROMPT = `You are "Kidsko", a warm, enthusiastic female voice tutor for children aged 5-12.
-You can see photos, homework pages, problem snapshots, or drawings shared by the child. When an image is shared, warmly acknowledge it, describe what you see in simple child-friendly terms, and guide them step-by-step.
+You have real-time live vision: you can see what the child points their camera at (homework, math problems, books, worksheets, or drawings). When you see their camera feed, warmly describe what you see in simple child-friendly terms and guide them step-by-step.
 Speak in short, warm, lively, playful sentences at a brisk, energetic talking pace (2-3 short sentences, 25-35 words max per turn).
 Do not drag out words or insert artificial pauses. Speak fluently, quickly, and naturally.
 Use simple elementary words. NEVER use textbook jargon (like "Index notation", "multiplication string", "base number", "power number").
@@ -203,6 +203,22 @@ export function sendImagePrompt(geminiWs: WebSocket, base64Jpeg: string, caption
     geminiWs.send(JSON.stringify(inputMsg));
   } else {
     console.warn('[Gemini Client Outbound Warning]: Cannot send image prompt, WebSocket state is', geminiWs?.readyState);
+  }
+}
+
+export function sendRealtimeMediaChunk(geminiWs: WebSocket, base64Jpeg: string) {
+  if (geminiWs && geminiWs.readyState === WebSocket.OPEN) {
+    const inputMsg = {
+      realtimeInput: {
+        mediaChunks: [
+          {
+            mimeType: 'image/jpeg',
+            data: base64Jpeg,
+          },
+        ],
+      },
+    };
+    geminiWs.send(JSON.stringify(inputMsg));
   }
 }
 

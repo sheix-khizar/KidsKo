@@ -3,7 +3,7 @@ import { Server } from 'http';
 import sharp from 'sharp';
 import { supabase, supabaseAdmin } from './supabase';
 import { checkVoiceEligibility, recordVoiceMinutesUsed, checkSnapshotEligibility, recordSnapshotUsed } from './voiceLimits';
-import { startLiveSession, sendAudioChunk, sendTextPrompt, sendImagePrompt, closeLiveSession } from './geminiLive';
+import { startLiveSession, sendAudioChunk, sendTextPrompt, sendImagePrompt, sendRealtimeMediaChunk, closeLiveSession } from './geminiLive';
 import { logUsageEvent } from './usageEvents';
 
 const ACCOUNTING_INTERVAL_MS = 10_000;
@@ -55,6 +55,7 @@ export function attachVoiceSocketServer(httpServer: Server) {
       let hardCapTimer: NodeJS.Timeout;
       let activeTurnId = 0;
       let isTurnInterrupted = false;
+      let lastCameraFrameTime = 0;
       let pcmBuffer = Buffer.alloc(0);
       const TARGET_CHUNK_BYTES = 14400; // ~300ms PCM audio @ 24kHz 16-bit mono
 
@@ -228,6 +229,23 @@ export function attachVoiceSocketServer(httpServer: Server) {
               if (studentId) await logUsageEvent(dbClient, parentId, studentId, 'live_snapshot');
 
               clientSocket.send(JSON.stringify({ type: 'snapshot_ack', remaining: snapshotEligibility.remaining - 1 }));
+            } else if (msg.type === 'camera_frame') {
+              const now = Date.now();
+              // Rate limit camera frames to at most 1 every 1200ms
+              if (now - lastCameraFrameTime >= 1200 && msg.data) {
+                lastCameraFrameTime = now;
+                try {
+                  const rawBuffer = Buffer.from(msg.data, 'base64');
+                  const compressedBuffer = await sharp(rawBuffer)
+                    .resize({ width: 512, height: 512, fit: 'inside' })
+                    .jpeg({ quality: 50, progressive: false })
+                    .toBuffer();
+                  const compressedBase64 = compressedBuffer.toString('base64');
+                  sendRealtimeMediaChunk(liveSession, compressedBase64);
+                } catch (err: any) {
+                  console.warn('[Voice Server] Error processing real-time camera frame:', err?.message);
+                }
+              }
             }
           } catch (err: any) {
             console.error('[Voice Socket] Bad client message or snapshot processing error:', err.message);

@@ -1,5 +1,4 @@
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
-import * as FileSystem from 'expo-file-system/legacy';
 import { ExpoSpeechRecognitionModule } from 'expo-speech-recognition';
 import { getToken } from './api';
 import { getWsUrl } from './config';
@@ -11,23 +10,10 @@ export async function forceLoudspeakerAudio(): Promise<void> {
       shouldRouteThroughEarpiece: false,
       interruptionMode: 'doNotMix',
     });
-    console.log('[Mobile Audio Mode]: Audio mode forced to loudspeaker & doNotMix.');
+    console.log('[Mobile Audio Mode]: Audio mode forced to loudspeaker & exclusive focus.');
   } catch (err: any) {
     console.warn('[Mobile Audio Mode]: Could not set audio mode:', err?.message || err);
   }
-}
-
-let wavFileCounter = 0;
-
-async function writePcmSegmentToTempWav(pcmBinary: string): Promise<string> {
-  const wavBase64 = createWavBase64(pcmBinary);
-  wavFileCounter++;
-  const baseDir = FileSystem.cacheDirectory || `${FileSystem.documentDirectory}cache/`;
-  const filePath = `${baseDir}kidsko_speech_${Date.now()}_${wavFileCounter}.wav`;
-  await FileSystem.writeAsStringAsync(filePath, wavBase64, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
-  return filePath;
 }
 
 type VoiceCallbacks = {
@@ -84,8 +70,8 @@ function createWavBase64(pcmBinary: string): string {
 
 export class VoiceSession {
   private ws: WebSocket | null = null;
-  private activePlayer: { player: any; uri: string } | null = null;
-  private preloadedNextPlayer: { player: any; uri: string } | null = null;
+  private activePlayer: any = null;
+  private preloadedNextPlayer: any = null;
   private callbacks: VoiceCallbacks | null = null;
   private speechSubscriptions: any[] = [];
   private lastSentTranscript = '';
@@ -104,7 +90,6 @@ export class VoiceSession {
   private receivedChunkCount = 0;
   private isTurnComplete = false;
   private hasLoggedPlaybackStart = false;
-  private flushingPromise: Promise<void> | null = null;
 
   // Diagnostic Timers & Handoff Metrics
   private promptSentTime = 0;
@@ -145,7 +130,7 @@ export class VoiceSession {
     console.log('Connecting Voice WebSocket to:', socketUrl);
     this.ws = new WebSocket(socketUrl);
 
-    this.ws.onmessage = async (event) => {
+    this.ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
         if (msg.type === 'ready') {
@@ -166,6 +151,7 @@ export class VoiceSession {
             console.log(`[Mobile Audio] Discarding stray audio chunk from old turn ${msg.turnId} (current turnId: ${this.currentTurnId})`);
             return;
           }
+          const turnId = this.currentTurnId;
           this.receivedChunkCount++;
           if (this.thinkingWatchdogTimer) {
             clearTimeout(this.thinkingWatchdogTimer);
@@ -180,16 +166,16 @@ export class VoiceSession {
           // Append incoming chunk to binary PCM accumulator
           this.accumulatedPcmBinary += atob(msg.data);
 
-          // Check if initial buffer threshold (~300ms) reached to start streaming playback
+          // Check if initial buffer threshold (~400ms) reached to start streaming playback
           if (!this.hasStartedPlayback) {
             if (this.accumulatedPcmBinary.length >= INITIAL_BUFFER_BYTES) {
-              await this.flushBufferedPcmToQueue();
+              this.flushBufferedPcmToQueue();
               this.startAudioQueuePlayback();
             }
           } else {
-            // Once streaming has started, flush chunks whenever chunk threshold (~1.2s) is reached
+            // Once streaming has started, flush chunks whenever chunk threshold (~1.6s) is reached
             if (this.accumulatedPcmBinary.length >= CHUNK_BUFFER_BYTES) {
-              await this.flushBufferedPcmToQueue();
+              this.flushBufferedPcmToQueue();
               if (!this.isPlayingQueue) {
                 this.playNextAudioSegment();
               } else if (!this.preloadedNextPlayer) {
@@ -216,7 +202,7 @@ export class VoiceSession {
 
           // Flush any remaining accumulated PCM bytes
           if (this.accumulatedPcmBinary.length > 0) {
-            await this.flushBufferedPcmToQueue(true);
+            this.flushBufferedPcmToQueue(true);
           }
 
           // If playback hasn't started yet (e.g. short 1-chunk reply), start it now
@@ -268,6 +254,12 @@ export class VoiceSession {
       this.startThinkingWatchdog(25000);
       forceLoudspeakerAudio().catch(() => {});
       this.ws.send(JSON.stringify({ type: 'image_capture', data: base64Jpeg, caption, turnId: this.currentTurnId }));
+    }
+  }
+
+  sendCameraFrame(base64Jpeg: string) {
+    if (this.ws?.readyState === WebSocket.OPEN && base64Jpeg) {
+      this.ws.send(JSON.stringify({ type: 'camera_frame', data: base64Jpeg }));
     }
   }
 
@@ -326,11 +318,6 @@ export class VoiceSession {
     if (this.activePlayer || this.preloadedNextPlayer || this.audioQueue.length > 0 || this.isPlayingQueue) {
       console.log('[Mobile Turn Interrupted]: Discarding queued audio and stopping active/preloaded players.');
     }
-    for (const uri of this.audioQueue) {
-      if (uri.startsWith('file://')) {
-        FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
-      }
-    }
     this.audioQueue = [];
     this.accumulatedPcmBinary = '';
     this.hasStartedPlayback = false;
@@ -340,21 +327,15 @@ export class VoiceSession {
 
     if (this.activePlayer) {
       try {
-        this.activePlayer.player?.remove?.();
+        this.activePlayer.remove();
       } catch { }
-      if (this.activePlayer.uri && this.activePlayer.uri.startsWith('file://')) {
-        FileSystem.deleteAsync(this.activePlayer.uri, { idempotent: true }).catch(() => {});
-      }
       this.activePlayer = null;
     }
 
     if (this.preloadedNextPlayer) {
       try {
-        this.preloadedNextPlayer.player?.remove?.();
+        this.preloadedNextPlayer.remove();
       } catch { }
-      if (this.preloadedNextPlayer.uri && this.preloadedNextPlayer.uri.startsWith('file://')) {
-        FileSystem.deleteAsync(this.preloadedNextPlayer.uri, { idempotent: true }).catch(() => {});
-      }
       this.preloadedNextPlayer = null;
     }
   }
@@ -513,46 +494,33 @@ export class VoiceSession {
     console.log('[SpeechRec Lifecycle]: Stopping speech recognition and cleaning listeners...');
     this.clearSpeechSubscriptions();
     try {
-      ExpoSpeechRecognitionModule.abort();
-    } catch {
-      try {
-        ExpoSpeechRecognitionModule.stop();
-      } catch { }
-    }
-    forceLoudspeakerAudio().catch(() => {});
+      ExpoSpeechRecognitionModule.stop();
+    } catch { }
   }
 
-  private async flushBufferedPcmToQueue(forceAll = false): Promise<void> {
-    while (this.flushingPromise) {
-      await this.flushingPromise;
+  private flushBufferedPcmToQueue(forceAll = false) {
+    if (this.accumulatedPcmBinary.length === 0) return;
+
+    let bytesPerSegment = CHUNK_BUFFER_BYTES;
+    if (!this.hasStartedPlayback) {
+      bytesPerSegment = INITIAL_BUFFER_BYTES;
     }
-    this.flushingPromise = (async () => {
-      try {
-        while (this.accumulatedPcmBinary.length > 0) {
-          const bytesPerSegment = !this.hasStartedPlayback ? INITIAL_BUFFER_BYTES : CHUNK_BUFFER_BYTES;
-          if (!forceAll && this.accumulatedPcmBinary.length < bytesPerSegment) {
-            break;
-          }
 
-          const pcmSegmentLength = forceAll
-            ? this.accumulatedPcmBinary.length
-            : Math.min(bytesPerSegment, this.accumulatedPcmBinary.length);
-
-          const pcmSegmentBinary = this.accumulatedPcmBinary.slice(0, pcmSegmentLength);
-          this.accumulatedPcmBinary = this.accumulatedPcmBinary.slice(pcmSegmentLength);
-
-          try {
-            const filePath = await writePcmSegmentToTempWav(pcmSegmentBinary);
-            this.audioQueue.push(filePath);
-          } catch (err) {
-            console.error('[Mobile Audio] Error saving temp WAV segment:', err);
-          }
-        }
-      } finally {
-        this.flushingPromise = null;
+    while (this.accumulatedPcmBinary.length > 0) {
+      if (!forceAll && this.accumulatedPcmBinary.length < bytesPerSegment) {
+        break; // Keep partial buffer until more chunks arrive or turn completes
       }
-    })();
-    await this.flushingPromise;
+
+      const pcmSegmentLength = forceAll
+        ? this.accumulatedPcmBinary.length
+        : Math.min(bytesPerSegment, this.accumulatedPcmBinary.length);
+
+      const pcmSegmentBinary = this.accumulatedPcmBinary.slice(0, pcmSegmentLength);
+      this.accumulatedPcmBinary = this.accumulatedPcmBinary.slice(pcmSegmentLength);
+
+      const wavBase64 = createWavBase64(pcmSegmentBinary);
+      this.audioQueue.push(`data:audio/wav;base64,${wavBase64}`);
+    }
   }
 
   private startAudioQueuePlayback() {
@@ -568,7 +536,6 @@ export class VoiceSession {
 
     const nextSegmentUri = this.audioQueue.shift()!;
     try {
-      console.log('[Mobile Audio Preload]: Pre-creating audio player for:', nextSegmentUri);
       const player = createAudioPlayer({ uri: nextSegmentUri });
       try {
         player.volume = 1.0;
@@ -576,7 +543,7 @@ export class VoiceSession {
         else if (typeof (player as any).setRate === 'function') (player as any).setRate(1.0);
         else (player as any).playbackRate = 1.0;
       } catch { }
-      this.preloadedNextPlayer = { player, uri: nextSegmentUri };
+      this.preloadedNextPlayer = player;
       this.currentSegmentPreloadTime = Date.now();
     } catch (err) {
       console.error('[Mobile Audio Preload Error]: Could not pre-create audio player:', err);
@@ -585,33 +552,28 @@ export class VoiceSession {
   }
 
   private playNextAudioSegment() {
-    let currentItem: { player: any; uri: string } | null = null;
+    let playerToPlay: any = null;
     const isPreloaded = !!this.preloadedNextPlayer;
 
     if (isPreloaded) {
-      currentItem = this.preloadedNextPlayer;
+      playerToPlay = this.preloadedNextPlayer;
       this.preloadedNextPlayer = null;
     } else if (this.audioQueue.length > 0) {
       const nextSegmentUri = this.audioQueue.shift()!;
       try {
-        console.log('[Mobile Audio Playback]: Creating audio player for:', nextSegmentUri);
-        const player = createAudioPlayer({ uri: nextSegmentUri });
+        playerToPlay = createAudioPlayer({ uri: nextSegmentUri });
         try {
-          player.volume = 1.0;
-          if (typeof (player as any).setPlaybackRate === 'function') (player as any).setPlaybackRate(1.0);
-          else if (typeof (player as any).setRate === 'function') (player as any).setRate(1.0);
-          else (player as any).playbackRate = 1.0;
+          playerToPlay.volume = 1.0;
+          if (typeof (playerToPlay as any).setPlaybackRate === 'function') (playerToPlay as any).setPlaybackRate(1.0);
+          else if (typeof (playerToPlay as any).setRate === 'function') (playerToPlay as any).setRate(1.0);
+          else (playerToPlay as any).playbackRate = 1.0;
         } catch { }
-        currentItem = { player, uri: nextSegmentUri };
       } catch (err) {
-        console.error('[Mobile Playback Error]: Exception creating audio player for:', nextSegmentUri, err);
-        if (nextSegmentUri.startsWith('file://')) {
-          FileSystem.deleteAsync(nextSegmentUri, { idempotent: true }).catch(() => {});
-        }
+        console.error('[Mobile Playback Error]: Exception playing WAV segment:', err);
       }
     }
 
-    if (!currentItem || !currentItem.player) {
+    if (!playerToPlay) {
       this.isPlayingQueue = false;
       if (this.isTurnComplete) {
         const playbackEndTime = Date.now();
@@ -639,76 +601,39 @@ export class VoiceSession {
       const playbackStartTime = Date.now();
       const timeToFirstAudio = this.promptSentTime > 0 ? playbackStartTime - this.promptSentTime : 0;
       console.log(`[Mobile Audio] Playback started: +${timeToFirstAudio} ms after prompt sent`);
+      console.log(`[Mobile Audio] Time to first audio: ${timeToFirstAudio} ms`);
     }
 
-    const previousItem = this.activePlayer;
-    this.activePlayer = currentItem;
-    const { player: playerToPlay, uri: playingUri } = currentItem;
-
-    let hasHandledCompletion = false;
-
-    // Safety watchdog: if player fails or never fires finished event within 15 seconds, don't freeze the state
-    const safetyTimer = setTimeout(() => {
-      if (!hasHandledCompletion && this.activePlayer === currentItem) {
-        console.warn('[Mobile Audio Playback] ⚠️ Safety watchdog fired for segment:', playingUri);
-        handleCompletion();
-      }
-    }, 15000);
-
-    const handleCompletion = () => {
-      if (hasHandledCompletion) return;
-      hasHandledCompletion = true;
-      clearTimeout(safetyTimer);
-
-      this.lastSegmentFinishTime = Date.now();
-      if (this.activePlayer === currentItem) {
-        this.activePlayer = null;
-      }
-
-      // Asynchronously delete the temporary WAV file
-      if (playingUri && playingUri.startsWith('file://')) {
-        FileSystem.deleteAsync(playingUri, { idempotent: true }).catch(() => {});
-      }
-
-      // ⚡ Seamless Handoff: Start playing the next preloaded segment IMMEDIATELY
-      this.playNextAudioSegment();
-
-      // Asynchronously cleanup native player
-      setTimeout(() => {
-        try {
-          playerToPlay.remove();
-        } catch { }
-      }, 50);
-    };
+    const previousPlayer = this.activePlayer;
+    this.activePlayer = playerToPlay;
 
     playerToPlay.addListener('playbackStatusUpdate', (status: any) => {
-      if (status.error) {
-        console.error('[Mobile Audio Playback Error Status]:', status.error);
-        handleCompletion();
-        return;
-      }
-
       if (status.didJustFinish) {
-        handleCompletion();
+        this.lastSegmentFinishTime = Date.now();
+        const finishedPlayer = playerToPlay;
+        if (this.activePlayer === finishedPlayer) {
+          this.activePlayer = null;
+        }
+
+        // ⚡ Seamless Handoff: Start playing the next preloaded segment IMMEDIATELY
+        this.playNextAudioSegment();
+
+        // Asynchronously cleanup native player after next segment has started
+        setTimeout(() => {
+          try {
+            finishedPlayer.remove();
+          } catch { }
+        }, 50);
       }
     });
 
-    try {
-      playerToPlay.play();
-    } catch (playErr) {
-      console.error('[Mobile Audio Play Error]:', playErr);
-      handleCompletion();
-      return;
-    }
+    playerToPlay.play();
 
     // Clean up previous player asynchronously after new player has started playing
-    if (previousItem && previousItem !== currentItem) {
+    if (previousPlayer && previousPlayer !== playerToPlay) {
       setTimeout(() => {
         try {
-          previousItem.player?.remove?.();
-          if (previousItem.uri && previousItem.uri.startsWith('file://')) {
-            FileSystem.deleteAsync(previousItem.uri, { idempotent: true }).catch(() => {});
-          }
+          previousPlayer.remove();
         } catch { }
       }, 50);
     }
