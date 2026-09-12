@@ -54,10 +54,15 @@ export function attachVoiceSocketServer(httpServer: Server) {
       let accountingTimer: NodeJS.Timeout;
       let hardCapTimer: NodeJS.Timeout;
       let activeTurnId = 0;
+      let isTurnInterrupted = false;
       let pcmBuffer = Buffer.alloc(0);
       const TARGET_CHUNK_BYTES = 14400; // ~300ms PCM audio @ 24kHz 16-bit mono
 
       const flushPcmBuffer = (forceAll = false) => {
+        if (isTurnInterrupted) {
+          pcmBuffer = Buffer.alloc(0);
+          return;
+        }
         while (pcmBuffer.length > 0) {
           if (!forceAll && pcmBuffer.length < TARGET_CHUNK_BYTES) {
             break;
@@ -76,16 +81,23 @@ export function attachVoiceSocketServer(httpServer: Server) {
 
       const liveCallbacks = {
         onTextChunk: (text: string) => {
+          if (isTurnInterrupted) return;
           if (clientSocket.readyState === WebSocket.OPEN) {
             clientSocket.send(JSON.stringify({ type: 'text', data: text }));
           }
         },
         onAudioChunk: (base64Audio: string) => {
+          if (isTurnInterrupted) return;
           const incoming = Buffer.from(base64Audio, 'base64');
           pcmBuffer = Buffer.concat([pcmBuffer, incoming]);
           flushPcmBuffer(false);
         },
         onTurnComplete: () => {
+          if (isTurnInterrupted) {
+            console.log(`[Backend Outbound turn_complete Frame]: Suppressing turn_complete for interrupted turnId=${activeTurnId}`);
+            pcmBuffer = Buffer.alloc(0);
+            return;
+          }
           flushPcmBuffer(true);
           if (clientSocket.readyState === WebSocket.OPEN) {
             const elapsedSec = Math.floor((Date.now() - sessionStartTime) / 1000);
@@ -182,16 +194,18 @@ export function attachVoiceSocketServer(httpServer: Server) {
                 sendAudioChunk(liveSession, msg.data);
               }
             } else if (msg.type === 'interrupt') {
-              activeTurnId = msg.turnId || (activeTurnId + 1);
+              isTurnInterrupted = true;
               pcmBuffer = Buffer.alloc(0);
               console.log(`[Voice Server] User interrupt received, cancelled active audio buffer for turnId=${activeTurnId}`);
             } else if (msg.type === 'text_prompt') {
+              isTurnInterrupted = false;
               activeTurnId = msg.turnId || (activeTurnId + 1);
               pcmBuffer = Buffer.alloc(0);
               const currentElapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
               console.log(`[Voice Server User Turn Received]: Prompt="${msg.data}", turnId=${activeTurnId}, Elapsed=${currentElapsed}s / ${capSeconds}s, Gemini WS state=${liveSession?.readyState}`);
               sendTextPrompt(liveSession, msg.data);
             } else if (msg.type === 'image_capture') {
+              isTurnInterrupted = false;
               activeTurnId = msg.turnId || (activeTurnId + 1);
               pcmBuffer = Buffer.alloc(0);
               const snapshotEligibility = await checkSnapshotEligibility(dbClient, parentId, eligibility.isPremium);

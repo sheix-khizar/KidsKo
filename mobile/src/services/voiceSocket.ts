@@ -232,12 +232,26 @@ export class VoiceSession {
   sendImageCapture(base64Jpeg: string, caption?: string) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       console.log('[Mobile Sending Image Capture]:', base64Jpeg.length, 'base64 chars, caption:', caption || '(none)');
+      this.stopSpeechRecognition();
       this.resetTurnState();
       this.callbacks?.onStateChange?.('thinking');
       this.promptSentTime = Date.now();
       this.startThinkingWatchdog();
       this.ws.send(JSON.stringify({ type: 'image_capture', data: base64Jpeg, caption, turnId: this.currentTurnId }));
     }
+  }
+
+  interrupt() {
+    if (!this.isSessionActive) return;
+    console.log('[Mobile Voice Input]: User explicitly requested interruption of Kidsko playback.');
+    this.stopAudioPlayback();
+    this.resetTurnState();
+    this.lastSentTranscript = '';
+    this.callbacks?.onStateChange?.('listening');
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'interrupt', turnId: this.currentTurnId }));
+    }
+    this.restartSpeechRecognition();
   }
 
   private resetTurnState() {
@@ -292,14 +306,14 @@ export class VoiceSession {
     if (this.activePlayer) {
       try {
         this.activePlayer.remove();
-      } catch {}
+      } catch { }
       this.activePlayer = null;
     }
 
     if (this.preloadedNextPlayer) {
       try {
         this.preloadedNextPlayer.remove();
-      } catch {}
+      } catch { }
       this.preloadedNextPlayer = null;
     }
   }
@@ -310,8 +324,8 @@ export class VoiceSession {
     setTimeout(() => {
       if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN && !this.isKidskoSpeaking()) {
         try {
-          console.log('[SpeechRec Lifecycle]: Started listening for spoken user turns...');
-          ExpoSpeechRecognitionModule.start({ lang: 'en-US', interimResults: true, continuous: true });
+          console.log('[SpeechRec Lifecycle]: Starting fresh speech recognition session...');
+          this.startSpeechRecognition();
         } catch (err: any) {
           console.error('[SpeechRec Lifecycle]: Error restarting speech recognition:', err?.message || err);
         }
@@ -325,14 +339,22 @@ export class VoiceSession {
       this.speechSilenceTimer = null;
     }
 
-    if (transcript && transcript.length > 0 && transcript !== this.lastSentTranscript && this.ws?.readyState === WebSocket.OPEN) {
+    const cleanTranscript = transcript?.trim();
+    if (
+      cleanTranscript &&
+      cleanTranscript.length > 0 &&
+      cleanTranscript.toLowerCase() !== this.lastSentTranscript.toLowerCase() &&
+      this.ws?.readyState === WebSocket.OPEN
+    ) {
+      // 1. Immediately stop speech recognition while Kidsko thinks and speaks
+      this.stopSpeechRecognition();
       this.resetTurnState();
       this.callbacks?.onStateChange?.('thinking');
       this.promptSentTime = Date.now();
       this.startThinkingWatchdog();
-      console.log(`[Mobile Voice Input] Finalized spoken turn -> Sending prompt to Gemini Live (turnId=${this.currentTurnId}):`, transcript);
-      this.lastSentTranscript = transcript;
-      this.ws.send(JSON.stringify({ type: 'text_prompt', data: transcript, turnId: this.currentTurnId }));
+      console.log(`[Mobile Voice Input] Finalized spoken turn -> Sending prompt to Gemini Live (turnId=${this.currentTurnId}):`, cleanTranscript);
+      this.lastSentTranscript = cleanTranscript;
+      this.ws.send(JSON.stringify({ type: 'text_prompt', data: cleanTranscript, turnId: this.currentTurnId }));
     }
   }
 
@@ -359,32 +381,32 @@ export class VoiceSession {
         const transcript = event.results?.[0]?.transcript?.trim();
         const isFinal = event.isFinal || event.results?.[0]?.isFinal;
 
-        if (transcript && transcript.length > 1) {
-          const words = transcript.split(/\s+/).filter(Boolean);
+        if (!transcript || transcript.length <= 1) return;
 
-          // ⚡ REAL-TIME BARGE-IN: If Kidsko is actively playing audio, stop audio INSTANTLY!
-          if (this.isKidskoActivelySpeakingAudio()) {
-            console.log('[SpeechRec Lifecycle] ⚡ User speech detected during audio playback! Stopping Kidsko audio INSTANTLY:', transcript);
-            this.resetTurnState();
-            this.callbacks?.onStateChange?.('listening');
-            if (this.ws?.readyState === WebSocket.OPEN) {
-              this.ws.send(JSON.stringify({ type: 'interrupt', turnId: this.currentTurnId }));
-            }
-          }
+        // Ignore incoming speech results if Kidsko is already thinking or speaking
+        if (this.isKidskoSpeaking()) {
+          console.log('[SpeechRec Lifecycle] Ignoring speech result while Kidsko is speaking/thinking:', transcript);
+          return;
+        }
 
-          // Real-time live transcript streaming to UI screen
-          this.callbacks?.onTranscript?.(transcript);
+        // Ignore duplicate transcript that matches what was already sent
+        if (this.lastSentTranscript && transcript.toLowerCase() === this.lastSentTranscript.toLowerCase()) {
+          console.log('[SpeechRec Lifecycle] Ignoring duplicate transcript matching last sent:', transcript);
+          return;
+        }
 
-          if (isFinal) {
+        // Real-time live transcript streaming to UI screen
+        this.callbacks?.onTranscript?.(transcript);
+
+        if (isFinal) {
+          this.finalizeSpokenTurn(transcript);
+        } else {
+          // Snappy 2.5s speech pause detection for conversational turn-taking
+          if (this.speechSilenceTimer) clearTimeout(this.speechSilenceTimer);
+          this.speechSilenceTimer = setTimeout(() => {
+            console.log('[Mobile Voice Input] Speech pause detected -> Finalizing spoken turn:', transcript);
             this.finalizeSpokenTurn(transcript);
-          } else {
-            // ⚡ Fast 3.0s (3000ms) (1000ms old) silence timer: Snappy speech pause detection for all spoken turns
-            if (this.speechSilenceTimer) clearTimeout(this.speechSilenceTimer);
-            this.speechSilenceTimer = setTimeout(() => {
-              console.log('[Mobile Voice Input] 3000ms speech pause detected -> Finalizing spoken turn:', transcript);
-              this.finalizeSpokenTurn(transcript);
-            }, 3000);
-          }
+          }, 2500);
         }
       });
 
@@ -392,10 +414,10 @@ export class VoiceSession {
         console.log('[SpeechRec Lifecycle]: Recognition cycle ended natively.');
         if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN) {
           if (this.isKidskoSpeaking()) {
-            console.log('[SpeechRec Lifecycle]: Kidsko is still speaking -> Deferring speech recognition restart until playback finishes.');
+            console.log('[SpeechRec Lifecycle]: Kidsko is speaking/thinking -> Deferring speech recognition restart until playback finishes.');
             this.pendingSpeechRestart = true;
           } else {
-            console.log('[SpeechRec Lifecycle]: Kidsko is not speaking -> Auto-restarting speech recognition for next user turn...');
+            console.log('[SpeechRec Lifecycle]: Kidsko is idle -> Auto-restarting speech recognition for next user turn...');
             this.restartSpeechRecognition();
           }
         }
@@ -441,7 +463,7 @@ export class VoiceSession {
     for (const sub of this.speechSubscriptions) {
       try {
         sub.remove();
-      } catch {}
+      } catch { }
     }
     this.speechSubscriptions = [];
   }
@@ -451,7 +473,7 @@ export class VoiceSession {
     this.clearSpeechSubscriptions();
     try {
       ExpoSpeechRecognitionModule.stop();
-    } catch {}
+    } catch { }
   }
 
   private flushBufferedPcmToQueue(forceAll = false) {
@@ -496,7 +518,7 @@ export class VoiceSession {
         if (typeof (player as any).setPlaybackRate === 'function') (player as any).setPlaybackRate(1.0);
         else if (typeof (player as any).setRate === 'function') (player as any).setRate(1.0);
         else (player as any).playbackRate = 1.0;
-      } catch {}
+      } catch { }
       this.preloadedNextPlayer = player;
       this.currentSegmentPreloadTime = Date.now();
     } catch (err) {
@@ -520,7 +542,7 @@ export class VoiceSession {
           if (typeof (playerToPlay as any).setPlaybackRate === 'function') (playerToPlay as any).setPlaybackRate(1.0);
           else if (typeof (playerToPlay as any).setRate === 'function') (playerToPlay as any).setRate(1.0);
           else (playerToPlay as any).playbackRate = 1.0;
-        } catch {}
+        } catch { }
       } catch (err) {
         console.error('[Mobile Playback Error]: Exception playing WAV segment:', err);
       }
@@ -533,14 +555,13 @@ export class VoiceSession {
         const totalTurnTime = this.promptSentTime > 0 ? playbackEndTime - this.promptSentTime : 0;
         console.log(`[Mobile Audio] Playback finished: +${totalTurnTime} ms after prompt sent. Session remains WAITING FOR NEXT USER TURN.`);
         this.promptSentTime = 0;
+        this.lastSentTranscript = '';
         this.callbacks?.onStateChange?.('listening');
 
-        // Trigger deferred speech recognition restart after Kidsko has finished speaking
-        if (this.pendingSpeechRestart || (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN)) {
-          this.pendingSpeechRestart = false;
-          console.log('[SpeechRec Lifecycle]: Playback finished -> Triggering speech recognition restart for next user turn...');
-          this.restartSpeechRecognition();
-        }
+        // Trigger speech recognition restart after Kidsko has finished speaking
+        this.pendingSpeechRestart = false;
+        console.log('[SpeechRec Lifecycle]: Playback finished -> Triggering speech recognition restart for next user turn...');
+        this.restartSpeechRecognition();
       } else {
         console.log('[Mobile Audio Stream]: Queue emptied mid-stream, awaiting next audio chunk...');
       }
@@ -576,7 +597,7 @@ export class VoiceSession {
         setTimeout(() => {
           try {
             finishedPlayer.remove();
-          } catch {}
+          } catch { }
         }, 50);
       }
     });
@@ -588,7 +609,7 @@ export class VoiceSession {
       setTimeout(() => {
         try {
           previousPlayer.remove();
-        } catch {}
+        } catch { }
       }, 50);
     }
 

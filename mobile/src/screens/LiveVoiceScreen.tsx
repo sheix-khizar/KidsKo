@@ -127,9 +127,10 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
   const sendHomeworkPhoto = (base64: string) => {
     setIsSendingSnapshot(true);
     setErrorReason(null);
-    const activeCaption = lastSpokenTranscript.trim() || sessionRef.current?.getLastTranscript() || 'Please look at this and help me with my homework.';
+    const activeCaption = lastSpokenTranscript.trim() || 'Please look at this and help me with my homework.';
     console.log('[LiveVoiceScreen] Sending captured homework photo with caption:', activeCaption);
     sessionRef.current?.sendImageCapture(base64, activeCaption);
+    setLastSpokenTranscript('');
   };
 
   return (
@@ -156,12 +157,15 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
       {status === 'live' && (
         <View style={styles.stateCard}>
           {voiceState === 'speaking' ? (
-            <View style={[styles.avatarCircle, styles.avatarSpeaking]}>
+            <Pressable
+              style={[styles.avatarCircle, styles.avatarSpeaking]}
+              onPress={() => sessionRef.current?.interrupt()}
+            >
               <Text style={styles.avatarEmoji}>🦉</Text>
               <View style={styles.speakingBadge}>
-                <Text style={styles.speakingBadgeText}>🔊 Kidsko is Talking...</Text>
+                <Text style={styles.speakingBadgeText}>🔊 Kidsko is Talking... (Tap to speak)</Text>
               </View>
-            </View>
+            </Pressable>
           ) : voiceState === 'thinking' ? (
             <View style={[styles.avatarCircle, styles.avatarThinking]}>
               <ActivityIndicator size="large" color="#FFD54F" />

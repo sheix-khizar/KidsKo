@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import os from 'os';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import authRoutes from './routes/auth';
@@ -51,10 +52,25 @@ app.use('/api/billing', billingRoutes);
 app.use('/api/transcript', transcriptRoutes);
 app.use('/api/admin', adminRoutes);
 
+const getLocalIp = (): string => {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name] || []) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return 'localhost';
+};
+
 const httpServer = app.listen(PORT, '0.0.0.0', () => {
+  const localIp = getLocalIp();
   console.log(`✅ Kidsko backend running on http://0.0.0.0:${PORT}`);
-  console.log(`   Health check: http://192.168.18.95:${PORT}/health`);
-  console.log(`   Voice WebSocket: ws://192.168.18.95:${PORT}/ws/voice`);
+  console.log(`   Host Local:       http://localhost:${PORT}/health`);
+  console.log(`   Detected LAN IP:  http://${localIp}:${PORT}/health`);
+  console.log(`   Android Emulator: http://10.0.2.2:${PORT}/health`);
+  console.log(`   Voice WebSocket:  ws://10.0.2.2:${PORT}/ws/voice (or ws://${localIp}:${PORT}/ws/voice)`);
 });
 
 attachVoiceSocketServer(httpServer);
