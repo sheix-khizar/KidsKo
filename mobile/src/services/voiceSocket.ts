@@ -9,9 +9,9 @@ export async function forceLoudspeakerAudio(): Promise<void> {
     await setAudioModeAsync({
       playsInSilentMode: true,
       shouldRouteThroughEarpiece: false,
-      interruptionMode: 'doNotMix',
+      interruptionMode: 'mixWithOthers',
     });
-    console.log('[Mobile Audio Mode]: Audio mode forced to loudspeaker & doNotMix.');
+    console.log('[Mobile Audio Mode]: Audio mode configured to loudspeaker & mixWithOthers.');
   } catch (err: any) {
     console.warn('[Mobile Audio Mode]: Could not set audio mode:', err?.message || err);
   }
@@ -77,10 +77,10 @@ type VoiceCallbacks = {
 };
 
 // 24000 Hz, 16-bit mono PCM = 48000 bytes/sec
-// ~300ms initial buffer = 14400 bytes -> instant early playback start on first burst
-const INITIAL_BUFFER_BYTES = 14400;
-// ~1.2s chunk buffer = 57600 bytes -> unifies turn chunks into single smooth WAV tracks
-const CHUNK_BUFFER_BYTES = 57600;
+// ~1.5s initial buffer = 72000 bytes -> ensures Android AudioTrack buffer is fully primed before playback starts
+const INITIAL_BUFFER_BYTES = 72000;
+// ~2.5s chunk buffer = 120000 bytes -> unifies turn chunks into smooth, continuous WAV tracks
+const CHUNK_BUFFER_BYTES = 120000;
 
 export class VoiceSession {
   private ws: WebSocket | null = null;
@@ -268,7 +268,6 @@ export class VoiceSession {
       this.promptSentTime = Date.now();
       // Allow up to 12s for image upload, Sharp compression, and Gemini multimodal vision reasoning
       this.startThinkingWatchdog(12000);
-      forceLoudspeakerAudio().catch(() => {});
       this.ws.send(JSON.stringify({ type: 'image_capture', data: base64Jpeg, caption, turnId: this.currentTurnId }));
     }
   }
@@ -520,7 +519,6 @@ export class VoiceSession {
         ExpoSpeechRecognitionModule.stop();
       } catch { }
     }
-    forceLoudspeakerAudio().catch(() => {});
   }
 
   private async flushBufferedPcmToQueue(forceAll = false): Promise<void> {
@@ -560,7 +558,6 @@ export class VoiceSession {
     if (this.isPlayingQueue) return;
     this.hasStartedPlayback = true;
     this.callbacks?.onStateChange?.('speaking');
-    forceLoudspeakerAudio().catch(() => {});
     this.playNextAudioSegment();
   }
 
@@ -573,6 +570,7 @@ export class VoiceSession {
       const player = createAudioPlayer({ uri: nextSegmentUri });
       try {
         player.volume = 1.0;
+        player.muted = false;
         if (typeof (player as any).setPlaybackRate === 'function') (player as any).setPlaybackRate(1.0);
         else if (typeof (player as any).setRate === 'function') (player as any).setRate(1.0);
         else (player as any).playbackRate = 1.0;
@@ -599,6 +597,7 @@ export class VoiceSession {
         const player = createAudioPlayer({ uri: nextSegmentUri });
         try {
           player.volume = 1.0;
+          player.muted = false;
           if (typeof (player as any).setPlaybackRate === 'function') (player as any).setPlaybackRate(1.0);
           else if (typeof (player as any).setRate === 'function') (player as any).setRate(1.0);
           else (player as any).playbackRate = 1.0;
@@ -674,12 +673,12 @@ export class VoiceSession {
       // ⚡ Seamless Handoff: Start playing the next preloaded segment IMMEDIATELY
       this.playNextAudioSegment();
 
-      // Asynchronously cleanup native player
+      // Asynchronously cleanup native player after a safe delay
       setTimeout(() => {
         try {
           playerToPlay.remove();
         } catch { }
-      }, 50);
+      }, 500);
     };
 
     playerToPlay.addListener('playbackStatusUpdate', (status: any) => {
@@ -711,7 +710,7 @@ export class VoiceSession {
             FileSystem.deleteAsync(previousItem.uri, { idempotent: true }).catch(() => {});
           }
         } catch { }
-      }, 50);
+      }, 500);
     }
 
     // ⚡ Immediately preload the NEXT segment player in background while current segment plays
