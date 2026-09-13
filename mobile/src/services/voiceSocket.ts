@@ -9,9 +9,9 @@ export async function forceLoudspeakerAudio(): Promise<void> {
     await setAudioModeAsync({
       playsInSilentMode: true,
       shouldRouteThroughEarpiece: false,
-      interruptionMode: 'mixWithOthers',
+      interruptionMode: 'doNotMix',
     });
-    console.log('[Mobile Audio Mode]: Audio mode configured to loudspeaker & mixWithOthers.');
+    console.log('[Mobile Audio Mode]: Audio mode forced to loudspeaker & doNotMix.');
   } catch (err: any) {
     console.warn('[Mobile Audio Mode]: Could not set audio mode:', err?.message || err);
   }
@@ -77,10 +77,10 @@ type VoiceCallbacks = {
 };
 
 // 24000 Hz, 16-bit mono PCM = 48000 bytes/sec
-// ~1.5s initial buffer = 72000 bytes -> ensures Android AudioTrack buffer is fully primed before playback starts
-const INITIAL_BUFFER_BYTES = 72000;
-// ~2.5s chunk buffer = 120000 bytes -> unifies turn chunks into smooth, continuous WAV tracks
-const CHUNK_BUFFER_BYTES = 120000;
+// ~300ms initial buffer = 14400 bytes -> instant early playback start on first burst
+const INITIAL_BUFFER_BYTES = 14400;
+// ~1.2s chunk buffer = 57600 bytes -> unifies turn chunks into single smooth WAV tracks
+const CHUNK_BUFFER_BYTES = 57600;
 
 export class VoiceSession {
   private ws: WebSocket | null = null;
@@ -94,19 +94,17 @@ export class VoiceSession {
   private pendingSpeechRestart = false;
   private speechSilenceTimer: any = null;
   private thinkingWatchdogTimer: any = null;
-  private speechRestartTimer: any = null;
-  private hasSpeechPermission = false;
   private currentTurnId = 0;
 
   // Streaming Audio Queue State
   private audioQueue: string[] = [];
   private accumulatedPcmBinary = '';
-  private flushingPromise: Promise<void> | null = null;
   private hasStartedPlayback = false;
   private isPlayingQueue = false;
   private receivedChunkCount = 0;
   private isTurnComplete = false;
   private hasLoggedPlaybackStart = false;
+  private flushingPromise: Promise<void> | null = null;
 
   // Diagnostic Timers & Handoff Metrics
   private promptSentTime = 0;
@@ -141,7 +139,7 @@ export class VoiceSession {
 
     this.callbacks = callbacks;
     this.isSessionActive = true;
-    await forceLoudspeakerAudio().catch(() => {});
+    forceLoudspeakerAudio().catch(() => {});
     const studentParam = studentId ? `&studentId=${studentId}` : '';
     const socketUrl = `${getWsUrl()}/ws/voice?token=${token}${studentParam}`;
     console.log('Connecting Voice WebSocket to:', socketUrl);
@@ -182,14 +180,14 @@ export class VoiceSession {
           // Append incoming chunk to binary PCM accumulator
           this.accumulatedPcmBinary += atob(msg.data);
 
-          // Check if initial buffer threshold (~300ms) reached to start streaming playback
+          // Check if initial buffer threshold reached to start streaming playback
           if (!this.hasStartedPlayback) {
             if (this.accumulatedPcmBinary.length >= INITIAL_BUFFER_BYTES) {
               await this.flushBufferedPcmToQueue();
               this.startAudioQueuePlayback();
             }
           } else {
-            // Once streaming has started, flush chunks whenever chunk threshold (~1.2s) is reached
+            // Once streaming has started, flush chunks whenever chunk threshold is reached
             if (this.accumulatedPcmBinary.length >= CHUNK_BUFFER_BYTES) {
               await this.flushBufferedPcmToQueue();
               if (!this.isPlayingQueue) {
@@ -208,7 +206,6 @@ export class VoiceSession {
           const latencyToTurnComplete = this.promptSentTime > 0 ? turnCompleteTime - this.promptSentTime : 0;
           console.log(`[Mobile Audio] Turn complete: +${latencyToTurnComplete} ms after prompt sent. Total chunks collected = ${this.receivedChunkCount}`);
 
-          // Ignore stray turn_complete frames from cancelled turns with 0 chunks
           if (this.receivedChunkCount === 0 && !this.hasStartedPlayback) {
             console.log('[Mobile Audio] Ignoring turn_complete frame from cancelled turn (0 chunks collected).');
             return;
@@ -216,12 +213,12 @@ export class VoiceSession {
 
           this.isTurnComplete = true;
 
-          // Flush any remaining accumulated PCM bytes to temp WAV file
+          // Flush any remaining accumulated PCM bytes
           if (this.accumulatedPcmBinary.length > 0) {
             await this.flushBufferedPcmToQueue(true);
           }
 
-          // If playback hasn't started yet (e.g. short 1-chunk reply), start it now
+          // If playback hasn't started yet, start it now
           if (!this.hasStartedPlayback) {
             this.startAudioQueuePlayback();
           } else if (!this.isPlayingQueue) {
@@ -244,7 +241,7 @@ export class VoiceSession {
     };
 
     this.ws.onclose = (e) => {
-      console.log(`[Mobile WebSocket Closed]: Code ${e.code} - ${e.reason || 'Closed'}`);
+      console.log(`[Mobile WebSocket Close Event]: code = ${e.code}, reason = ${e.reason || 'None'}`);
       this.isSessionActive = false;
       this.stopSpeechRecognition();
       this.stopAudioPlayback();
@@ -266,8 +263,9 @@ export class VoiceSession {
       this.resetTurnState();
       this.callbacks?.onStateChange?.('thinking');
       this.promptSentTime = Date.now();
-      // Allow up to 12s for image upload, Sharp compression, and Gemini multimodal vision reasoning
-      this.startThinkingWatchdog(12000);
+      // Allow up to 25s for image upload, Sharp compression, and Gemini multimodal vision reasoning
+      this.startThinkingWatchdog(25000);
+      forceLoudspeakerAudio().catch(() => {});
       this.ws.send(JSON.stringify({ type: 'image_capture', data: base64Jpeg, caption, turnId: this.currentTurnId }));
     }
   }
@@ -300,10 +298,6 @@ export class VoiceSession {
     if (this.thinkingWatchdogTimer) {
       clearTimeout(this.thinkingWatchdogTimer);
       this.thinkingWatchdogTimer = null;
-    }
-    if (this.speechRestartTimer) {
-      clearTimeout(this.speechRestartTimer);
-      this.speechRestartTimer = null;
     }
     this.stopAudioPlayback();
     this.pendingSpeechRestart = false;
@@ -370,27 +364,19 @@ export class VoiceSession {
     }
   }
 
-  private restartSpeechRecognition(delayMs = 600) {
+  private restartSpeechRecognition() {
     if (!this.isSessionActive || this.ws?.readyState !== WebSocket.OPEN) return;
-    if (this.isKidskoSpeaking()) return;
-
-    if (this.speechRestartTimer) {
-      clearTimeout(this.speechRestartTimer);
-      this.speechRestartTimer = null;
-    }
-
     this.callbacks?.onStateChange?.('listening');
-    this.speechRestartTimer = setTimeout(async () => {
-      this.speechRestartTimer = null;
+    setTimeout(() => {
       if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN && !this.isKidskoSpeaking()) {
         try {
           console.log('[SpeechRec Lifecycle]: Starting fresh speech recognition session...');
-          await this.startSpeechRecognition();
+          this.startSpeechRecognition();
         } catch (err: any) {
           console.error('[SpeechRec Lifecycle]: Error restarting speech recognition:', err?.message || err);
         }
       }
-    }, delayMs);
+    }, 300);
   }
 
   private finalizeSpokenTurn(transcript: string) {
@@ -406,7 +392,7 @@ export class VoiceSession {
       cleanTranscript.toLowerCase() !== this.lastSentTranscript.toLowerCase() &&
       this.ws?.readyState === WebSocket.OPEN
     ) {
-      // 1. Immediately stop speech recognition while Kidsko thinks and speaks
+      // Immediately abort speech recognition to release microphone hardware lock
       this.stopSpeechRecognition();
       this.resetTurnState();
       this.callbacks?.onStateChange?.('thinking');
@@ -419,18 +405,15 @@ export class VoiceSession {
   }
 
   private async startSpeechRecognition() {
-    if (!this.isSessionActive || this.isStartingSpeech || this.isKidskoSpeaking()) return;
+    if (!this.isSessionActive || this.isStartingSpeech) return;
     this.isStartingSpeech = true;
 
     try {
-      if (!this.hasSpeechPermission) {
-        const perm = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-        if (!perm.granted) {
-          console.warn('[SpeechRec Lifecycle]: Permission not granted');
-          this.isStartingSpeech = false;
-          return;
-        }
-        this.hasSpeechPermission = true;
+      const perm = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      if (!perm.granted) {
+        console.warn('[SpeechRec Lifecycle]: Permission not granted');
+        this.isStartingSpeech = false;
+        return;
       }
 
       this.clearSpeechSubscriptions();
@@ -441,53 +424,64 @@ export class VoiceSession {
       });
 
       const subResult = ExpoSpeechRecognitionModule.addListener('result', (event: any) => {
-        const transcript = event.results?.[0]?.transcript || '';
-        if (transcript) {
-          this.callbacks?.onTranscript?.(transcript);
+        const transcript = event.results?.[0]?.transcript?.trim();
+        const isFinal = event.isFinal || event.results?.[0]?.isFinal;
 
-          // Reset trailing silence debounce timer on every new speech chunk
-          if (this.speechSilenceTimer) {
-            clearTimeout(this.speechSilenceTimer);
-          }
+        if (!transcript || transcript.length <= 1) return;
 
-          if (event.isFinal) {
-            console.log('[SpeechRec Lifecycle]: Engine delivered final speech segment:', transcript);
+        // Ignore incoming speech results if Kidsko is already thinking or speaking
+        if (this.isKidskoSpeaking()) {
+          console.log('[SpeechRec Lifecycle] Ignoring speech result while Kidsko is speaking/thinking:', transcript);
+          return;
+        }
+
+        // Ignore duplicate transcript that matches what was already sent
+        if (this.lastSentTranscript && transcript.toLowerCase() === this.lastSentTranscript.toLowerCase()) {
+          console.log('[SpeechRec Lifecycle] Ignoring duplicate transcript matching last sent:', transcript);
+          return;
+        }
+
+        // Real-time live transcript streaming to UI screen
+        this.callbacks?.onTranscript?.(transcript);
+
+        if (this.speechSilenceTimer) clearTimeout(this.speechSilenceTimer);
+
+        if (isFinal) {
+          console.log('[SpeechRec Lifecycle]: Received final speech frame -> dispatching turn immediately:', transcript);
+          this.finalizeSpokenTurn(transcript);
+        } else {
+          // Adaptive silence endpoint detection: 800ms
+          this.speechSilenceTimer = setTimeout(() => {
+            console.log('[SpeechRec Lifecycle]: 800ms silence detected after user speech -> dispatching turn:', transcript);
             this.finalizeSpokenTurn(transcript);
-          } else {
-            // Natural silence end-pointing: 850ms silence after speech concludes a turn
-            this.speechSilenceTimer = setTimeout(() => {
-              console.log('[SpeechRec Lifecycle]: 850ms trailing silence detected -> finalizing spoken turn:', transcript);
-              this.finalizeSpokenTurn(transcript);
-            }, 850);
-          }
+          }, 800);
         }
       });
 
       const subError = ExpoSpeechRecognitionModule.addListener('error', (event: any) => {
-        console.warn('[SpeechRec Lifecycle]: Recognition error:', event.error, event.message);
-        if (this.isSessionActive && !this.isKidskoSpeaking() && this.ws?.readyState === WebSocket.OPEN) {
-          this.restartSpeechRecognition(1200);
+        console.warn('[SpeechRec Lifecycle]: Recognition error event =', event.error);
+        if (event.error === 'no-speech' && !this.isKidskoSpeaking()) {
+          this.restartSpeechRecognition();
         }
       });
 
       const subEnd = ExpoSpeechRecognitionModule.addListener('end', () => {
-        console.log('[SpeechRec Lifecycle]: Recognition ended.');
-        if (this.isSessionActive && !this.isKidskoSpeaking() && this.ws?.readyState === WebSocket.OPEN) {
-          this.restartSpeechRecognition(600);
+        console.log('[SpeechRec Lifecycle]: Recognition session ended.');
+        if (this.isSessionActive && !this.isKidskoSpeaking()) {
+          this.restartSpeechRecognition();
         }
       });
 
-      this.speechSubscriptions = [subStart, subResult, subError, subEnd];
+      this.speechSubscriptions.push(subStart, subResult, subError, subEnd);
 
       ExpoSpeechRecognitionModule.start({
         lang: 'en-US',
         interimResults: true,
         continuous: true,
       });
-
-      this.isStartingSpeech = false;
     } catch (err: any) {
-      console.error('[SpeechRec Lifecycle]: Exception starting speech recognition:', err?.message || err);
+      console.error('[SpeechRec Lifecycle]: Start exception =', err?.message || err);
+    } finally {
       this.isStartingSpeech = false;
     }
   }
@@ -496,10 +490,6 @@ export class VoiceSession {
     if (this.speechSilenceTimer) {
       clearTimeout(this.speechSilenceTimer);
       this.speechSilenceTimer = null;
-    }
-    if (this.speechRestartTimer) {
-      clearTimeout(this.speechRestartTimer);
-      this.speechRestartTimer = null;
     }
     for (const sub of this.speechSubscriptions) {
       try {
@@ -519,6 +509,7 @@ export class VoiceSession {
         ExpoSpeechRecognitionModule.stop();
       } catch { }
     }
+    forceLoudspeakerAudio().catch(() => {});
   }
 
   private async flushBufferedPcmToQueue(forceAll = false): Promise<void> {
@@ -558,6 +549,7 @@ export class VoiceSession {
     if (this.isPlayingQueue) return;
     this.hasStartedPlayback = true;
     this.callbacks?.onStateChange?.('speaking');
+    forceLoudspeakerAudio().catch(() => {});
     this.playNextAudioSegment();
   }
 
@@ -570,7 +562,6 @@ export class VoiceSession {
       const player = createAudioPlayer({ uri: nextSegmentUri });
       try {
         player.volume = 1.0;
-        player.muted = false;
         if (typeof (player as any).setPlaybackRate === 'function') (player as any).setPlaybackRate(1.0);
         else if (typeof (player as any).setRate === 'function') (player as any).setRate(1.0);
         else (player as any).playbackRate = 1.0;
@@ -597,7 +588,6 @@ export class VoiceSession {
         const player = createAudioPlayer({ uri: nextSegmentUri });
         try {
           player.volume = 1.0;
-          player.muted = false;
           if (typeof (player as any).setPlaybackRate === 'function') (player as any).setPlaybackRate(1.0);
           else if (typeof (player as any).setRate === 'function') (player as any).setRate(1.0);
           else (player as any).playbackRate = 1.0;
@@ -647,13 +637,13 @@ export class VoiceSession {
 
     let hasHandledCompletion = false;
 
-    // Safety watchdog: if player fails or never fires finished event within 15 seconds, don't freeze the state
+    // Safety watchdog: if player fails or never fires finished event within 12 seconds, don't freeze the state
     const safetyTimer = setTimeout(() => {
       if (!hasHandledCompletion && this.activePlayer === currentItem) {
         console.warn('[Mobile Audio Playback] ⚠️ Safety watchdog fired for segment:', playingUri);
         handleCompletion();
       }
-    }, 15000);
+    }, 12000);
 
     const handleCompletion = () => {
       if (hasHandledCompletion) return;
@@ -673,12 +663,12 @@ export class VoiceSession {
       // ⚡ Seamless Handoff: Start playing the next preloaded segment IMMEDIATELY
       this.playNextAudioSegment();
 
-      // Asynchronously cleanup native player after a safe delay
+      // Asynchronously cleanup native player
       setTimeout(() => {
         try {
           playerToPlay.remove();
         } catch { }
-      }, 500);
+      }, 50);
     };
 
     playerToPlay.addListener('playbackStatusUpdate', (status: any) => {
@@ -710,7 +700,7 @@ export class VoiceSession {
             FileSystem.deleteAsync(previousItem.uri, { idempotent: true }).catch(() => {});
           }
         } catch { }
-      }, 500);
+      }, 50);
     }
 
     // ⚡ Immediately preload the NEXT segment player in background while current segment plays
