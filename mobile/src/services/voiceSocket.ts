@@ -94,6 +94,8 @@ export class VoiceSession {
   private pendingSpeechRestart = false;
   private speechSilenceTimer: any = null;
   private thinkingWatchdogTimer: any = null;
+  private speechRestartTimer: any = null;
+  private hasSpeechPermission = false;
   private currentTurnId = 0;
 
   // Streaming Audio Queue State
@@ -300,6 +302,10 @@ export class VoiceSession {
       clearTimeout(this.thinkingWatchdogTimer);
       this.thinkingWatchdogTimer = null;
     }
+    if (this.speechRestartTimer) {
+      clearTimeout(this.speechRestartTimer);
+      this.speechRestartTimer = null;
+    }
     this.stopAudioPlayback();
     this.pendingSpeechRestart = false;
     this.promptSentTime = 0;
@@ -365,19 +371,27 @@ export class VoiceSession {
     }
   }
 
-  private restartSpeechRecognition() {
+  private restartSpeechRecognition(delayMs = 600) {
     if (!this.isSessionActive || this.ws?.readyState !== WebSocket.OPEN) return;
+    if (this.isKidskoSpeaking()) return;
+
+    if (this.speechRestartTimer) {
+      clearTimeout(this.speechRestartTimer);
+      this.speechRestartTimer = null;
+    }
+
     this.callbacks?.onStateChange?.('listening');
-    setTimeout(() => {
+    this.speechRestartTimer = setTimeout(async () => {
+      this.speechRestartTimer = null;
       if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN && !this.isKidskoSpeaking()) {
         try {
           console.log('[SpeechRec Lifecycle]: Starting fresh speech recognition session...');
-          this.startSpeechRecognition();
+          await this.startSpeechRecognition();
         } catch (err: any) {
           console.error('[SpeechRec Lifecycle]: Error restarting speech recognition:', err?.message || err);
         }
       }
-    }, 300);
+    }, delayMs);
   }
 
   private finalizeSpokenTurn(transcript: string) {
@@ -406,15 +420,18 @@ export class VoiceSession {
   }
 
   private async startSpeechRecognition() {
-    if (!this.isSessionActive || this.isStartingSpeech) return;
+    if (!this.isSessionActive || this.isStartingSpeech || this.isKidskoSpeaking()) return;
     this.isStartingSpeech = true;
 
     try {
-      const perm = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-      if (!perm.granted) {
-        console.warn('[SpeechRec Lifecycle]: Permission not granted');
-        this.isStartingSpeech = false;
-        return;
+      if (!this.hasSpeechPermission) {
+        const perm = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+        if (!perm.granted) {
+          console.warn('[SpeechRec Lifecycle]: Permission not granted');
+          this.isStartingSpeech = false;
+          return;
+        }
+        this.hasSpeechPermission = true;
       }
 
       this.clearSpeechSubscriptions();
@@ -450,16 +467,14 @@ export class VoiceSession {
       const subError = ExpoSpeechRecognitionModule.addListener('error', (event: any) => {
         console.warn('[SpeechRec Lifecycle]: Recognition error:', event.error, event.message);
         if (this.isSessionActive && !this.isKidskoSpeaking() && this.ws?.readyState === WebSocket.OPEN) {
-          console.log('[SpeechRec Lifecycle]: Auto-recovering speech recognition from error...');
-          this.restartSpeechRecognition();
+          this.restartSpeechRecognition(1200);
         }
       });
 
       const subEnd = ExpoSpeechRecognitionModule.addListener('end', () => {
         console.log('[SpeechRec Lifecycle]: Recognition ended.');
         if (this.isSessionActive && !this.isKidskoSpeaking() && this.ws?.readyState === WebSocket.OPEN) {
-          console.log('[SpeechRec Lifecycle]: Speech ended while Kidsko not speaking -> restarting...');
-          this.restartSpeechRecognition();
+          this.restartSpeechRecognition(600);
         }
       });
 
@@ -482,6 +497,10 @@ export class VoiceSession {
     if (this.speechSilenceTimer) {
       clearTimeout(this.speechSilenceTimer);
       this.speechSilenceTimer = null;
+    }
+    if (this.speechRestartTimer) {
+      clearTimeout(this.speechRestartTimer);
+      this.speechRestartTimer = null;
     }
     for (const sub of this.speechSubscriptions) {
       try {
