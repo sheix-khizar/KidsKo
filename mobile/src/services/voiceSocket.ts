@@ -9,9 +9,9 @@ export async function forceLoudspeakerAudio(): Promise<void> {
     await setAudioModeAsync({
       playsInSilentMode: true,
       shouldRouteThroughEarpiece: false,
-      interruptionMode: 'doNotMix',
+      interruptionMode: 'mixWithOthers',
     });
-    console.log('[Mobile Audio Mode]: Audio mode forced to loudspeaker & doNotMix.');
+    console.log('[Mobile Audio Mode]: Audio mode configured to loudspeaker & mixWithOthers.');
   } catch (err: any) {
     console.warn('[Mobile Audio Mode]: Could not set audio mode:', err?.message || err);
   }
@@ -77,10 +77,10 @@ type VoiceCallbacks = {
 };
 
 // 24000 Hz, 16-bit mono PCM = 48000 bytes/sec
-// ~300ms initial buffer = 14400 bytes -> instant early playback start on first burst
-const INITIAL_BUFFER_BYTES = 14400;
-// ~1.2s chunk buffer = 57600 bytes -> unifies turn chunks into single smooth WAV tracks
-const CHUNK_BUFFER_BYTES = 57600;
+// ~1.5s initial buffer = 72000 bytes -> ensures Android AudioTrack buffer is fully primed before playback starts
+const INITIAL_BUFFER_BYTES = 72000;
+// ~2.5s chunk buffer = 120000 bytes -> unifies turn chunks into smooth, continuous WAV tracks
+const CHUNK_BUFFER_BYTES = 120000;
 
 export class VoiceSession {
   private ws: WebSocket | null = null;
@@ -106,7 +106,7 @@ export class VoiceSession {
   private receivedChunkCount = 0;
   private isTurnComplete = false;
   private hasLoggedPlaybackStart = false;
-  private flushingPromise: Promise<void> | null = null;
+  private isFlushing = false;
 
   // Diagnostic Timers & Handoff Metrics
   private promptSentTime = 0;
@@ -237,7 +237,7 @@ export class VoiceSession {
             this.preloadNextSegment();
           }
         } else if (msg.type === 'text') {
-          callbacks.onTranscript?.(msg.data);
+          // AI response text from Gemini Live — preserved without spamming student speech transcript
         } else if (msg.type === 'snapshot_ack') {
           console.log(`[Mobile Snapshot Ack]: ${msg.remaining} remaining this week`);
           callbacks.onSnapshotAck?.(msg.remaining);
@@ -536,47 +536,51 @@ export class VoiceSession {
         ExpoSpeechRecognitionModule.stop();
       } catch { }
     }
-    forceLoudspeakerAudio().catch(() => {});
   }
 
   private async flushBufferedPcmToQueue(forceAll = false): Promise<void> {
-    while (this.flushingPromise) {
-      await this.flushingPromise;
-    }
-    this.flushingPromise = (async () => {
-      try {
-        while (this.accumulatedPcmBinary.length > 0) {
-          const bytesPerSegment = !this.hasStartedPlayback ? INITIAL_BUFFER_BYTES : CHUNK_BUFFER_BYTES;
-          if (!forceAll && this.accumulatedPcmBinary.length < bytesPerSegment) {
-            break;
-          }
-
-          const pcmSegmentLength = forceAll
-            ? this.accumulatedPcmBinary.length
-            : Math.min(bytesPerSegment, this.accumulatedPcmBinary.length);
-
-          const pcmSegmentBinary = this.accumulatedPcmBinary.slice(0, pcmSegmentLength);
-          this.accumulatedPcmBinary = this.accumulatedPcmBinary.slice(pcmSegmentLength);
-
-          try {
-            const filePath = await writePcmSegmentToTempWav(pcmSegmentBinary);
-            this.audioQueue.push(filePath);
-          } catch (err) {
-            console.error('[Mobile Audio] Error saving temp WAV segment:', err);
-          }
+    if (this.isFlushing) {
+      if (forceAll) {
+        while (this.isFlushing) {
+          await new Promise((r) => setTimeout(r, 40));
         }
-      } finally {
-        this.flushingPromise = null;
+      } else {
+        return;
       }
-    })();
-    await this.flushingPromise;
+    }
+    this.isFlushing = true;
+    try {
+      while (this.accumulatedPcmBinary.length > 0) {
+        const bytesPerSegment = !this.hasStartedPlayback ? INITIAL_BUFFER_BYTES : CHUNK_BUFFER_BYTES;
+        if (!forceAll && this.accumulatedPcmBinary.length < bytesPerSegment) {
+          break;
+        }
+
+        const pcmSegmentLength = forceAll
+          ? this.accumulatedPcmBinary.length
+          : Math.min(bytesPerSegment, this.accumulatedPcmBinary.length);
+
+        if (pcmSegmentLength <= 0) break;
+
+        const pcmSegmentBinary = this.accumulatedPcmBinary.slice(0, pcmSegmentLength);
+        this.accumulatedPcmBinary = this.accumulatedPcmBinary.slice(pcmSegmentLength);
+
+        try {
+          const filePath = await writePcmSegmentToTempWav(pcmSegmentBinary);
+          this.audioQueue.push(filePath);
+        } catch (err) {
+          console.error('[Mobile Audio] Error saving temp WAV segment:', err);
+        }
+      }
+    } finally {
+      this.isFlushing = false;
+    }
   }
 
   private startAudioQueuePlayback() {
     if (this.isPlayingQueue) return;
     this.hasStartedPlayback = true;
     this.callbacks?.onStateChange?.('speaking');
-    forceLoudspeakerAudio().catch(() => {});
     this.playNextAudioSegment();
   }
 
@@ -589,6 +593,7 @@ export class VoiceSession {
       const player = createAudioPlayer({ uri: nextSegmentUri });
       try {
         player.volume = 1.0;
+        player.muted = false;
         if (typeof (player as any).setPlaybackRate === 'function') (player as any).setPlaybackRate(1.0);
         else if (typeof (player as any).setRate === 'function') (player as any).setRate(1.0);
         else (player as any).playbackRate = 1.0;
@@ -615,6 +620,7 @@ export class VoiceSession {
         const player = createAudioPlayer({ uri: nextSegmentUri });
         try {
           player.volume = 1.0;
+          player.muted = false;
           if (typeof (player as any).setPlaybackRate === 'function') (player as any).setPlaybackRate(1.0);
           else if (typeof (player as any).setRate === 'function') (player as any).setRate(1.0);
           else (player as any).playbackRate = 1.0;
@@ -691,12 +697,12 @@ export class VoiceSession {
       // ⚡ Seamless Handoff: Start playing the next preloaded segment IMMEDIATELY
       this.playNextAudioSegment();
 
-      // Asynchronously cleanup native player
+      // Asynchronously cleanup native player after a safe delay
       setTimeout(() => {
         try {
           playerToPlay.remove();
         } catch { }
-      }, 50);
+      }, 500);
     };
 
     playerToPlay.addListener('playbackStatusUpdate', (status: any) => {
@@ -733,7 +739,7 @@ export class VoiceSession {
             FileSystem.deleteAsync(previousItem.uri, { idempotent: true }).catch(() => {});
           }
         } catch { }
-      }, 50);
+      }, 500);
     }
 
     // ⚡ Immediately preload the NEXT segment player in background while current segment plays

@@ -38,9 +38,13 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
         onReady: (capSeconds) => {
           setStatus('live');
           setSecondsLeft(capSeconds);
+          const startTime = Date.now();
+          const capSec = capSeconds;
+          if (timerRef.current) clearInterval(timerRef.current);
           timerRef.current = setInterval(() => {
-            setSecondsLeft((s) => (s !== null && s > 0 ? s - 1 : 0));
-          }, 1000);
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            setSecondsLeft(Math.max(0, capSec - elapsed));
+          }, 500);
         },
         onCapReached: () => {
           setStatus('ended');
