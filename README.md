@@ -1,4 +1,4 @@
-# KidsKo 🚀
+# KidsKo AI🚀
 
 **KidsKo is an AI-powered voice learning companion designed to make learning more interactive, engaging, and natural for children.**
 
