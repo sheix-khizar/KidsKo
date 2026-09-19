@@ -94,6 +94,8 @@ export class VoiceSession {
   private pendingSpeechRestart = false;
   private speechSilenceTimer: any = null;
   private thinkingWatchdogTimer: any = null;
+  private midStreamWatchdogTimer: any = null;
+  private speechRestartTimer: any = null;
   private currentTurnId = 0;
 
   // Streaming Audio Queue State
@@ -171,6 +173,10 @@ export class VoiceSession {
             clearTimeout(this.thinkingWatchdogTimer);
             this.thinkingWatchdogTimer = null;
           }
+          if (this.midStreamWatchdogTimer) {
+            clearTimeout(this.midStreamWatchdogTimer);
+            this.midStreamWatchdogTimer = null;
+          }
           if (this.receivedChunkCount === 1) {
             this.firstChunkTime = Date.now();
             const latencyToFirstChunk = this.promptSentTime > 0 ? this.firstChunkTime - this.promptSentTime : 0;
@@ -201,6 +207,10 @@ export class VoiceSession {
           if (typeof msg.turnId === 'number' && msg.turnId !== this.currentTurnId) {
             console.log(`[Mobile Audio] Discarding stray turn_complete frame from old turn ${msg.turnId} (current turnId: ${this.currentTurnId})`);
             return;
+          }
+          if (this.midStreamWatchdogTimer) {
+            clearTimeout(this.midStreamWatchdogTimer);
+            this.midStreamWatchdogTimer = null;
           }
           const turnCompleteTime = Date.now();
           const latencyToTurnComplete = this.promptSentTime > 0 ? turnCompleteTime - this.promptSentTime : 0;
@@ -299,6 +309,14 @@ export class VoiceSession {
       clearTimeout(this.thinkingWatchdogTimer);
       this.thinkingWatchdogTimer = null;
     }
+    if (this.midStreamWatchdogTimer) {
+      clearTimeout(this.midStreamWatchdogTimer);
+      this.midStreamWatchdogTimer = null;
+    }
+    if (this.speechRestartTimer) {
+      clearTimeout(this.speechRestartTimer);
+      this.speechRestartTimer = null;
+    }
     this.stopAudioPlayback();
     this.pendingSpeechRestart = false;
     this.promptSentTime = 0;
@@ -364,10 +382,15 @@ export class VoiceSession {
     }
   }
 
-  private restartSpeechRecognition() {
+  private restartSpeechRecognition(delayMs = 300) {
     if (!this.isSessionActive || this.ws?.readyState !== WebSocket.OPEN) return;
+    if (this.speechRestartTimer) {
+      clearTimeout(this.speechRestartTimer);
+      this.speechRestartTimer = null;
+    }
     this.callbacks?.onStateChange?.('listening');
-    setTimeout(() => {
+    this.speechRestartTimer = setTimeout(() => {
+      this.speechRestartTimer = null;
       if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN && !this.isKidskoSpeaking()) {
         try {
           console.log('[SpeechRec Lifecycle]: Starting fresh speech recognition session...');
@@ -376,7 +399,7 @@ export class VoiceSession {
           console.error('[SpeechRec Lifecycle]: Error restarting speech recognition:', err?.message || err);
         }
       }
-    }, 300);
+    }, delayMs);
   }
 
   private finalizeSpokenTurn(transcript: string) {
@@ -490,6 +513,10 @@ export class VoiceSession {
     if (this.speechSilenceTimer) {
       clearTimeout(this.speechSilenceTimer);
       this.speechSilenceTimer = null;
+    }
+    if (this.speechRestartTimer) {
+      clearTimeout(this.speechRestartTimer);
+      this.speechRestartTimer = null;
     }
     for (const sub of this.speechSubscriptions) {
       try {
@@ -617,6 +644,7 @@ export class VoiceSession {
         this.restartSpeechRecognition();
       } else {
         console.log('[Mobile Audio Stream]: Queue emptied mid-stream, awaiting next audio chunk...');
+        this.startMidStreamStallWatchdog();
       }
       return;
     }
@@ -637,13 +665,13 @@ export class VoiceSession {
 
     let hasHandledCompletion = false;
 
-    // Safety watchdog: if player fails or never fires finished event within 12 seconds, don't freeze the state
+    // Safety watchdog: segments are ~0.3s to 1.5s; 3.5s timeout prevents ever freezing in dead silence
     const safetyTimer = setTimeout(() => {
       if (!hasHandledCompletion && this.activePlayer === currentItem) {
         console.warn('[Mobile Audio Playback] ⚠️ Safety watchdog fired for segment:', playingUri);
         handleCompletion();
       }
-    }, 12000);
+    }, 3500);
 
     const handleCompletion = () => {
       if (hasHandledCompletion) return;
@@ -678,7 +706,12 @@ export class VoiceSession {
         return;
       }
 
-      if (status.didJustFinish) {
+      const isFinished =
+        status.didJustFinish ||
+        status.playbackState === 'ended' ||
+        (status.playing === false && status.currentTime > 0 && status.duration > 0 && status.currentTime >= status.duration - 0.08);
+
+      if (isFinished) {
         handleCompletion();
       }
     });
@@ -707,10 +740,36 @@ export class VoiceSession {
     this.preloadNextSegment();
   }
 
+  private startMidStreamStallWatchdog() {
+    if (this.midStreamWatchdogTimer) clearTimeout(this.midStreamWatchdogTimer);
+    this.midStreamWatchdogTimer = setTimeout(() => {
+      if (this.isSessionActive && !this.isTurnComplete && this.audioQueue.length === 0 && !this.isPlayingQueue) {
+        console.warn('[Mobile Audio Stream] ⚠️ Mid-stream queue starved for 3s -> auto-completing turn to prevent UI hang.');
+        this.isTurnComplete = true;
+        this.promptSentTime = 0;
+        this.lastSentTranscript = '';
+        this.callbacks?.onStateChange?.('listening');
+        this.restartSpeechRecognition();
+      }
+    }, 3000);
+  }
+
   async end() {
     console.log('[Mobile Session End Call]: User manually ending voice session...');
     this.isSessionActive = false;
     this.pendingSpeechRestart = false;
+    if (this.thinkingWatchdogTimer) {
+      clearTimeout(this.thinkingWatchdogTimer);
+      this.thinkingWatchdogTimer = null;
+    }
+    if (this.midStreamWatchdogTimer) {
+      clearTimeout(this.midStreamWatchdogTimer);
+      this.midStreamWatchdogTimer = null;
+    }
+    if (this.speechRestartTimer) {
+      clearTimeout(this.speechRestartTimer);
+      this.speechRestartTimer = null;
+    }
     this.clearSpeechSubscriptions();
     this.stopAudioPlayback();
     if (this.ws) {

@@ -100,41 +100,56 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
     };
   }, []);
 
-  // Continuous Camera Vision Loop (1 frame every 1.5s when camera is open)
+  // Continuous Camera Vision Loop (Paced non-blocking loop, active ONLY during 'listening' state)
   useEffect(() => {
-    let frameInterval: any = null;
-    let isCapturing = false;
+    let isCancelled = false;
+    let captureTimeout: any = null;
+
+    const captureNextFrame = async () => {
+      if (isCancelled) return;
+
+      // Only capture when camera is active, session is live, Kidsko is listening, and not taking an instant snapshot
+      if (isCameraActive && status === 'live' && voiceState === 'listening' && !isSendingSnapshot) {
+        if (cameraRef.current) {
+          try {
+            // Guard with 2.5s timeout so Android Camera2 driver NEVER permanently freezes the JS thread
+            const capturePromise = cameraRef.current.takePictureAsync({
+              quality: 0.25,
+              base64: true,
+              shutterSound: false,
+            });
+
+            const timeoutPromise = new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Camera capture timeout')), 2500)
+            );
+
+            const picture: any = await Promise.race([capturePromise, timeoutPromise]);
+            if (!isCancelled && picture?.base64 && sessionRef.current) {
+              sessionRef.current.sendCameraFrame(picture.base64);
+            }
+          } catch {
+            // Frame dropped or timed out, gracefully continue
+          }
+        }
+      }
+
+      if (!isCancelled) {
+        // Pace with 2.5s interval to give the React Native JS bridge, UI animations, and GC breathing room
+        captureTimeout = setTimeout(captureNextFrame, 2500);
+      }
+    };
 
     if (isCameraActive && status === 'live') {
-      console.log('[LiveVoiceScreen] Starting continuous real-time camera streaming loop (1.5s interval)...');
-      frameInterval = setInterval(async () => {
-        if (!cameraRef.current || isCapturing) return;
-        isCapturing = true;
-        try {
-          const picture = await cameraRef.current.takePictureAsync({
-            quality: 0.35,
-            base64: true,
-            skipProcessing: true,
-            shutterSound: false,
-          });
-          if (picture?.base64 && sessionRef.current) {
-            sessionRef.current.sendCameraFrame(picture.base64);
-          }
-        } catch {
-          // Missed frame, will capture on next tick
-        } finally {
-          isCapturing = false;
-        }
-      }, 1500);
+      console.log('[LiveVoiceScreen] Starting paced non-blocking camera vision loop (2.5s interval, listening only)...');
+      captureTimeout = setTimeout(captureNextFrame, 1500);
     }
 
     return () => {
-      if (frameInterval) {
-        clearInterval(frameInterval);
-        console.log('[LiveVoiceScreen] Stopped camera streaming loop.');
-      }
+      isCancelled = true;
+      if (captureTimeout) clearTimeout(captureTimeout);
+      console.log('[LiveVoiceScreen] Stopped camera streaming loop.');
     };
-  }, [isCameraActive, status]);
+  }, [isCameraActive, status, voiceState, isSendingSnapshot]);
 
   const handleEnd = async () => {
     setIsCameraActive(false);
@@ -172,21 +187,27 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
   };
 
   const handleInstantSnapshot = async () => {
-    if (!cameraRef.current) return;
+    if (!cameraRef.current || isSendingSnapshot) return;
     setIsSendingSnapshot(true);
     setErrorReason(null);
     try {
-      const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.6,
+      const capturePromise = cameraRef.current.takePictureAsync({
+        quality: 0.4,
         base64: true,
-        skipProcessing: true,
         shutterSound: false,
       });
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Photo capture timed out. Please try again.')), 6000)
+      );
+      const photo: any = await Promise.race([capturePromise, timeoutPromise]);
       if (photo?.base64) {
         sendHomeworkPhoto(photo.base64);
+      } else {
+        setIsSendingSnapshot(false);
       }
     } catch (err: any) {
-      setErrorReason(err?.message || 'Could not take photo');
+      console.warn('[LiveVoiceScreen] Snapshot capture error:', err?.message || err);
+      setErrorReason(err?.message || 'Could not take photo. Please try again.');
       setIsSendingSnapshot(false);
     }
   };
@@ -255,10 +276,13 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
                     <Text style={styles.floatingSpeakingText}>🔊 Kidsko is Talking... (Tap to speak)</Text>
                   </Pressable>
                 ) : voiceState === 'thinking' ? (
-                  <View style={styles.floatingThinkingBadge}>
+                  <Pressable
+                    style={styles.floatingThinkingBadge}
+                    onPress={() => sessionRef.current?.interrupt()}
+                  >
                     <ActivityIndicator size="small" color="#FFD54F" />
-                    <Text style={styles.floatingThinkingText}>💡 Thinking...</Text>
-                  </View>
+                    <Text style={styles.floatingThinkingText}>💡 Thinking... (Tap to cancel)</Text>
+                  </Pressable>
                 ) : (
                   <View style={styles.floatingListeningBadge}>
                     <Text style={styles.floatingListeningText}>👁️ Kidsko is Watching & Listening...</Text>
@@ -280,10 +304,14 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
                   </View>
                 </Pressable>
               ) : voiceState === 'thinking' ? (
-                <View style={[styles.avatarCircle, styles.avatarThinking]}>
+                <Pressable
+                  style={[styles.avatarCircle, styles.avatarThinking]}
+                  onPress={() => sessionRef.current?.interrupt()}
+                >
                   <ActivityIndicator size="large" color="#FFD54F" />
                   <Text style={styles.thinkingText}>💡 Thinking...</Text>
-                </View>
+                  <Text style={{ color: '#aaa', fontSize: 11, marginTop: 4 }}>Tap to cancel</Text>
+                </Pressable>
               ) : (
                 <View style={[styles.avatarCircle, styles.avatarListening]}>
                   <Text style={styles.avatarEmoji}>🎙️</Text>
