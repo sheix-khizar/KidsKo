@@ -13,7 +13,7 @@ type Props = {
 
 export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimitReached }: Props) {
   const [status, setStatus] = useState<'connecting' | 'live' | 'ended'>('connecting');
-  const [voiceState, setVoiceState] = useState<'listening' | 'thinking' | 'speaking'>('listening');
+  const [voiceState, setVoiceState] = useState<'listening' | 'thinking' | 'speaking'>('thinking');
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [errorReason, setErrorReason] = useState<string | null>(null);
   const [isSendingSnapshot, setIsSendingSnapshot] = useState(false);
