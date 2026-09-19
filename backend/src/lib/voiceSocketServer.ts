@@ -47,7 +47,12 @@ export function attachVoiceSocketServer(httpServer: Server) {
       const capMs = Math.max(1000, capMinutes * 60 * 1000);
       const capSeconds = Math.floor(capMs / 1000);
 
-      console.log(`[Voice Session Started]: ParentId=${parentId}, StudentId=${studentId || '(none)'}, CapMinutes=${capMinutes.toFixed(2)}, CapSeconds=${capSeconds}s, StartTime=${new Date(sessionStartTime).toISOString()}`);
+      const queryInputMode = url.searchParams.get('inputMode');
+      const inputMode = (queryInputMode === 'audio' || queryInputMode === 'text')
+        ? queryInputMode
+        : (process.env.ENABLE_NATIVE_AUDIO_INPUT === 'true' ? 'audio' : 'text');
+
+      console.log(`[Voice Session Started]: ParentId=${parentId}, StudentId=${studentId || '(none)'}, InputMode=${inputMode}, CapMinutes=${capMinutes.toFixed(2)}, CapSeconds=${capSeconds}s, StartTime=${new Date(sessionStartTime).toISOString()}`);
 
       let liveSession: any;
       let elapsedMs = 0;
@@ -112,6 +117,14 @@ export function attachVoiceSocketServer(httpServer: Server) {
             clientSocket.send(JSON.stringify({ type: 'turn_complete', turnId: activeTurnId }));
           }
         },
+        onInterrupted: () => {
+          console.log(`[Backend Outbound interrupted Frame]: Native Gemini interrupt fired for turnId=${activeTurnId}`);
+          isTurnInterrupted = true;
+          pcmBuffer = Buffer.alloc(0);
+          if (clientSocket.readyState === WebSocket.OPEN) {
+            clientSocket.send(JSON.stringify({ type: 'interrupted', turnId: activeTurnId }));
+          }
+        },
         onClose: async (reason?: string) => {
           console.log(`[Gemini Live WS Session Closed]: Reason=${reason || 'Normal close'}`);
           if (cameraWatchdogTimer) {
@@ -165,7 +178,7 @@ export function attachVoiceSocketServer(httpServer: Server) {
         return;
       }
 
-      clientSocket.send(JSON.stringify({ type: 'ready', capSeconds }));
+      clientSocket.send(JSON.stringify({ type: 'ready', capSeconds, inputMode }));
 
       // 🎙️ Send initial personalized AI voice greeting upon call start
       let studentName = 'there';
@@ -213,14 +226,20 @@ export function attachVoiceSocketServer(httpServer: Server) {
           try {
             const msg = JSON.parse(raw.toString());
             if (msg.type === 'audio_chunk') {
-              console.log('[Voice Server] Received chunk, bytes:', msg.data.length);
-              if (msg.isRawPcm) {
+              if (msg.data) {
+                if (isTurnInterrupted) {
+                  isTurnInterrupted = false;
+                  activeTurnId++;
+                }
                 sendAudioChunk(liveSession, msg.data);
               }
             } else if (msg.type === 'interrupt') {
               isTurnInterrupted = true;
               pcmBuffer = Buffer.alloc(0);
               console.log(`[Voice Server] User interrupt received, cancelled active audio buffer for turnId=${activeTurnId}`);
+              if (clientSocket.readyState === WebSocket.OPEN) {
+                clientSocket.send(JSON.stringify({ type: 'interrupted', turnId: activeTurnId }));
+              }
             } else if (msg.type === 'text_prompt') {
               isTurnInterrupted = false;
               activeTurnId = msg.turnId || (activeTurnId + 1);

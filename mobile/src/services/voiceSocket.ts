@@ -1,16 +1,21 @@
 import * as FileSystem from 'expo-file-system/legacy';
-import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
+import { createAudioPlayer, setAudioModeAsync, AudioModule } from 'expo-audio';
 import { ExpoSpeechRecognitionModule } from 'expo-speech-recognition';
 import { getToken } from './api';
 import { getWsUrl } from './config';
 
 export async function forceLoudspeakerAudio(): Promise<void> {
   try {
-    await setAudioModeAsync({
-      playsInSilentMode: true,
-      shouldRouteThroughEarpiece: false,
-      interruptionMode: 'duckOthers',
-    });
+    await Promise.race([
+      setAudioModeAsync({
+        playsInSilentMode: true,
+        shouldRouteThroughEarpiece: false,
+        interruptionMode: 'duckOthers',
+      }),
+      new Promise<void>((_, reject) =>
+        setTimeout(() => reject(new Error('setAudioModeAsync timed out after 2500ms')), 2500)
+      ),
+    ]);
     console.log('[Mobile Audio Mode]: Audio mode configured to loudspeaker & duckOthers.');
   } catch (err: any) {
     console.warn('[Mobile Audio Mode]: Could not set audio mode:', err?.message || err);
@@ -29,18 +34,16 @@ function createWavBase64(pcmBinary: string): string {
   view.setUint32(4, 36 + pcmBytesLength, true);
   // WAVE header ("WAVE")
   view.setUint8(8, 0x57); view.setUint8(9, 0x41); view.setUint8(10, 0x56); view.setUint8(11, 0x45);
-
-  // fmt subchunk ("fmt ")
+  // "fmt " chunk
   view.setUint8(12, 0x66); view.setUint8(13, 0x6d); view.setUint8(14, 0x74); view.setUint8(15, 0x20);
-  view.setUint32(16, 16, true);        // Subchunk1Size = 16 (PCM)
-  view.setUint16(20, 1, true);         // AudioFormat = 1 (PCM)
-  view.setUint16(22, 1, true);         // NumChannels = 1 (mono)
-  view.setUint32(24, 24000, true);     // SampleRate = 24000 Hz
-  view.setUint32(28, 24000 * 2, true); // ByteRate = 24000 * 1 * 16/8 = 48000
-  view.setUint16(32, 2, true);         // BlockAlign = 1 * 16/8 = 2
-  view.setUint16(34, 16, true);        // BitsPerSample = 16
-
-  // data subchunk ("data")
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // Linear PCM
+  view.setUint16(22, 1, true); // Mono (1 channel)
+  view.setUint32(24, 24000, true); // Sample rate = 24000 Hz
+  view.setUint32(28, 24000 * 2, true); // Byte rate = 48000 bytes/sec
+  view.setUint16(32, 2, true); // Block align = 2 bytes
+  view.setUint16(34, 16, true); // Bits per sample = 16-bit
+  // "data" chunk
   view.setUint8(36, 0x64); view.setUint8(37, 0x61); view.setUint8(38, 0x74); view.setUint8(39, 0x61);
   view.setUint32(40, pcmBytesLength, true);
 
@@ -58,9 +61,14 @@ async function writePcmSegmentToTempWav(pcmBinary: string): Promise<string> {
   wavFileCounter++;
   const baseDir = FileSystem.cacheDirectory || `${FileSystem.documentDirectory}cache/`;
   const filePath = `${baseDir}kidsko_speech_${Date.now()}_${wavFileCounter}.wav`;
-  await FileSystem.writeAsStringAsync(filePath, wavBase64, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
+  await Promise.race([
+    FileSystem.writeAsStringAsync(filePath, wavBase64, {
+      encoding: FileSystem.EncodingType.Base64,
+    }),
+    new Promise<void>((_, reject) =>
+      setTimeout(() => reject(new Error('FileSystem.writeAsStringAsync timed out after 4000ms')), 4000)
+    ),
+  ]);
   return filePath;
 }
 
@@ -118,6 +126,12 @@ export class VoiceSession {
   private currentTurnId = 0;
   private audioGeneration = 0;
   private currentRecognitionSessionId = 0;
+
+  // Native AudioStream Streaming Mic State (Option B)
+  private audioStream: any = null;
+  private audioStreamSub: any = null;
+  private isStreamingMic = false;
+  private inputMode: 'audio' | 'text' = 'text';
 
   // Configurable Silence Debounce (1.8s in recommended 1.5 - 2s range)
   private silenceDebounceMs = 1800;
@@ -196,7 +210,8 @@ export class VoiceSession {
     this.isSessionActive = true;
     forceLoudspeakerAudio().catch(() => {});
     const studentParam = studentId ? `&studentId=${studentId}` : '';
-    const socketUrl = `${getWsUrl()}/ws/voice?token=${token}${studentParam}`;
+    const inputModeParam = process.env.EXPO_PUBLIC_ENABLE_NATIVE_AUDIO_INPUT === 'true' ? '&inputMode=audio' : '';
+    const socketUrl = `${getWsUrl()}/ws/voice?token=${token}${studentParam}${inputModeParam}`;
     console.log('Connecting Voice WebSocket to:', socketUrl);
     this.ws = new WebSocket(socketUrl);
 
@@ -204,24 +219,38 @@ export class VoiceSession {
       try {
         const msg = JSON.parse(event.data);
         if (msg.type === 'ready') {
-          console.log(`[Mobile WS Ready Frame]: Session cap = ${msg.capSeconds}s. Waiting for Kidsko greeting...`);
+          this.inputMode = msg.inputMode || 'text';
+          console.log(`[Mobile WS Ready Frame]: Session cap = ${msg.capSeconds}s, inputMode = ${this.inputMode}. Waiting for Kidsko greeting...`);
           this.callbacks?.onStateChange?.('thinking');
           callbacks.onReady(msg.capSeconds);
+
+          if (this.inputMode === 'audio') {
+            this.startAudioStream().catch((err) => {
+              console.error('[AudioStream Mic] Failed to start native audio stream:', err);
+            });
+          }
 
           // Fallback safety timer: if no initial greeting audio arrives within 5s, transition to listening
           setTimeout(() => {
             if (this.isSessionActive && !this.hasStartedPlayback && !this.isTurnComplete && this.receivedChunkCount === 0) {
-              console.log('[Mobile WS]: Initial greeting fallback timeout -> starting speech recognition');
+              console.log('[Mobile WS]: Initial greeting fallback timeout -> transition to listening');
               this.callbacks?.onStateChange?.('listening');
-              this.restartSpeechRecognition(100);
+              if (this.inputMode === 'text') {
+                this.restartSpeechRecognition(100);
+              }
             }
           }, 5000);
         } else if (msg.type === 'cap_reached') {
           console.log('[Mobile WS Cap Reached Frame]: Server sent cap_reached signal.');
           this.isSessionActive = false;
+          this.stopAudioStream();
           this.stopSpeechRecognition();
           this.stopAudioPlayback();
           callbacks.onCapReached();
+        } else if (msg.type === 'interrupted') {
+          console.log(`[Mobile WS Interrupted Frame]: Server confirmed interruption for turnId=${msg.turnId}`);
+          this.completeTurn('INTERRUPTED');
+          this.resetTurnState();
         } else if (msg.type === 'error') {
           console.error('[Mobile WS Error Frame]: Server error =', msg.reason);
           callbacks.onError(msg.reason);
@@ -334,6 +363,7 @@ export class VoiceSession {
       console.log(`[Mobile WebSocket Close Event]: code = ${e.code}, reason = ${e.reason || 'None'}`);
       this.isSessionActive = false;
       this.clearMidStreamWatchdog();
+      this.stopAudioStream();
       this.stopSpeechRecognition();
       this.stopAudioPlayback();
       callbacks.onClose(e.reason || e.code);
@@ -403,7 +433,9 @@ export class VoiceSession {
 
     if (this.isSessionActive) {
       this.callbacks?.onStateChange?.('listening');
-      this.restartSpeechRecognition(400);
+      if (this.inputMode === 'text') {
+        this.restartSpeechRecognition(400);
+      }
     }
   }
 
@@ -499,6 +531,7 @@ export class VoiceSession {
   }
 
   private restartSpeechRecognition(delayMs = 300) {
+    if (this.inputMode === 'audio') return;
     if (!this.isSessionActive || this.ws?.readyState !== WebSocket.OPEN) return;
     if (this.speechRestartTimer) {
       clearTimeout(this.speechRestartTimer);
@@ -544,6 +577,7 @@ export class VoiceSession {
   }
 
   private async startSpeechRecognition() {
+    if (this.inputMode === 'audio') return;
     if (!this.isSessionActive || this.isStartingSpeech) return;
     if (this.isKidskoSpeaking()) {
       console.log('[SpeechRec Lifecycle] Suppressing startSpeechRecognition while Kidsko is actively speaking or thinking.');
@@ -552,7 +586,15 @@ export class VoiceSession {
     this.isStartingSpeech = true;
 
     try {
-      const perm = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      const perm = await Promise.race([
+        ExpoSpeechRecognitionModule.requestPermissionsAsync(),
+        new Promise<{ granted: boolean }>((resolve) =>
+          setTimeout(() => {
+            console.warn('[SpeechRec Lifecycle]: requestPermissionsAsync timed out after 5000ms');
+            resolve({ granted: false });
+          }, 5000)
+        ),
+      ]);
       if (!perm.granted) {
         console.warn('[SpeechRec Lifecycle]: Permission not granted');
         this.isStartingSpeech = false;
@@ -669,13 +711,99 @@ export class VoiceSession {
     }
   }
 
+  private async startAudioStream() {
+    if (!this.isSessionActive || this.isStreamingMic) return;
+    try {
+      console.log('[AudioStream Lifecycle]: Requesting microphone recording permissions...');
+      const perm = await Promise.race([
+        AudioModule.requestRecordingPermissionsAsync(),
+        new Promise<{ granted: boolean }>((resolve) =>
+          setTimeout(() => {
+            console.warn('[AudioStream Lifecycle]: requestRecordingPermissionsAsync timed out after 5000ms');
+            resolve({ granted: false });
+          }, 5000)
+        ),
+      ]);
+
+      if (!perm.granted) {
+        console.warn('[AudioStream Lifecycle]: Recording permission not granted.');
+        return;
+      }
+
+      this.stopAudioStream();
+
+      console.log('[AudioStream Lifecycle]: Initializing AudioStream (16000Hz, mono, int16)...');
+      this.audioStream = new AudioModule.AudioStream({
+        sampleRate: 16000,
+        channels: 1,
+        encoding: 'int16',
+      });
+
+      this.audioStreamSub = this.audioStream.addListener('audioStreamBuffer', (buffer: any) => {
+        if (!this.isSessionActive || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+        if (!buffer?.data) return;
+
+        try {
+          const bytes = new Uint8Array(buffer.data);
+          let binary = '';
+          const len = bytes.byteLength;
+          for (let i = 0; i < len; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          const base64Chunk = btoa(binary);
+          this.ws.send(JSON.stringify({
+            type: 'audio_chunk',
+            data: base64Chunk,
+            isRawPcm: true,
+          }));
+        } catch (streamErr) {
+          console.error('[AudioStream Lifecycle] Error sending audio chunk:', streamErr);
+        }
+      });
+
+      await Promise.race([
+        this.audioStream.start(),
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error('AudioStream.start() timed out after 4000ms')), 4000)
+        ),
+      ]);
+      this.isStreamingMic = true;
+      console.log('[AudioStream Lifecycle]: AudioStream capturing and streaming mic PCM.');
+    } catch (err: any) {
+      console.error('[AudioStream Lifecycle]: Exception starting AudioStream:', err?.message || err);
+      this.stopAudioStream();
+    }
+  }
+
+  private stopAudioStream() {
+    if (this.audioStreamSub) {
+      try {
+        this.audioStreamSub.remove();
+      } catch {}
+      this.audioStreamSub = null;
+    }
+    if (this.audioStream) {
+      try {
+        this.audioStream.stop();
+      } catch {}
+      this.audioStream = null;
+    }
+    this.isStreamingMic = false;
+  }
+
   private async flushBufferedPcmToQueue(forceAll = false, expectedGen?: number): Promise<void> {
     const currentGen = this.audioGeneration;
     if (typeof expectedGen === 'number' && expectedGen !== currentGen) return;
 
     if (this.isFlushing) {
       if (forceAll) {
+        const flushWaitStart = Date.now();
         while (this.isFlushing) {
+          if (Date.now() - flushWaitStart > 3000) {
+            console.warn('[Mobile Audio] Stalled isFlushing lock detected (>3000ms). Force-releasing lock.');
+            this.isFlushing = false;
+            break;
+          }
           await new Promise((r) => setTimeout(r, 40));
         }
       } else {
@@ -1006,6 +1134,7 @@ export class VoiceSession {
     this.isSessionActive = false;
     this.pendingSpeechRestart = false;
     this.clearMidStreamWatchdog();
+    this.stopAudioStream();
     if (this.thinkingWatchdogTimer) {
       clearTimeout(this.thinkingWatchdogTimer);
       this.thinkingWatchdogTimer = null;

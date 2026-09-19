@@ -29,6 +29,7 @@ type LiveCallbacks = {
   onAudioChunk: (base64Audio: string) => void;
   onTextChunk?: (text: string) => void;
   onTurnComplete?: () => void;
+  onInterrupted?: () => void;
   onClose: (reason?: string) => void;
   onError: (err: any) => void;
 };
@@ -75,11 +76,13 @@ async function connectSingleModel(modelName: string, callbacks: LiveCallbacks): 
         const data = JSON.parse(str);
 
         const isTurnComplete = !!data?.serverContent?.turnComplete;
+        const isInterrupted = !!data?.serverContent?.interrupted;
 
         console.log('[Gemini Server Message Received]:', {
           setupComplete: !!data.setupComplete,
           hasServerContent: !!data.serverContent,
           turnComplete: isTurnComplete,
+          interrupted: isInterrupted,
           partsCount: data.serverContent?.modelTurn?.parts?.length || 0,
           error: data.error || null,
         });
@@ -93,6 +96,11 @@ async function connectSingleModel(modelName: string, callbacks: LiveCallbacks): 
 
         if (data.error) {
           console.error('[Gemini Live Server Error]:', data.error);
+        }
+
+        if (isInterrupted && callbacks.onInterrupted) {
+          console.log('[Gemini Live WS] serverContent.interrupted signal received from Gemini Live server!');
+          callbacks.onInterrupted();
         }
 
         const parts = data?.serverContent?.modelTurn?.parts;
