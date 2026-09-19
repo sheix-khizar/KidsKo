@@ -206,7 +206,7 @@ export function sendImagePrompt(geminiWs: WebSocket, base64Jpeg: string, caption
   }
 }
 
-export function sendRealtimeMediaChunk(geminiWs: WebSocket, base64Jpeg: string) {
+export function sendRealtimeVideoFrame(geminiWs: WebSocket, base64Jpeg: string) {
   if (geminiWs && geminiWs.readyState === WebSocket.OPEN) {
     const inputMsg = {
       realtimeInput: {
@@ -219,6 +219,9 @@ export function sendRealtimeMediaChunk(geminiWs: WebSocket, base64Jpeg: string) 
     geminiWs.send(JSON.stringify(inputMsg));
   }
 }
+
+// Deprecated alias for backwards compatibility
+export const sendRealtimeMediaChunk = sendRealtimeVideoFrame;
 
 export function closeLiveSession(geminiWs: WebSocket) {
   if (geminiWs && (geminiWs.readyState === WebSocket.OPEN || geminiWs.readyState === WebSocket.CONNECTING)) {
