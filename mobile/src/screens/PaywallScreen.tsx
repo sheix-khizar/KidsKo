@@ -99,9 +99,10 @@ export default function PaywallScreen({ onBack, onPurchased }: Props) {
 
       {/* Features List */}
       <View style={styles.featuresContainer}>
+        <Text style={styles.featureItem}>✓ Free Trial: 10 minutes/week to talk or show homework live</Text>
+        <Text style={styles.featureItem}>✓ Premium: 25 live call & vision minutes / week (~108 min/mo)</Text>
+        <Text style={styles.featureItem}>✓ Unlimited homework camera vision & step-by-step guidance</Text>
         <Text style={styles.featureItem}>✓ 2,000 text chat messages / month</Text>
-        <Text style={styles.featureItem}>✓ 25 live voice call minutes / week (~108 min/mo)</Text>
-        <Text style={styles.featureItem}>✓ 20 homework photo helps / week</Text>
         <Text style={styles.featureItem}>✓ Detailed parent progress reports & transcripts</Text>
       </View>
 
@@ -117,7 +118,7 @@ export default function PaywallScreen({ onBack, onPurchased }: Props) {
       </Pressable>
 
       <Pressable onPress={onBack} style={styles.cancelBtn}>
-        <Text style={styles.cancelText}>Not now, stay on free plan</Text>
+        <Text style={styles.cancelText}>Not now, stay on 10 min/week free plan</Text>
       </Pressable>
     </ScrollView>
   );

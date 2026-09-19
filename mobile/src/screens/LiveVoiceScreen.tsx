@@ -104,7 +104,12 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
     };
   }, []);
 
-  // Continuous Camera Vision Loop (Paced non-blocking loop, active ONLY during 'listening' state)
+  // Native in-flight lock to guarantee Android CameraX NEVER receives concurrent capture requests
+  const isNativeCaptureInProgressRef = useRef(false);
+  const consecutiveFailuresRef = useRef(0);
+  const captureIterationRef = useRef(0);
+
+  // Continuous Camera Vision Loop (Paced non-blocking loop with hardware circuit-breaker)
   useEffect(() => {
     let isCancelled = false;
     let captureTimeout: any = null;
@@ -114,30 +119,62 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
 
       // Only capture when camera is active, session is live, Kidsko is listening, and not taking an instant snapshot
       if (isCameraActive && status === 'live' && voiceState === 'listening' && !isSendingSnapshot) {
-        if (cameraRef.current) {
+        // Prevent concurrent native calls if previous native capture is still in-flight on Main Looper
+        if (cameraRef.current && !isNativeCaptureInProgressRef.current) {
+          isNativeCaptureInProgressRef.current = true;
+          captureIterationRef.current++;
+          const iter = captureIterationRef.current;
+          const startTime = Date.now();
+
+          console.log(`[Camera Loop #${iter}] 📸 Dispatching takePictureAsync (quality 0.2)...`);
+
           try {
-            // Guard with 2.5s timeout so Android Camera2 driver NEVER permanently freezes the JS thread
-            const capturePromise = cameraRef.current.takePictureAsync({
-              quality: 0.25,
+            const nativeCapturePromise = cameraRef.current.takePictureAsync({
+              quality: 0.2,
               base64: true,
               shutterSound: false,
             });
 
+            // Native completion handler to release the in-flight lock whenever Android finishes
+            nativeCapturePromise
+              .then(() => {
+                isNativeCaptureInProgressRef.current = false;
+              })
+              .catch(() => {
+                isNativeCaptureInProgressRef.current = false;
+              });
+
             const timeoutPromise = new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('Camera capture timeout')), 2500)
+              setTimeout(() => reject(new Error(`Camera capture #${iter} timeout after 2500ms`)), 2500)
             );
 
-            const picture: any = await Promise.race([capturePromise, timeoutPromise]);
+            const picture: any = await Promise.race([nativeCapturePromise, timeoutPromise]);
+            const durationMs = Date.now() - startTime;
+
+            consecutiveFailuresRef.current = 0; // Reset circuit-breaker counter on clean capture
+            console.log(`[Camera Loop #${iter}] ✅ Resolved in ${durationMs}ms, base64 length: ${picture?.base64?.length || 0}`);
+
             if (!isCancelled && picture?.base64 && sessionRef.current) {
               sessionRef.current.sendCameraFrame(picture.base64);
             }
-          } catch {
-            // Frame dropped or timed out, gracefully continue
+          } catch (err: any) {
+            const durationMs = Date.now() - startTime;
+            consecutiveFailuresRef.current++;
+            console.warn(`[Camera Loop #${iter}] ⚠️ Capture failed/timed-out (${durationMs}ms): ${err?.message}. Consecutive failures = ${consecutiveFailuresRef.current}`);
+
+            // Circuit-Breaker: auto-pause camera if 2 consecutive frames stall to prevent Android UI freeze
+            if (consecutiveFailuresRef.current >= 2) {
+              console.error(`[Camera Circuit-Breaker] 🚨 2 consecutive captures stalled. Auto-pausing camera to protect UI responsiveness.`);
+              setIsCameraActive(false);
+              setNetworkNotice('Live camera paused to keep app responsive — tap Open Camera to resume.');
+              consecutiveFailuresRef.current = 0;
+              return;
+            }
           }
         }
       }
 
-      if (!isCancelled) {
+      if (!isCancelled && isCameraActive) {
         // Pace with 2.5s interval to give the React Native JS bridge, UI animations, and GC breathing room
         captureTimeout = setTimeout(captureNextFrame, 2500);
       }
@@ -145,6 +182,7 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
 
     if (isCameraActive && status === 'live') {
       console.log('[LiveVoiceScreen] Starting paced non-blocking camera vision loop (2.5s interval, listening only)...');
+      consecutiveFailuresRef.current = 0;
       captureTimeout = setTimeout(captureNextFrame, 1500);
     }
 
@@ -361,10 +399,6 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
             </View>
           )}
         </>
-      )}
-
-      {snapshotsRemaining !== null && (
-        <Text style={styles.snapshotCount}>{snapshotsRemaining} photo helps left this week</Text>
       )}
 
       {errorReason && <Text style={styles.errorSub}>{errorReason}</Text>}

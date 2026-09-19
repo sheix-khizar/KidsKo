@@ -9,7 +9,7 @@ type Student = { id: string; student_name: string };
 type Props = {
   onLoggedOut: () => void;
   onSelectStudent: (student: Student) => void;
-  onScanStudent: (student: Student) => void;
+  onScanStudent?: (student: Student) => void;
   onOpenTranscript: (student: Student) => void;
   onOpenVoiceCall: (student: Student) => void;
 };
@@ -110,9 +110,6 @@ export default function HomeScreen({ onLoggedOut, onSelectStudent, onScanStudent
               </Pressable>
               <Pressable style={styles.voiceBtn} onPress={() => onOpenVoiceCall(item)}>
                 <Text style={styles.voiceBtnText}>🎙️ Call</Text>
-              </Pressable>
-              <Pressable style={styles.scanBtn} onPress={() => onScanStudent(item)}>
-                <Text style={styles.scanBtnText}>📸 Scan</Text>
               </Pressable>
               <Pressable style={styles.chatBtn} onPress={() => onSelectStudent(item)}>
                 <Text style={styles.chatBtnText}>💬 Chat</Text>

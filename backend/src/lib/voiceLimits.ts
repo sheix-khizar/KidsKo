@@ -1,10 +1,10 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 
-export const FREE_WEEKLY_VOICE_MINUTES = 5;
+export const FREE_WEEKLY_VOICE_MINUTES = 10; // Unified 10 min/week trial for voice + live vision
 export const PREMIUM_WEEKLY_VOICE_MINUTES = 25;
 
-export const FREE_WEEKLY_LIVE_SNAPSHOTS = 3;
-export const PREMIUM_WEEKLY_LIVE_SNAPSHOTS = 20;
+export const FREE_WEEKLY_LIVE_SNAPSHOTS = 50; // Internal abuse safeguard
+export const PREMIUM_WEEKLY_LIVE_SNAPSHOTS = 200;
 
 type VoiceEligibility = {
   allowed: boolean;
@@ -70,8 +70,8 @@ export async function checkVoiceEligibility(
       isPremium,
       minutesRemaining: 0,
       reason: isPremium
-        ? 'Voice allowance used up for this month.'
-        : `Free voice time used up for this week (${FREE_WEEKLY_VOICE_MINUTES} min/week). Upgrade to Premium for more!`,
+        ? 'Voice & vision call allowance used up for this week.'
+        : `Free trial time used up for this week (${FREE_WEEKLY_VOICE_MINUTES} min/week for voice & live vision). Upgrade to Premium for more!`,
     };
   }
 
@@ -124,8 +124,8 @@ export async function checkSnapshotEligibility(
       allowed: false,
       remaining: 0,
       reason: isPremium
-        ? 'Live photo-help allowance used up for this week.'
-        : `Free live photo-help used up for this week (${FREE_WEEKLY_LIVE_SNAPSHOTS}/week). Upgrade to Premium for more!`,
+        ? 'Live photo-help limit reached for this session.'
+        : `Live photo-help limit reached for this week. Upgrade to Premium for unlimited guidance!`,
     };
   }
 
