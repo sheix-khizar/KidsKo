@@ -3,7 +3,7 @@ import { Server } from 'http';
 import sharp from 'sharp';
 import { supabase, supabaseAdmin } from './supabase';
 import { checkVoiceEligibility, recordVoiceMinutesUsed, checkSnapshotEligibility, recordSnapshotUsed } from './voiceLimits';
-import { startLiveSession, sendAudioChunk, sendTextPrompt, sendImagePrompt, sendRealtimeVideoFrame, closeLiveSession } from './geminiLive';
+import { startLiveSession, sendAudioChunk, sendTextPrompt, sendImagePrompt, closeLiveSession } from './geminiLive';
 import { logUsageEvent } from './usageEvents';
 
 const ACCOUNTING_INTERVAL_MS = 10_000;
@@ -47,12 +47,7 @@ export function attachVoiceSocketServer(httpServer: Server) {
       const capMs = Math.max(1000, capMinutes * 60 * 1000);
       const capSeconds = Math.floor(capMs / 1000);
 
-      const queryInputMode = url.searchParams.get('inputMode');
-      const inputMode = (queryInputMode === 'audio' || queryInputMode === 'text')
-        ? queryInputMode
-        : (process.env.ENABLE_NATIVE_AUDIO_INPUT === 'true' ? 'audio' : 'text');
-
-      console.log(`[Voice Session Started]: ParentId=${parentId}, StudentId=${studentId || '(none)'}, InputMode=${inputMode}, CapMinutes=${capMinutes.toFixed(2)}, CapSeconds=${capSeconds}s, StartTime=${new Date(sessionStartTime).toISOString()}`);
+      console.log(`[Voice Session Started]: ParentId=${parentId}, StudentId=${studentId || '(none)'}, CapMinutes=${capMinutes.toFixed(2)}, CapSeconds=${capSeconds}s, StartTime=${new Date(sessionStartTime).toISOString()}`);
 
       let liveSession: any;
       let elapsedMs = 0;
@@ -60,9 +55,6 @@ export function attachVoiceSocketServer(httpServer: Server) {
       let hardCapTimer: NodeJS.Timeout;
       let activeTurnId = 0;
       let isTurnInterrupted = false;
-      let lastCameraFrameTime = 0;
-      let cameraFramesSentCount = 0;
-      let cameraWatchdogTimer: NodeJS.Timeout | null = null;
       let pcmBuffer = Buffer.alloc(0);
       const TARGET_CHUNK_BYTES = 14400; // ~300ms PCM audio @ 24kHz 16-bit mono
 
@@ -96,10 +88,6 @@ export function attachVoiceSocketServer(httpServer: Server) {
         },
         onAudioChunk: (base64Audio: string) => {
           if (isTurnInterrupted) return;
-          if (cameraWatchdogTimer) {
-            clearTimeout(cameraWatchdogTimer);
-            cameraWatchdogTimer = null;
-          }
           const incoming = Buffer.from(base64Audio, 'base64');
           pcmBuffer = Buffer.concat([pcmBuffer, incoming]);
           flushPcmBuffer(false);
@@ -117,36 +105,11 @@ export function attachVoiceSocketServer(httpServer: Server) {
             clientSocket.send(JSON.stringify({ type: 'turn_complete', turnId: activeTurnId }));
           }
         },
-        onInterrupted: () => {
-          console.log(`[Backend Outbound interrupted Frame]: Native Gemini interrupt fired for turnId=${activeTurnId}`);
-          isTurnInterrupted = true;
-          pcmBuffer = Buffer.alloc(0);
-          if (clientSocket.readyState === WebSocket.OPEN) {
-            clientSocket.send(JSON.stringify({ type: 'interrupted', turnId: activeTurnId }));
-          }
-        },
         onClose: async (reason?: string) => {
           console.log(`[Gemini Live WS Session Closed]: Reason=${reason || 'Normal close'}`);
-          if (cameraWatchdogTimer) {
-            clearTimeout(cameraWatchdogTimer);
-            cameraWatchdogTimer = null;
-          }
           if (clientSocket.readyState === WebSocket.OPEN) {
             const elapsedSec = Math.floor((Date.now() - sessionStartTime) / 1000);
             const reasonStr = reason || '';
-
-            // Ticket 4: Explicit error handling for protocol/schema/deprecation rejections
-            const isSchemaOrDeprecation = reasonStr.toLowerCase().includes('deprecated') || reasonStr.toLowerCase().includes('realtime_input');
-            if (isSchemaOrDeprecation) {
-              console.error(`🚨 [Gemini Live Protocol Error]: Gemini rejected payload: "${reasonStr}"`);
-              clientSocket.send(JSON.stringify({
-                type: 'error',
-                reason: 'Live camera view is temporarily unavailable — please try again.'
-              }));
-              clientSocket.close(4002, 'Gemini schema error');
-              return;
-            }
-
             const isGoAwayOrLimit = reasonStr.includes('GoAway') || reasonStr.includes('session duration') || reasonStr.includes('Go Away');
             if (elapsedSec < capSeconds && isGoAwayOrLimit) {
               console.log('[Voice Socket]: Gemini WS closed due to Google duration limit (GoAway). Transparently auto-reconnecting Gemini Live WS...');
@@ -178,7 +141,7 @@ export function attachVoiceSocketServer(httpServer: Server) {
         return;
       }
 
-      clientSocket.send(JSON.stringify({ type: 'ready', capSeconds, inputMode }));
+      clientSocket.send(JSON.stringify({ type: 'ready', capSeconds }));
 
       // 🎙️ Send initial personalized AI voice greeting upon call start
       let studentName = 'there';
@@ -226,20 +189,14 @@ export function attachVoiceSocketServer(httpServer: Server) {
           try {
             const msg = JSON.parse(raw.toString());
             if (msg.type === 'audio_chunk') {
-              if (msg.data) {
-                if (isTurnInterrupted) {
-                  isTurnInterrupted = false;
-                  activeTurnId++;
-                }
+              console.log('[Voice Server] Received chunk, bytes:', msg.data.length);
+              if (msg.isRawPcm) {
                 sendAudioChunk(liveSession, msg.data);
               }
             } else if (msg.type === 'interrupt') {
               isTurnInterrupted = true;
               pcmBuffer = Buffer.alloc(0);
               console.log(`[Voice Server] User interrupt received, cancelled active audio buffer for turnId=${activeTurnId}`);
-              if (clientSocket.readyState === WebSocket.OPEN) {
-                clientSocket.send(JSON.stringify({ type: 'interrupted', turnId: activeTurnId }));
-              }
             } else if (msg.type === 'text_prompt') {
               isTurnInterrupted = false;
               activeTurnId = msg.turnId || (activeTurnId + 1);
@@ -271,35 +228,6 @@ export function attachVoiceSocketServer(httpServer: Server) {
               if (studentId) await logUsageEvent(dbClient, parentId, studentId, 'live_snapshot');
 
               clientSocket.send(JSON.stringify({ type: 'snapshot_ack', remaining: snapshotEligibility.remaining - 1 }));
-            } else if (msg.type === 'camera_frame') {
-              const now = Date.now();
-              // Rate limit camera frames to at most 1 every 1200ms
-              if (now - lastCameraFrameTime >= 1200 && msg.data) {
-                lastCameraFrameTime = now;
-                cameraFramesSentCount++;
-                try {
-                  const rawBuffer = Buffer.from(msg.data, 'base64');
-                  const compressedBuffer = await sharp(rawBuffer)
-                    .resize({ width: 512, height: 512, fit: 'inside' })
-                    .jpeg({ quality: 50, progressive: false })
-                    .toBuffer();
-                  const compressedBase64 = compressedBuffer.toString('base64');
-                  // Ticket 2: Send via realtimeInput.video
-                  sendRealtimeVideoFrame(liveSession, compressedBase64);
-
-                  // Ticket 5: Silent-failure watchdog for camera frame streaming
-                  if (!cameraWatchdogTimer && cameraFramesSentCount % 5 === 0) {
-                    cameraWatchdogTimer = setTimeout(() => {
-                      if (clientSocket.readyState === WebSocket.OPEN && liveSession?.readyState === WebSocket.OPEN) {
-                        console.warn(`[Camera Vision Watchdog] ⚠️ Warning: ${cameraFramesSentCount} camera frames sent but no model response triggered yet. Stream healthy.`);
-                      }
-                      cameraWatchdogTimer = null;
-                    }, 12000);
-                  }
-                } catch (err: any) {
-                  console.warn('[Voice Server] Error processing real-time camera frame:', err?.message);
-                }
-              }
             }
           } catch (err: any) {
             console.error('[Voice Socket] Bad client message or snapshot processing error:', err.message);

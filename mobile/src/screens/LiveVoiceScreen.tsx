@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Modal, ActivityIndicator } from 'react-native';
-import { CameraView, useCameraPermissions } from 'expo-camera';
 import { VoiceSession, forceLoudspeakerAudio } from '../services/voiceSocket';
-import { pickImageFromGallery } from '../utils/imageHelper';
+import { pickImageFromGallery, captureImageFromCamera } from '../utils/imageHelper';
 
 type Props = {
   studentId: string;
@@ -13,18 +12,14 @@ type Props = {
 
 export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimitReached }: Props) {
   const [status, setStatus] = useState<'connecting' | 'live' | 'ended'>('connecting');
-  const [voiceState, setVoiceState] = useState<'listening' | 'thinking' | 'speaking'>('thinking');
+  const [voiceState, setVoiceState] = useState<'listening' | 'thinking' | 'speaking'>('listening');
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [errorReason, setErrorReason] = useState<string | null>(null);
+  const [showOptionModal, setShowOptionModal] = useState(false);
   const [isSendingSnapshot, setIsSendingSnapshot] = useState(false);
   const [snapshotsRemaining, setSnapshotsRemaining] = useState<number | null>(null);
   const [lastSpokenTranscript, setLastSpokenTranscript] = useState<string>('');
   const [networkNotice, setNetworkNotice] = useState<string | null>(null);
-
-  // Live Camera Vision State
-  const [isCameraActive, setIsCameraActive] = useState(false);
-  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
-  const cameraRef = useRef<any>(null);
 
   const sessionRef = useRef<VoiceSession | null>(null);
   const timerRef = useRef<any>(null);
@@ -38,13 +33,9 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
         onReady: (capSeconds) => {
           setStatus('live');
           setSecondsLeft(capSeconds);
-          const startTime = Date.now();
-          const capSec = capSeconds;
-          if (timerRef.current) clearInterval(timerRef.current);
           timerRef.current = setInterval(() => {
-            const elapsed = Math.floor((Date.now() - startTime) / 1000);
-            setSecondsLeft(Math.max(0, capSec - elapsed));
-          }, 500);
+            setSecondsLeft((s) => (s !== null && s > 0 ? s - 1 : 0));
+          }, 1000);
         },
         onCapReached: () => {
           setStatus('ended');
@@ -104,119 +95,13 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
     };
   }, []);
 
-  // Native in-flight lock to guarantee Android CameraX NEVER receives concurrent capture requests
-  const isNativeCaptureInProgressRef = useRef(false);
-  const consecutiveFailuresRef = useRef(0);
-  const captureIterationRef = useRef(0);
-
-  // Continuous Camera Vision Loop (Paced non-blocking loop with hardware circuit-breaker)
-  useEffect(() => {
-    let isCancelled = false;
-    let captureTimeout: any = null;
-
-    const captureNextFrame = async () => {
-      if (isCancelled) return;
-
-      // Only capture when camera is active, session is live, Kidsko is listening, and not taking an instant snapshot
-      if (isCameraActive && status === 'live' && voiceState === 'listening' && !isSendingSnapshot) {
-        // Prevent concurrent native calls if previous native capture is still in-flight on Main Looper
-        if (cameraRef.current && !isNativeCaptureInProgressRef.current) {
-          isNativeCaptureInProgressRef.current = true;
-          captureIterationRef.current++;
-          const iter = captureIterationRef.current;
-          const startTime = Date.now();
-
-          console.log(`[Camera Loop #${iter}] 📸 Dispatching takePictureAsync (quality 0.2)...`);
-
-          try {
-            const nativeCapturePromise = cameraRef.current.takePictureAsync({
-              quality: 0.2,
-              base64: true,
-              shutterSound: false,
-            });
-
-            // Native completion handler to release the in-flight lock whenever Android finishes
-            nativeCapturePromise
-              .then(() => {
-                isNativeCaptureInProgressRef.current = false;
-              })
-              .catch(() => {
-                isNativeCaptureInProgressRef.current = false;
-              });
-
-            const timeoutPromise = new Promise((_, reject) =>
-              setTimeout(() => reject(new Error(`Camera capture #${iter} timeout after 2500ms`)), 2500)
-            );
-
-            const picture: any = await Promise.race([nativeCapturePromise, timeoutPromise]);
-            const durationMs = Date.now() - startTime;
-
-            consecutiveFailuresRef.current = 0; // Reset circuit-breaker counter on clean capture
-            console.log(`[Camera Loop #${iter}] ✅ Resolved in ${durationMs}ms, base64 length: ${picture?.base64?.length || 0}`);
-
-            if (!isCancelled && picture?.base64 && sessionRef.current) {
-              sessionRef.current.sendCameraFrame(picture.base64);
-            }
-          } catch (err: any) {
-            const durationMs = Date.now() - startTime;
-            consecutiveFailuresRef.current++;
-            console.warn(`[Camera Loop #${iter}] ⚠️ Capture failed/timed-out (${durationMs}ms): ${err?.message}. Consecutive failures = ${consecutiveFailuresRef.current}`);
-
-            // Circuit-Breaker: auto-pause camera if 2 consecutive frames stall to prevent Android UI freeze
-            if (consecutiveFailuresRef.current >= 2) {
-              console.error(`[Camera Circuit-Breaker] 🚨 2 consecutive captures stalled. Auto-pausing camera to protect UI responsiveness.`);
-              setIsCameraActive(false);
-              setNetworkNotice('Live camera paused to keep app responsive — tap Open Camera to resume.');
-              consecutiveFailuresRef.current = 0;
-              return;
-            }
-          }
-        }
-      }
-
-      if (!isCancelled && isCameraActive) {
-        // Pace with 2.5s interval to give the React Native JS bridge, UI animations, and GC breathing room
-        captureTimeout = setTimeout(captureNextFrame, 2500);
-      }
-    };
-
-    if (isCameraActive && status === 'live') {
-      console.log('[LiveVoiceScreen] Starting paced non-blocking camera vision loop (2.5s interval, listening only)...');
-      consecutiveFailuresRef.current = 0;
-      captureTimeout = setTimeout(captureNextFrame, 1500);
-    }
-
-    return () => {
-      isCancelled = true;
-      if (captureTimeout) clearTimeout(captureTimeout);
-      console.log('[LiveVoiceScreen] Stopped camera streaming loop.');
-    };
-  }, [isCameraActive, status, voiceState, isSendingSnapshot]);
-
   const handleEnd = async () => {
-    setIsCameraActive(false);
     await sessionRef.current?.end();
     onBack();
   };
 
-  const handleToggleCamera = async () => {
-    if (isCameraActive) {
-      setIsCameraActive(false);
-      return;
-    }
-
-    if (!cameraPermission?.granted) {
-      const perm = await requestCameraPermission();
-      if (!perm.granted) {
-        setErrorReason('Camera permission is required for live video.');
-        return;
-      }
-    }
-    await forceLoudspeakerAudio().catch(() => {});
-    setIsCameraActive(true);
-  };
-
   const handlePickGallery = async () => {
+    setShowOptionModal(false);
     try {
       const result = await pickImageFromGallery();
       await forceLoudspeakerAudio().catch(() => {});
@@ -228,29 +113,16 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
     }
   };
 
-  const handleInstantSnapshot = async () => {
-    if (!cameraRef.current || isSendingSnapshot) return;
-    setIsSendingSnapshot(true);
-    setErrorReason(null);
+  const handleTakeCamera = async () => {
+    setShowOptionModal(false);
     try {
-      const capturePromise = cameraRef.current.takePictureAsync({
-        quality: 0.4,
-        base64: true,
-        shutterSound: false,
-      });
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Photo capture timed out. Please try again.')), 6000)
-      );
-      const photo: any = await Promise.race([capturePromise, timeoutPromise]);
-      if (photo?.base64) {
-        sendHomeworkPhoto(photo.base64);
-      } else {
-        setIsSendingSnapshot(false);
+      const result = await captureImageFromCamera();
+      await forceLoudspeakerAudio().catch(() => {});
+      if (result) {
+        sendHomeworkPhoto(result.base64);
       }
     } catch (err: any) {
-      console.warn('[LiveVoiceScreen] Snapshot capture error:', err?.message || err);
-      setErrorReason(err?.message || 'Could not take photo. Please try again.');
-      setIsSendingSnapshot(false);
+      setErrorReason(err?.message || 'Could not capture image from camera.');
     }
   };
 
@@ -287,118 +159,59 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
       )}
 
       {status === 'live' && (
-        <>
-          {isCameraActive ? (
-            /* Live In-App Camera Viewfinder */
-            <View style={styles.cameraCard}>
-              <CameraView
-                ref={cameraRef}
-                style={styles.cameraView}
-                facing="back"
-                animateShutter={false}
-              />
-              {/* Header Badge */}
-              <View style={styles.cameraHeaderOverlay}>
-                <View style={styles.liveVisionBadge}>
-                  <View style={styles.liveDot} />
-                  <Text style={styles.liveVisionText}>Live Vision Active</Text>
-                </View>
-                <Pressable style={styles.closeCameraBtn} onPress={() => setIsCameraActive(false)}>
-                  <Text style={styles.closeCameraBtnText}>✕ Close</Text>
-                </Pressable>
+        <View style={styles.stateCard}>
+          {voiceState === 'speaking' ? (
+            <Pressable
+              style={[styles.avatarCircle, styles.avatarSpeaking]}
+              onPress={() => sessionRef.current?.interrupt()}
+            >
+              <Text style={styles.avatarEmoji}>🦉</Text>
+              <View style={styles.speakingBadge}>
+                <Text style={styles.speakingBadgeText}>🔊 Kidsko is Talking... (Tap to speak)</Text>
               </View>
-
-              {/* Footer State Overlay */}
-              <View style={styles.cameraFooterOverlay}>
-                {voiceState === 'speaking' ? (
-                  <Pressable
-                    style={styles.floatingSpeakingBadge}
-                    onPress={() => sessionRef.current?.interrupt()}
-                  >
-                    <Text style={styles.floatingSpeakingText}>🔊 Kidsko is Talking... (Tap to speak)</Text>
-                  </Pressable>
-                ) : voiceState === 'thinking' ? (
-                  <Pressable
-                    style={styles.floatingThinkingBadge}
-                    onPress={() => sessionRef.current?.interrupt()}
-                  >
-                    <ActivityIndicator size="small" color="#FFD54F" />
-                    <Text style={styles.floatingThinkingText}>💡 Thinking... (Tap to cancel)</Text>
-                  </Pressable>
-                ) : (
-                  <View style={styles.floatingListeningBadge}>
-                    <Text style={styles.floatingListeningText}>👁️ Kidsko is Watching & Listening...</Text>
-                  </View>
-                )}
-              </View>
-            </View>
-          ) : (
-            /* Avatar View */
-            <View style={styles.stateCard}>
-              {voiceState === 'speaking' ? (
-                <Pressable
-                  style={[styles.avatarCircle, styles.avatarSpeaking]}
-                  onPress={() => sessionRef.current?.interrupt()}
-                >
-                  <Text style={styles.avatarEmoji}>🦉</Text>
-                  <View style={styles.speakingBadge}>
-                    <Text style={styles.speakingBadgeText}>🔊 Kidsko is Talking... (Tap to speak)</Text>
-                  </View>
-                </Pressable>
-              ) : voiceState === 'thinking' ? (
-                <Pressable
-                  style={[styles.avatarCircle, styles.avatarThinking]}
-                  onPress={() => sessionRef.current?.interrupt()}
-                >
-                  <ActivityIndicator size="large" color="#FFD54F" />
-                  <Text style={styles.thinkingText}>💡 Thinking...</Text>
-                  <Text style={{ color: '#aaa', fontSize: 11, marginTop: 4 }}>Tap to cancel</Text>
-                </Pressable>
-              ) : (
-                <View style={[styles.avatarCircle, styles.avatarListening]}>
-                  <Text style={styles.avatarEmoji}>🎙️</Text>
-                  <View style={styles.listeningBadge}>
-                    <Text style={styles.listeningBadgeText}>🟢 Listening to You...</Text>
-                  </View>
-                </View>
-              )}
-
-              {lastSpokenTranscript ? (
-                <View style={styles.transcriptBox}>
-                  <Text style={styles.transcriptLabel}>You said:</Text>
-                  <Text style={styles.transcriptText} numberOfLines={2}>
-                    "{lastSpokenTranscript}"
-                  </Text>
-                </View>
-              ) : (
-                <Text style={styles.promptHint}>Speak anytime or open camera to show homework!</Text>
-              )}
-            </View>
-          )}
-
-          {/* Action Buttons */}
-          {isSendingSnapshot ? (
-            <View style={styles.analyzingBox}>
+            </Pressable>
+          ) : voiceState === 'thinking' ? (
+            <View style={[styles.avatarCircle, styles.avatarThinking]}>
               <ActivityIndicator size="large" color="#FFD54F" />
-              <Text style={styles.analyzingText}>🦉 Analyzing homework photo...</Text>
-            </View>
-          ) : isCameraActive ? (
-            <View style={styles.cameraActionsRow}>
-              <Pressable style={styles.instantShutterBtn} onPress={handleInstantSnapshot}>
-                <Text style={styles.instantShutterText}>✨ Ask About This</Text>
-              </Pressable>
+              <Text style={styles.thinkingText}>💡 Thinking...</Text>
             </View>
           ) : (
-            <View style={styles.actionContainer}>
-              <Pressable style={styles.openCameraBtn} onPress={handleToggleCamera}>
-                <Text style={styles.openCameraBtnText}>📹 Open Camera (Live Vision)</Text>
-              </Pressable>
-              <Pressable style={styles.galleryLink} onPress={handlePickGallery}>
-                <Text style={styles.galleryLinkText}>🖼️ Choose from Gallery instead</Text>
-              </Pressable>
+            <View style={[styles.avatarCircle, styles.avatarListening]}>
+              <Text style={styles.avatarEmoji}>🎙️</Text>
+              <View style={styles.listeningBadge}>
+                <Text style={styles.listeningBadgeText}>🟢 Listening to You...</Text>
+              </View>
             </View>
           )}
-        </>
+
+          {lastSpokenTranscript ? (
+            <View style={styles.transcriptBox}>
+              <Text style={styles.transcriptLabel}>You said:</Text>
+              <Text style={styles.transcriptText} numberOfLines={2}>
+                "{lastSpokenTranscript}"
+              </Text>
+            </View>
+          ) : (
+            <Text style={styles.promptHint}>Speak anytime or tap "Show Homework" to share a photo!</Text>
+          )}
+        </View>
+      )}
+
+      {isSendingSnapshot ? (
+        <View style={styles.analyzingBox}>
+          <ActivityIndicator size="large" color="#FFD54F" />
+          <Text style={styles.analyzingText}>🦉 Looking at your homework...</Text>
+        </View>
+      ) : (
+        status === 'live' && (
+          <Pressable style={styles.showButton} onPress={() => setShowOptionModal(true)}>
+            <Text style={styles.showButtonText}>📷 Show Homework</Text>
+          </Pressable>
+        )
+      )}
+
+      {snapshotsRemaining !== null && (
+        <Text style={styles.snapshotCount}>{snapshotsRemaining} photo helps left this week</Text>
       )}
 
       {errorReason && <Text style={styles.errorSub}>{errorReason}</Text>}
@@ -406,6 +219,28 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
       <Pressable style={styles.endButton} onPress={handleEnd}>
         <Text style={styles.endButtonText}>{status === 'ended' ? 'Close' : 'End Call'}</Text>
       </Pressable>
+
+      {/* Option Sheet Modal */}
+      <Modal visible={showOptionModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Show Homework to Kidsko</Text>
+            <Text style={styles.modalSubtitle}>How would you like to provide the homework photo?</Text>
+
+            <Pressable style={styles.optionButton} onPress={handleTakeCamera}>
+              <Text style={styles.optionButtonText}>📸 Take Photo with Camera</Text>
+            </Pressable>
+
+            <Pressable style={[styles.optionButton, styles.optionButtonSecondary]} onPress={handlePickGallery}>
+              <Text style={styles.optionButtonTextSecondary}>🖼️ Choose from Gallery</Text>
+            </Pressable>
+
+            <Pressable style={styles.cancelModalButton} onPress={() => setShowOptionModal(false)}>
+              <Text style={styles.cancelModalText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -413,234 +248,109 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1a1a2e', padding: 24 },
   title: { fontSize: 20, fontWeight: '800', color: '#fff', marginBottom: 8, textAlign: 'center' },
-  timer: { fontSize: 16, color: '#FFD54F', fontWeight: '700', marginBottom: 12 },
-  errorSub: { fontSize: 14, color: '#FF8A80', fontWeight: '600', marginBottom: 16, textAlign: 'center' },
+  timer: { fontSize: 16, color: '#FFD54F', fontWeight: '700', marginBottom: 16 },
+  errorSub: { fontSize: 14, color: '#FF8A80', fontWeight: '600', marginBottom: 20, textAlign: 'center' },
   endButton: { backgroundColor: '#EA4335', borderRadius: 30, paddingVertical: 14, paddingHorizontal: 40, marginTop: 10 },
   endButtonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  showButton: { backgroundColor: '#1a73e8', borderRadius: 24, paddingVertical: 14, paddingHorizontal: 28, marginBottom: 12 },
+  showButtonText: { color: '#fff', fontWeight: '800', fontSize: 16 },
+  snapshotCount: { color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: '600', marginBottom: 20 },
+  analyzingBox: { alignItems: 'center', marginVertical: 20, gap: 10 },
+  analyzingText: { color: '#FFD54F', fontSize: 16, fontWeight: '700' },
 
-  // Vision Camera Styles
-  cameraCard: {
-    width: '100%',
-    height: 320,
-    borderRadius: 24,
-    overflow: 'hidden',
-    backgroundColor: '#000',
-    position: 'relative',
-    marginBottom: 16,
-    borderWidth: 2,
-    borderColor: '#4CAF50',
-  },
-  cameraView: {
-    width: '100%',
-    height: '100%',
-  },
-  cameraHeaderOverlay: {
-    position: 'absolute',
-    top: 12,
-    left: 12,
-    right: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  liveVisionBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    gap: 6,
-  },
-  liveDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#4CAF50',
-  },
-  liveVisionText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  closeCameraBtn: {
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  closeCameraBtnText: {
-    color: '#FFD54F',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  cameraFooterOverlay: {
-    position: 'absolute',
-    bottom: 12,
-    left: 12,
-    right: 12,
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  floatingSpeakingBadge: {
-    backgroundColor: '#E65100',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 16,
-  },
-  floatingSpeakingText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  floatingThinkingBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.75)',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 16,
-    gap: 6,
-  },
-  floatingThinkingText: {
-    color: '#FFD54F',
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  floatingListeningBadge: {
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 16,
-  },
-  floatingListeningText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 13,
-  },
-
-  cameraActionsRow: {
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  instantShutterBtn: {
-    backgroundColor: '#4CAF50',
-    borderRadius: 24,
-    paddingVertical: 12,
-    paddingHorizontal: 28,
-  },
-  instantShutterText: {
-    color: '#fff',
-    fontWeight: '800',
-    fontSize: 15,
-  },
-
-  actionContainer: {
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  openCameraBtn: {
-    backgroundColor: '#1a73e8',
-    borderRadius: 24,
-    paddingVertical: 14,
-    paddingHorizontal: 28,
-    marginBottom: 10,
-  },
-  openCameraBtnText: {
-    color: '#fff',
-    fontWeight: '800',
-    fontSize: 16,
-  },
-  galleryLink: {
-    paddingVertical: 6,
-  },
-  galleryLinkText: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 13,
-    fontWeight: '600',
-    textDecorationLine: 'underline',
-  },
-
-  snapshotCount: { color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: '600', marginBottom: 16 },
-  analyzingBox: { alignItems: 'center', marginVertical: 16, gap: 8 },
-  analyzingText: { color: '#FFD54F', fontSize: 15, fontWeight: '700' },
-
+  // State Card Styles
   stateCard: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 28,
-    paddingVertical: 24,
-    paddingHorizontal: 20,
     width: '100%',
+    backgroundColor: '#252542',
+    borderRadius: 24,
+    padding: 20,
+    alignItems: 'center',
     marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   avatarCircle: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     justifyContent: 'center',
     alignItems: 'center',
-    position: 'relative',
     marginBottom: 16,
-  },
-  avatarSpeaking: {
-    backgroundColor: '#FF9800',
-    borderWidth: 4,
-    borderColor: '#FFE0B2',
+    position: 'relative',
   },
   avatarListening: {
-    backgroundColor: '#1e3a8a',
-    borderWidth: 4,
-    borderColor: '#3b82f6',
+    backgroundColor: '#1b3a2b',
+    borderWidth: 3,
+    borderColor: '#4CAF50',
   },
   avatarThinking: {
-    backgroundColor: '#374151',
-    borderWidth: 4,
-    borderColor: '#9ca3af',
+    backgroundColor: '#3a351b',
+    borderWidth: 3,
+    borderColor: '#FFC107',
   },
-  avatarEmoji: { fontSize: 60 },
-  speakingBadge: {
-    position: 'absolute',
-    bottom: -10,
-    backgroundColor: '#E65100',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+  avatarSpeaking: {
+    backgroundColor: '#3a251b',
+    borderWidth: 3,
+    borderColor: '#FF9800',
   },
-  speakingBadgeText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  avatarEmoji: { fontSize: 44 },
+  thinkingText: { color: '#FFD54F', fontWeight: '700', fontSize: 13, marginTop: 6 },
+
   listeningBadge: {
     position: 'absolute',
     bottom: -10,
-    backgroundColor: '#15803d',
+    backgroundColor: '#2e7d32',
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 12,
   },
-  listeningBadgeText: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  thinkingText: { color: '#FFD54F', fontSize: 14, fontWeight: '700', marginTop: 8 },
+  listeningBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
+
+  speakingBadge: {
+    position: 'absolute',
+    bottom: -10,
+    backgroundColor: '#e65100',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  speakingBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
+
   transcriptBox: {
-    backgroundColor: 'rgba(0,0,0,0.25)',
-    borderRadius: 14,
-    padding: 10,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     width: '100%',
     alignItems: 'center',
   },
   transcriptLabel: { color: '#FFD54F', fontSize: 11, fontWeight: '700', marginBottom: 2 },
-  transcriptText: { color: '#fff', fontSize: 14, fontStyle: 'italic', textAlign: 'center' },
-  promptHint: { color: 'rgba(255,255,255,0.5)', fontSize: 12, textAlign: 'center' },
+  transcriptText: { color: '#fff', fontSize: 13, fontWeight: '600', fontStyle: 'italic', textAlign: 'center' },
+  promptHint: { color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: '600', textAlign: 'center' },
 
   noticeBanner: {
-    backgroundColor: 'rgba(255,213,79,0.15)',
-    borderColor: '#FFD54F',
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 10,
-    marginBottom: 14,
-    width: '100%',
+    backgroundColor: '#3e2723',
+    borderColor: '#ffb74d',
+    borderWidth: 1.5,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    marginBottom: 12,
     alignItems: 'center',
+    width: '100%',
   },
-  noticeBannerText: { color: '#FFD54F', fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 2 },
-  noticeDismissText: { color: 'rgba(255,255,255,0.6)', fontSize: 11 },
+  noticeBannerText: { color: '#ffe082', fontSize: 13, fontWeight: '700', textAlign: 'center' },
+  noticeDismissText: { color: 'rgba(255,224,130,0.7)', fontSize: 11, fontWeight: '600', marginTop: 3 },
+
+  // Modal styles
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: '#22223b', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, alignItems: 'center', gap: 12 },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: '#fff' },
+  modalSubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.7)', marginBottom: 8, textAlign: 'center' },
+  optionButton: { width: '100%', backgroundColor: '#1a73e8', borderRadius: 16, paddingVertical: 14, alignItems: 'center' },
+  optionButtonText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  optionButtonSecondary: { backgroundColor: '#333355', borderWidth: 1, borderColor: '#555577' },
+  optionButtonTextSecondary: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  cancelModalButton: { marginTop: 8, paddingVertical: 10 },
+  cancelModalText: { color: '#FF8A80', fontWeight: '700', fontSize: 15 },
 });

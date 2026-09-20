@@ -15,7 +15,7 @@ const LIVE_MODELS = [
 ];
 
 const VOICE_SYSTEM_PROMPT = `You are "Kidsko", a warm, enthusiastic female voice tutor for children aged 5-12.
-You have real-time live vision: you can see what the child points their camera at (homework, math problems, books, worksheets, or drawings). When you see their camera feed, warmly describe what you see in simple child-friendly terms and guide them step-by-step.
+You can see photos, homework pages, problem snapshots, or drawings shared by the child. When an image is shared, warmly acknowledge it, describe what you see in simple child-friendly terms, and guide them step-by-step.
 Speak in short, warm, lively, playful sentences at a brisk, energetic talking pace (2-3 short sentences, 25-35 words max per turn).
 Do not drag out words or insert artificial pauses. Speak fluently, quickly, and naturally.
 Use simple elementary words. NEVER use textbook jargon (like "Index notation", "multiplication string", "base number", "power number").
@@ -29,7 +29,6 @@ type LiveCallbacks = {
   onAudioChunk: (base64Audio: string) => void;
   onTextChunk?: (text: string) => void;
   onTurnComplete?: () => void;
-  onInterrupted?: () => void;
   onClose: (reason?: string) => void;
   onError: (err: any) => void;
 };
@@ -76,13 +75,11 @@ async function connectSingleModel(modelName: string, callbacks: LiveCallbacks): 
         const data = JSON.parse(str);
 
         const isTurnComplete = !!data?.serverContent?.turnComplete;
-        const isInterrupted = !!data?.serverContent?.interrupted;
 
         console.log('[Gemini Server Message Received]:', {
           setupComplete: !!data.setupComplete,
           hasServerContent: !!data.serverContent,
           turnComplete: isTurnComplete,
-          interrupted: isInterrupted,
           partsCount: data.serverContent?.modelTurn?.parts?.length || 0,
           error: data.error || null,
         });
@@ -96,11 +93,6 @@ async function connectSingleModel(modelName: string, callbacks: LiveCallbacks): 
 
         if (data.error) {
           console.error('[Gemini Live Server Error]:', data.error);
-        }
-
-        if (isInterrupted && callbacks.onInterrupted) {
-          console.log('[Gemini Live WS] serverContent.interrupted signal received from Gemini Live server!');
-          callbacks.onInterrupted();
         }
 
         const parts = data?.serverContent?.modelTurn?.parts;
@@ -213,23 +205,6 @@ export function sendImagePrompt(geminiWs: WebSocket, base64Jpeg: string, caption
     console.warn('[Gemini Client Outbound Warning]: Cannot send image prompt, WebSocket state is', geminiWs?.readyState);
   }
 }
-
-export function sendRealtimeVideoFrame(geminiWs: WebSocket, base64Jpeg: string) {
-  if (geminiWs && geminiWs.readyState === WebSocket.OPEN) {
-    const inputMsg = {
-      realtimeInput: {
-        video: {
-          mimeType: 'image/jpeg',
-          data: base64Jpeg,
-        },
-      },
-    };
-    geminiWs.send(JSON.stringify(inputMsg));
-  }
-}
-
-// Deprecated alias for backwards compatibility
-export const sendRealtimeMediaChunk = sendRealtimeVideoFrame;
 
 export function closeLiveSession(geminiWs: WebSocket) {
   if (geminiWs && (geminiWs.readyState === WebSocket.OPEN || geminiWs.readyState === WebSocket.CONNECTING)) {
