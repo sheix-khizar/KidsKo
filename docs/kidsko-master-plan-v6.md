@@ -26,7 +26,7 @@ Directly confirmed from the `dev` branch as of this writing:
 | `FREE_DAILY_MESSAGE_LIMIT` / `FREE_DAILY_SCAN_LIMIT` | `30` / `5` — tracked **daily**, not weekly. No confirmed premium-specific cap exists yet (premium appears to bypass the daily limit entirely per the original SRS design) |
 | `HomeScreen.tsx` | The `📸 Scan` button is back (duplicate entry point alongside `🎙️ Call`) |
 | `PaywallScreen.tsx` | Copy still reflects the old 25-min/20-snapshot framing |
-| `realtimeInput.video` fix (deprecated `media_chunks`) | **Still intact** — survived the revert, no action needed |
+| `realtimeInput.video` fix (deprecated `media_chunks`) | **Correction from Phase A's audit:** the *fix* to the field name survived, but the continuous live-video streaming loop that used to call it did not — it was removed in the revert along with the camera-loop instability it caused. There is currently **no live video feature in Call at all**, only a discrete "take a photo / choose from gallery" modal that sends one still image. See new Phase B2 below. |
 
 **Do not assume any of the above without re-confirming at the start of implementation** — re-run a quick grep/read pass on each file before editing, exactly as Task 1 below specifies. Code drifts; this table is a snapshot, not a guarantee.
 
@@ -129,7 +129,31 @@ Each phase below has a plain-language summary, then an agent-executable task blo
 
 ---
 
-### Phase C — Convert message/upload limits to weekly, add explicit premium caps (moderate — new logic)
+### Phase B2 — Rebuild Live Video (real engineering — the one deliberate exception to Section 6's guardrail)
+
+**Plain language:** The business decision is final: this release ships as "Call → Voice + Live Video," not voice-only. But Phase A's audit confirmed live video doesn't currently exist — it was lost in the revert along with the instability it caused. This phase rebuilds it, deliberately differently from before, because we now have evidence the old approach (`takePictureAsync` called repeatedly in a loop) was never going to be reliable — it's a long-documented source of hangs and multi-second stalls across Expo's camera library, not something specific to this codebase. Repeating the same pattern more carefully would likely reproduce the same risk.
+
+**This is the one place in v6 that's allowed to touch camera code that Section 6 otherwise protects.** Everywhere else in this document, that guardrail still holds.
+
+**Recommended technical direction:** Do not rebuild live video as repeated `takePictureAsync` calls, even paced or wrapped more carefully than before. Instead, use a proper continuous-frame-access approach — `react-native-vision-camera`'s frame processors are the standard solution for this in the React Native ecosystem, giving low-latency access to a live frame stream rather than repeatedly triggering a discrete, slow, capture-and-encode operation. **Trade-off to accept going in:** this requires a custom EAS development build (it's not available in Expo Go), which is a real setup cost, but it's a one-time cost — you're already using EAS Build per your existing store-submission plan, so this isn't a new pipeline, just an additional native dependency in it.
+
+**Entry gate:** Phase B complete (backend voice/video pool constants in place). Does not depend on Phase C, D, or E.
+
+| Ticket | Action | Definition of Done |
+|---|---|---|
+| B2.1 | Confirm `react-native-vision-camera` compatibility with Expo SDK 57 (managed + config plugin) and current React Native version; set up a custom EAS dev build with it installed | A test build runs on a real device with the library's example frame processor working, before any Kidsko-specific code is written |
+| B2.2 | Implement a frame processor that samples frames at a low, fixed rate (start conservative — roughly 1 frame every 2–3 seconds, matching the previous loop's cadence, not higher) and sends each as a compressed JPEG over the existing voice WebSocket to the backend | Frames are received and logged by the backend at the expected rate on a real device, with no dropped connection |
+| B2.3 | Backend: reconnect the frame payload to `realtimeInput.video` (the field-name fix from the original crash bug is still correct and reusable) | A live test session shows Gemini's spoken response referencing content visible in the camera feed, not just "no crash" — same verification bar as the original media_chunks fix required |
+| B2.4 | Explicit resource/lifecycle safety: ensure the frame processor is fully torn down when a call ends, when the app backgrounds, and when the user manually toggles video off mid-call — this was never cleanly handled in the old implementation and is a likely source of the original freeze even independent of `takePictureAsync`'s own flakiness | Toggling video on/off repeatedly within one call, and backgrounding the app mid-video-call, are both tested explicitly and produce no hang, no orphaned camera session, no stuck UI |
+| B2.5 | Full device matrix regression pass (reuse the matrix from the earlier voice-hardening plan) with live video active for the entire duration, not just spot-checked | Pass/fail table per device; specifically include at least one lower-spec/budget Android device, since that's where the original freeze reproduced most reliably |
+
+**Exit KPI:** ✅ A live video call runs for 5+ minutes on a real mid-range/budget Android device with video continuously active, survives at least one interruption and one video on/off toggle, and Gemini's responses demonstrably reference live camera content — with zero hangs, confirmed across the device matrix, not just your primary test phone.
+
+**Hard rule:** Phase D and Phase E (UI cleanup and paywall copy) must not reference "Live Video" as an active feature, and Phase F's verification must not claim video works, until this phase's Exit KPI is met. If B2 is still in progress, Phase D/E can proceed for everything except video-specific copy — but do not ship "Voice + Live Video" language anywhere a parent sees it until B2 is done and proven.
+
+---
+
+
 
 **Plain language:** Right now, message and photo-upload limits reset daily and premium users aren't capped at all. The new structure resets weekly and gives premium an explicit (generous) ceiling instead of no ceiling.
 
@@ -148,31 +172,34 @@ Each phase below has a plain-language summary, then an agent-executable task blo
 
 ### Phase D — Enforce the Call/Chat feature boundary (UI only — this is where all screen cleanup happens)
 
-**Plain language:** Two cleanups from Section 3a's rule, both handled here and only here, now that Phase B is backend-only. First, the Home screen has a redundant `📸 Scan` button duplicating what Chat already does. Second — the part the original v6 draft left ambiguous — the Call screen still has homework-style capture UI (the gallery picker, the "photo helps" counter) left over from Phase B's backend removal, which needs its matching UI deleted. This phase is the single place that UI change happens, so there's one clear diff to review, not two overlapping ones.
+**Plain language:** Two cleanups from Section 3a's rule, both handled here and only here, now that Phase B is backend-only. First, the Home screen has a redundant `📸 Scan` button duplicating what Chat already does. Second — the part the original v6 draft left ambiguous, and which Phase A's audit clarified further — the Call screen currently has discrete homework-style capture UI (a "take photo / choose from gallery" modal) standing in for what should be live video. Once Phase B2 lands, this modal's discrete-capture elements get removed and replaced by B2's continuous video UI; this phase handles the Home screen cleanup and the parts of Call cleanup that don't depend on B2.
+
+**Depends on:** Phase B for the Home-screen/backend-constant parts. **Depends on Phase B2 specifically** for anything that assumes Call already has working live video — do not mark this phase's video-related items done until B2's Exit KPI is met.
 
 **Task for agent:**
-> 1. In `mobile/src/screens/HomeScreen.tsx`, remove the standalone `📸 Scan` button (the `onScanStudent` call) from each student row. Keep `🎙️ Call`, `Chat`, `Transcript`.
-> 2. In `mobile/src/screens/LiveVoiceScreen.tsx`, remove the now-dead UI left over from Phase B's backend removal: the `snapshotsRemaining` state, the "photo helps left this week" text, the `isSendingSnapshot` state, and the "🖼️ Choose from Gallery" button (`handlePickGallery`). Per Section 6's guardrail, this is UI/state cleanup for a removed feature, explicitly authorized here — it is **not** the same as touching the continuous live-video camera streaming mechanics, which stay completely untouched. If you're unsure whether a given piece of code is "removed-feature UI" (delete) or "streaming mechanics" (leave alone), stop and ask rather than guess.
+> 1. In `mobile/src/screens/HomeScreen.tsx`, remove the standalone `📸 Scan` button (the `onScanStudent` call) from each student row. Keep `🎙️ Call`, `Chat`, `Transcript`. This part does not depend on B2 and can be done anytime after Phase B.
+> 2. In `mobile/src/screens/LiveVoiceScreen.tsx`, remove the discrete-capture UI (`snapshotsRemaining` state, "photo helps left this week" text, `isSendingSnapshot` state, the take-photo/"🖼️ Choose from Gallery" modal) **only once Phase B2's live-video replacement is in place and tested** — removing this before B2 is done would leave Call with no visual feature at all. Sequence: B2 lands and passes its Exit KPI first, then this discrete-capture UI is removed as part of the same change that wires in B2's new live-video UI, so Call is never left in a broken in-between state.
 > 3. Re-confirm (do not assume from prior notes) that `mobile/src/screens/ChatScreen.tsx` still independently calls `analyzeHomework` for its own photo-attach flow during text chat — that flow must keep working, since it's Chat's job specifically, per Section 3a. Do not delete `HomeworkScreen.tsx` or the backend `homework.ts` route — only remove the Home screen button that opens `HomeworkScreen.tsx` directly, and the Call-screen elements from step 2.
 >
 > End state to verify: Home → `Call`, `Chat`, `Transcript` only. Call → Voice and Live Video only, nothing homework-related. Chat → text messages and homework photo attach, and only Chat.
 
-**Definition of Done:** Home screen shows only `🎙️ Call`, `Chat`, `Transcript` per student. The Call screen's UI contains no gallery button, no snapshot/photo-helps counter, and no homework-related affordance anywhere — and the continuous live-video streaming still works exactly as before, confirmed by testing a video call end to end, not just reading the diff. Text-chat photo attachment via `ChatScreen.tsx` still works, confirmed by testing it directly.
+**Definition of Done:** Home screen shows only `🎙️ Call`, `Chat`, `Transcript` per student. The Call screen's UI contains no gallery button, no snapshot/photo-helps counter, and no homework-related affordance anywhere — and live video (from B2) works in its place, confirmed by testing a video call end to end, not just reading the diff. Text-chat photo attachment via `ChatScreen.tsx` still works, confirmed by testing it directly.
 
 ---
 
 ### Phase E — Update paywall and in-app copy
 
-**Plain language:** Make sure every number a parent or child sees in the app matches the new structure — no leftover "25 minutes" or "3 photo helps" text anywhere.
+**Plain language:** Make sure every number a parent or child sees in the app matches the new structure — no leftover "25 minutes" or "3 photo helps" text anywhere. **Video-specific copy is gated on B2, per Phase B2's hard rule** — don't advertise a feature that isn't shipped and proven yet.
 
 **Task for agent:**
-> In `mobile/src/screens/PaywallScreen.tsx`, update all copy to reflect: Free — 10 Voice & Video minutes/week, 30 messages/week, 3 uploads/week. Premium — $19.99/month or $199/year, 100 Voice & Video minutes/week, 200 messages/week, 15 uploads/week. Use "Voice & Video minutes," not "AI minutes," per Section 3a's terminology rule.
+> In `mobile/src/screens/PaywallScreen.tsx`, update all copy to reflect: Free — 10 Voice & Video minutes/week, 30 messages/week, 3 uploads/week. Premium — $19.99/month or $199/year, 100 Voice & Video minutes/week, 200 messages/week, 15 uploads/week. Use "Voice & Video minutes," not "AI minutes," per Section 3a's terminology rule. **Do not use "Voice & Video" language until Phase B2's Exit KPI is confirmed met — check with the team before this phase ships if B2's status is unclear.**
 >
 > Search the full mobile codebase for any other UI strings referencing the old numbers (5 min, 25 min, 3 snapshots, 20 snapshots, 30 messages/day, 5 scans/day) — check `LiveVoiceScreen.tsx`'s remaining-time/remaining-snapshot displays specifically — and update them all to match.
 
-**Definition of Done:** No UI text anywhere in the app references any of the old numbers. A full read-through of the paywall and in-call remaining-usage displays matches Section 3's table exactly.
+**Definition of Done:** No UI text anywhere in the app references any of the old numbers. A full read-through of the paywall and in-call remaining-usage displays matches Section 3's table exactly, and "Voice & Video" language is confirmed accurate against B2's actual shipped state, not aspirational.
 
 ---
+
 
 ### Phase F — End-to-end verification (do not skip)
 
@@ -192,11 +219,14 @@ Each phase below has a plain-language summary, then an agent-executable task blo
 
 **Do not modify, refactor, or "improve" any of the following as part of this plan, even if you notice something that looks fixable while working nearby:**
 - `mobile/src/services/voiceSocket.ts`
-- **The continuous live-video camera capture/streaming mechanics** in `mobile/src/screens/LiveVoiceScreen.tsx` — this means the loop that feeds the ongoing video call feed, its pacing/timing logic, and anything already governing how frames stream to `realtimeInput.video`. This is a narrower exception than "the whole file": Phase D explicitly authorizes deleting the *homework snapshot/gallery UI and state* in this same file (`snapshotsRemaining`, `isSendingSnapshot`, the "photo helps" text, the gallery button, `handlePickGallery`) — that is in scope and expected. If you're ever unsure whether something is streaming mechanics (leave alone) or removed-feature UI/state (delete per Phase D), stop and ask rather than guess.
-- `backend/src/lib/geminiLive.ts`'s audio/video session handling (beyond what Task B.3 explicitly asks you to touch in the snapshot-limit backend logic, which is limit-checking code, not the streaming/session code itself)
+- Anything related to audio streaming, playback, buffering, or watchdog logic anywhere in the mobile or backend voice pipeline
+- `backend/src/lib/geminiLive.ts`'s audio session handling (beyond what Task B.3 explicitly asks you to touch in the snapshot-limit backend logic, which is limit-checking code, not the streaming/session code itself)
 - `backend/src/lib/voiceSocketServer.ts`'s turn/session management
 
-If you find something that looks like a bug in these files while working on this plan, **stop and report it — do not fix it inline.** These files were the source of a week of regressions caused by well-intentioned incremental fixes. Any change to them needs to go through the separate architecture migration plan (`kidsko-architecture-migration-option-b.md`), with its own testing gates — not be bundled into a tier/pricing update.
+**The one explicit exception is Phase B2 (Live Video rebuild).** Per Phase A's audit, live video does not currently exist in the codebase — it was removed in the revert, so there is no existing "mechanics to leave alone" for it the way there is for audio. Phase B2 is the sole authorized place to write new camera/video code, and it has its own entry gate, ticket list, and Exit KPI specifically because it's the one piece of this plan that carries real technical risk — treat it with the same care as the separate architecture migration plan, not as a quick add-on to a pricing release. Everything else in this guardrail list still applies at full strength, including within Phase B2's own work: it should not touch `voiceSocket.ts`, audio handling, or `voiceSocketServer.ts`'s turn management even while building new video capture.
+
+If you find something that looks like a bug in the audio-pipeline files while working on this plan, **stop and report it — do not fix it inline.** Those files were the source of a week of regressions caused by well-intentioned incremental fixes. Any change to them needs to go through the separate architecture migration plan (`kidsko-architecture-migration-option-b.md`), with its own testing gates — not be bundled into a tier/pricing update.
+
 
 ---
 
