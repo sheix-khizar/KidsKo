@@ -19,8 +19,8 @@ async function runPhase5Verification() {
 
   // 1. Ticket 5.0a: Usage Limit Constants Verification
   console.log('1️⃣ Ticket 5.0a — Usage Limit Constants & Family Pooling Schema');
-  assert(FREE_DAILY_MESSAGE_LIMIT === 30, 'FREE_DAILY_MESSAGE_LIMIT is 30 messages/day');
-  assert(FREE_DAILY_SCAN_LIMIT === 5, 'FREE_DAILY_SCAN_LIMIT is 5 scans/day');
+  assert(FREE_DAILY_MESSAGE_LIMIT === 30, 'FREE_DAILY_MESSAGE_LIMIT is 30 messages/week');
+  assert(FREE_DAILY_SCAN_LIMIT === 3, 'FREE_DAILY_SCAN_LIMIT is 3 scans/week (v6 update)');
 
   // 2. Ticket 5.7: Cache Key Normalization & Grade Band Isolation
   console.log('\n2️⃣ Ticket 5.7 — Redis Cache Key & Grade Band Isolation');

@@ -159,9 +159,9 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
         <Text style={styles.headerTitle}>Kidsko.ai 🦉</Text>
         <Text style={styles.headerSubtitle}>{studentName}</Text>
         {remaining !== null && (
-          <View style={[styles.usagePill, isPremium && styles.usagePillPremium, remaining <= 2 && !isPremium && styles.usagePillLow]}>
+          <View style={[styles.usagePill, isPremium && styles.usagePillPremium, remaining <= 5 && !isPremium && styles.usagePillLow]}>
             <Text style={styles.usagePillText}>
-              {isPremium ? '⭐ Premium' : `💬 ${remaining} left today`}
+              {isPremium ? (remaining <= 20 ? `⭐ Premium (${remaining} left this week)` : '⭐ Premium') : `💬 ${remaining} left this week`}
             </Text>
           </View>
         )}

@@ -196,7 +196,7 @@ router.post('/', requireAuth, userRateLimit, async (req: Request, res: Response)
   try {
     const usage = await checkAndIncrementUsage(req.supabase!, req.user!.id, 'message');
     if (!usage.allowed) {
-      return res.status(429).json({ error: usage.reason, remaining: 0, isPremium: false });
+      return res.status(429).json({ error: usage.reason, remaining: 0, isPremium: usage.isPremium });
     }
 
     let activeThreadId = threadId;
