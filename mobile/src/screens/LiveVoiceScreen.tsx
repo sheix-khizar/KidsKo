@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Modal, ActivityIndicator } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, Pressable, StyleSheet, Modal, ActivityIndicator, AppState, AppStateStatus } from 'react-native';
+import { Camera, useCameraDevice, useCameraPermission, usePhotoOutput } from 'react-native-vision-camera';
 import { VoiceSession, forceLoudspeakerAudio } from '../services/voiceSocket';
 import { pickImageFromGallery, captureImageFromCamera } from '../utils/imageHelper';
 
@@ -8,6 +9,25 @@ type Props = {
   studentName: string;
   onBack: () => void;
   onLimitReached: () => void;
+};
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const len = bytes.byteLength;
+  const chunkSize = 8192;
+  for (let i = 0; i < len; i += chunkSize) {
+    const chunk = bytes.subarray(i, Math.min(i + chunkSize, len));
+    binary += String.fromCharCode.apply(null, chunk as unknown as number[]);
+  }
+  return btoa(binary);
+}
+
+const PHOTO_CONFIG = {
+  containerFormat: 'jpeg' as const,
+  quality: 0.5,
+  qualityPrioritization: 'speed' as const,
+  targetResolution: { width: 640, height: 480 },
 };
 
 export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimitReached }: Props) {
@@ -21,8 +41,78 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
   const [lastSpokenTranscript, setLastSpokenTranscript] = useState<string>('');
   const [networkNotice, setNetworkNotice] = useState<string | null>(null);
 
+  // Live Video State & Camera Hooks (Phase B2)
+  const [isVideoActive, setIsVideoActive] = useState(false);
+  const [isCameraReady, setIsCameraReady] = useState(false);
+  const [isAppForeground, setIsAppForeground] = useState(true);
+  const { hasPermission, requestPermission } = useCameraPermission();
+  const device = useCameraDevice('back');
+  const photoOutput = usePhotoOutput(PHOTO_CONFIG);
+  const outputs = useMemo(() => [photoOutput], [photoOutput]);
+
+  const isCameraActive = status === 'live' && isVideoActive && isAppForeground && hasPermission && !!device;
+
   const sessionRef = useRef<VoiceSession | null>(null);
   const timerRef = useRef<any>(null);
+  const frameIntervalRef = useRef<any>(null);
+  const isCapturingRef = useRef<boolean>(false);
+
+  // AppState listener for lifecycle safety (Ticket B2.4)
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState: AppStateStatus) => {
+      setIsAppForeground(nextState === 'active');
+    });
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  // Frame sampling loop (Ticket B2.2 & B2.4)
+  useEffect(() => {
+    if (!isCameraActive || !isCameraReady || !photoOutput) {
+      if (frameIntervalRef.current) {
+        clearInterval(frameIntervalRef.current);
+        frameIntervalRef.current = null;
+      }
+      return;
+    }
+
+    const captureFrame = async () => {
+      console.log('[LiveVoiceScreen] captureFrame called! isCapturing:', isCapturingRef.current, 'isCameraActive:', isCameraActive, 'isCameraReady:', isCameraReady);
+      if (isCapturingRef.current || !isCameraActive || !isCameraReady) return;
+      isCapturingRef.current = true;
+      try {
+        console.log('[LiveVoiceScreen] Calling photoOutput.capturePhoto()...');
+        const photo = await photoOutput.capturePhoto({ enableShutterSound: false }, {});
+        console.log('[LiveVoiceScreen] photo captured! Fetching data...');
+        try {
+          const fileData = await photo.getFileDataAsync();
+          if (fileData && fileData.byteLength > 0) {
+            const base64 = arrayBufferToBase64(fileData);
+            console.log('[LiveVoiceScreen] sendVideoFrame base64 length:', base64.length);
+            sessionRef.current?.sendVideoFrame(base64);
+          }
+        } finally {
+          photo.dispose();
+        }
+      } catch (err: any) {
+        console.warn('[LiveVoiceScreen] Video frame capture skipped:', err?.message || err);
+      } finally {
+        isCapturingRef.current = false;
+      }
+    };
+
+    const initialTimeout = setTimeout(captureFrame, 1000);
+    frameIntervalRef.current = setInterval(captureFrame, 2500);
+
+    return () => {
+      clearTimeout(initialTimeout);
+      if (frameIntervalRef.current) {
+        clearInterval(frameIntervalRef.current);
+        frameIntervalRef.current = null;
+      }
+    };
+  }, [isCameraActive, isCameraReady, photoOutput]);
 
   useEffect(() => {
     const session = new VoiceSession();
@@ -91,11 +181,37 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
+      if (frameIntervalRef.current) clearInterval(frameIntervalRef.current);
       sessionRef.current?.end();
     };
   }, []);
 
+  const handleToggleVideo = async () => {
+    console.log('[LiveVoiceScreen] handleToggleVideo tapped! Current isVideoActive:', isVideoActive, 'hasPermission:', hasPermission);
+    if (isVideoActive) {
+      setIsCameraReady(false);
+      setIsVideoActive(false);
+    } else {
+      if (!hasPermission) {
+        console.log('[LiveVoiceScreen] Requesting camera permission...');
+        const granted = await requestPermission();
+        console.log('[LiveVoiceScreen] Permission result:', granted);
+        if (!granted) {
+          setErrorReason('Camera permission is required for live video.');
+          return;
+        }
+      }
+      console.log('[LiveVoiceScreen] Enabling isVideoActive = true, device exists:', !!device);
+      setIsVideoActive(true);
+    }
+  };
+
   const handleEnd = async () => {
+    if (frameIntervalRef.current) {
+      clearInterval(frameIntervalRef.current);
+      frameIntervalRef.current = null;
+    }
+    setIsVideoActive(false);
     await sessionRef.current?.end();
     onBack();
   };
@@ -160,28 +276,61 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
 
       {status === 'live' && (
         <View style={styles.stateCard}>
-          {voiceState === 'speaking' ? (
-            <Pressable
-              style={[styles.avatarCircle, styles.avatarSpeaking]}
-              onPress={() => sessionRef.current?.interrupt()}
-            >
-              <Text style={styles.avatarEmoji}>🦉</Text>
-              <View style={styles.speakingBadge}>
-                <Text style={styles.speakingBadgeText}>🔊 Kidsko is Talking... (Tap to speak)</Text>
+          {isVideoActive && isCameraActive && device ? (
+            <View style={styles.cameraContainer}>
+              <Camera
+                style={StyleSheet.absoluteFill}
+                device={device}
+                isActive={isCameraActive}
+                outputs={outputs}
+                resizeMode="cover"
+                onStarted={() => {
+                  console.log('[LiveVoiceScreen] Camera onStarted!');
+                  setIsCameraReady(true);
+                }}
+                onStopped={() => {
+                  console.log('[LiveVoiceScreen] Camera onStopped!');
+                  setIsCameraReady(false);
+                }}
+                onError={(err) => {
+                  console.error('[LiveVoiceScreen] Camera onError:', err);
+                  setIsCameraReady(false);
+                }}
+              />
+              <View style={styles.liveVideoBadge}>
+                <View style={styles.liveDot} />
+                <Text style={styles.liveVideoBadgeText}>LIVE VIDEO</Text>
               </View>
-            </Pressable>
-          ) : voiceState === 'thinking' ? (
-            <View style={[styles.avatarCircle, styles.avatarThinking]}>
-              <ActivityIndicator size="large" color="#FFD54F" />
-              <Text style={styles.thinkingText}>💡 Thinking...</Text>
+              <Pressable style={styles.cameraOverlayToggle} onPress={handleToggleVideo}>
+                <Text style={styles.cameraOverlayToggleText}>✕ Turn Off</Text>
+              </Pressable>
             </View>
           ) : (
-            <View style={[styles.avatarCircle, styles.avatarListening]}>
-              <Text style={styles.avatarEmoji}>🎙️</Text>
-              <View style={styles.listeningBadge}>
-                <Text style={styles.listeningBadgeText}>🟢 Listening to You...</Text>
-              </View>
-            </View>
+            <>
+              {voiceState === 'speaking' ? (
+                <Pressable
+                  style={[styles.avatarCircle, styles.avatarSpeaking]}
+                  onPress={() => sessionRef.current?.interrupt()}
+                >
+                  <Text style={styles.avatarEmoji}>🦉</Text>
+                  <View style={styles.speakingBadge}>
+                    <Text style={styles.speakingBadgeText}>🔊 Kidsko is Talking... (Tap to speak)</Text>
+                  </View>
+                </Pressable>
+              ) : voiceState === 'thinking' ? (
+                <View style={[styles.avatarCircle, styles.avatarThinking]}>
+                  <ActivityIndicator size="large" color="#FFD54F" />
+                  <Text style={styles.thinkingText}>💡 Thinking...</Text>
+                </View>
+              ) : (
+                <View style={[styles.avatarCircle, styles.avatarListening]}>
+                  <Text style={styles.avatarEmoji}>🎙️</Text>
+                  <View style={styles.listeningBadge}>
+                    <Text style={styles.listeningBadgeText}>🟢 Listening to You...</Text>
+                  </View>
+                </View>
+              )}
+            </>
           )}
 
           {lastSpokenTranscript ? (
@@ -192,25 +341,43 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
               </Text>
             </View>
           ) : (
-            <Text style={styles.promptHint}>Speak anytime or tap "Show Homework" to share a photo!</Text>
+            <Text style={styles.promptHint}>
+              {isVideoActive
+                ? 'Live video is on! Kidsko can see your work.'
+                : 'Speak anytime or turn on Live Video to show your work!'}
+            </Text>
           )}
         </View>
       )}
 
-      {isSendingSnapshot ? (
-        <View style={styles.analyzingBox}>
-          <ActivityIndicator size="large" color="#FFD54F" />
-          <Text style={styles.analyzingText}>🦉 Looking at your homework...</Text>
-        </View>
-      ) : (
-        status === 'live' && (
-          <Pressable style={styles.showButton} onPress={() => setShowOptionModal(true)}>
-            <Text style={styles.showButtonText}>📷 Show Homework</Text>
+      {/* Video Toggle & Snapshot Actions */}
+      {status === 'live' && (
+        <View style={styles.actionRow}>
+          <Pressable
+            style={[styles.videoToggleButton, isVideoActive && styles.videoToggleButtonActive]}
+            onPress={handleToggleVideo}
+          >
+            <Text style={styles.videoToggleButtonText}>
+              {isVideoActive ? '📹 Turn Off Video' : '📹 Start Live Video'}
+            </Text>
           </Pressable>
-        )
+
+          {!isVideoActive && (
+            isSendingSnapshot ? (
+              <View style={styles.analyzingBox}>
+                <ActivityIndicator size="small" color="#FFD54F" />
+                <Text style={styles.analyzingText}>Looking...</Text>
+              </View>
+            ) : (
+              <Pressable style={styles.showButton} onPress={() => setShowOptionModal(true)}>
+                <Text style={styles.showButtonText}>📷 Snap Photo</Text>
+              </Pressable>
+            )
+          )}
+        </View>
       )}
 
-      {snapshotsRemaining !== null && (
+      {snapshotsRemaining !== null && !isVideoActive && (
         <Text style={styles.snapshotCount}>{snapshotsRemaining} photo helps left this week</Text>
       )}
 
@@ -220,7 +387,7 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
         <Text style={styles.endButtonText}>{status === 'ended' ? 'Close' : 'End Call'}</Text>
       </Pressable>
 
-      {/* Option Sheet Modal */}
+      {/* Option Sheet Modal (Retained until Phase D per Plan v6) */}
       <Modal visible={showOptionModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -252,11 +419,39 @@ const styles = StyleSheet.create({
   errorSub: { fontSize: 14, color: '#FF8A80', fontWeight: '600', marginBottom: 20, textAlign: 'center' },
   endButton: { backgroundColor: '#EA4335', borderRadius: 30, paddingVertical: 14, paddingHorizontal: 40, marginTop: 10 },
   endButtonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  showButton: { backgroundColor: '#1a73e8', borderRadius: 24, paddingVertical: 14, paddingHorizontal: 28, marginBottom: 12 },
-  showButtonText: { color: '#fff', fontWeight: '800', fontSize: 16 },
+  showButton: { backgroundColor: '#333355', borderRadius: 20, paddingVertical: 12, paddingHorizontal: 18, borderWidth: 1, borderColor: '#555577' },
+  showButtonText: { color: '#fff', fontWeight: '700', fontSize: 14 },
   snapshotCount: { color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: '600', marginBottom: 20 },
-  analyzingBox: { alignItems: 'center', marginVertical: 20, gap: 10 },
-  analyzingText: { color: '#FFD54F', fontSize: 16, fontWeight: '700' },
+  analyzingBox: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12 },
+  analyzingText: { color: '#FFD54F', fontSize: 14, fontWeight: '700' },
+
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+  },
+  videoToggleButton: {
+    backgroundColor: '#00897B',
+    borderRadius: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 22,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  videoToggleButtonActive: {
+    backgroundColor: '#D32F2F',
+  },
+  videoToggleButtonText: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 14,
+  },
 
   // State Card Styles
   stateCard: {
@@ -265,9 +460,56 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     padding: 20,
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
+  },
+  cameraContainer: {
+    width: '100%',
+    height: 240,
+    borderRadius: 18,
+    overflow: 'hidden',
+    marginBottom: 14,
+    position: 'relative',
+    backgroundColor: '#000',
+  },
+  liveVideoBadge: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    gap: 6,
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#00E676',
+  },
+  liveVideoBadgeText: {
+    color: '#00E676',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  cameraOverlayToggle: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  cameraOverlayToggleText: {
+    color: '#FF8A80',
+    fontSize: 11,
+    fontWeight: '700',
   },
   avatarCircle: {
     width: 100,

@@ -1,21 +1,12 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 
-export const FREE_WEEKLY_VOICE_MINUTES = 5;
-export const PREMIUM_WEEKLY_VOICE_MINUTES = 25;
-
-export const FREE_WEEKLY_LIVE_SNAPSHOTS = 3;
-export const PREMIUM_WEEKLY_LIVE_SNAPSHOTS = 20;
+export const FREE_WEEKLY_VOICE_MINUTES = 10;
+export const PREMIUM_WEEKLY_VOICE_MINUTES = 100;
 
 type VoiceEligibility = {
   allowed: boolean;
   isPremium: boolean;
   minutesRemaining: number;
-  reason?: string;
-};
-
-type SnapshotEligibility = {
-  allowed: boolean;
-  remaining: number;
   reason?: string;
 };
 
@@ -70,8 +61,8 @@ export async function checkVoiceEligibility(
       isPremium,
       minutesRemaining: 0,
       reason: isPremium
-        ? 'Voice allowance used up for this month.'
-        : `Free voice time used up for this week (${FREE_WEEKLY_VOICE_MINUTES} min/week). Upgrade to Premium for more!`,
+        ? `Premium voice & video allowance used up for this week (${PREMIUM_WEEKLY_VOICE_MINUTES} min/week).`
+        : `Free voice & video time used up for this week (${FREE_WEEKLY_VOICE_MINUTES} min/week). Upgrade to Premium for more!`,
     };
   }
 
@@ -95,53 +86,5 @@ export async function recordVoiceMinutesUsed(
   await supabase
     .from('family_usage')
     .update({ weekly_voice_minutes_used: current + minutesElapsed })
-    .eq('parent_id', parentId);
-}
-
-// IMPORTANT: only call this from within an already-started voice session —
-// i.e. after checkVoiceEligibility() has already run for this connection.
-// That function owns the weekly reset logic for BOTH counters (they share
-// last_weekly_reset_at); this function assumes the week has already been
-// correctly rolled by the time a snapshot is attempted mid-session.
-export async function checkSnapshotEligibility(
-  supabase: SupabaseClient,
-  parentId: string,
-  isPremium: boolean
-): Promise<SnapshotEligibility> {
-  const limit = isPremium ? PREMIUM_WEEKLY_LIVE_SNAPSHOTS : FREE_WEEKLY_LIVE_SNAPSHOTS;
-
-  const { data: usage } = await supabase
-    .from('family_usage')
-    .select('weekly_live_snapshots_used')
-    .eq('parent_id', parentId)
-    .maybeSingle();
-
-  const used = usage?.weekly_live_snapshots_used || 0;
-  const remaining = Math.max(0, limit - used);
-
-  if (remaining <= 0) {
-    return {
-      allowed: false,
-      remaining: 0,
-      reason: isPremium
-        ? 'Live photo-help allowance used up for this week.'
-        : `Free live photo-help used up for this week (${FREE_WEEKLY_LIVE_SNAPSHOTS}/week). Upgrade to Premium for more!`,
-    };
-  }
-
-  return { allowed: true, remaining };
-}
-
-export async function recordSnapshotUsed(supabase: SupabaseClient, parentId: string): Promise<void> {
-  const { data: usage } = await supabase
-    .from('family_usage')
-    .select('weekly_live_snapshots_used')
-    .eq('parent_id', parentId)
-    .maybeSingle();
-
-  const current = usage?.weekly_live_snapshots_used || 0;
-  await supabase
-    .from('family_usage')
-    .update({ weekly_live_snapshots_used: current + 1 })
     .eq('parent_id', parentId);
 }

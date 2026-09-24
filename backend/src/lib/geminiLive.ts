@@ -169,6 +169,20 @@ export function sendAudioChunk(geminiWs: WebSocket, base64Audio: string) {
   }
 }
 
+export function sendVideoChunk(geminiWs: WebSocket, base64Jpeg: string) {
+  if (geminiWs && geminiWs.readyState === WebSocket.OPEN) {
+    const inputMsg = {
+      realtimeInput: {
+        video: {
+          mimeType: 'image/jpeg',
+          data: base64Jpeg,
+        },
+      },
+    };
+    geminiWs.send(JSON.stringify(inputMsg));
+  }
+}
+
 export function sendTextPrompt(geminiWs: WebSocket, textPrompt: string) {
   if (geminiWs && geminiWs.readyState === WebSocket.OPEN) {
     console.log('[Gemini Client Outbound Prompt]:', textPrompt);

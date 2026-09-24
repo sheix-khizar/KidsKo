@@ -257,6 +257,12 @@ export class VoiceSession {
     }
   }
 
+  sendVideoFrame(base64Jpeg: string) {
+    if (this.ws?.readyState === WebSocket.OPEN && this.isSessionActive) {
+      this.ws.send(JSON.stringify({ type: 'video_frame', data: base64Jpeg }));
+    }
+  }
+
   interrupt() {
     if (!this.isSessionActive) return;
     console.log('[Mobile Voice Input]: User explicitly requested interruption of Kidsko playback.');
