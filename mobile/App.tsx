@@ -158,10 +158,6 @@ export default function App() {
         setScanExplanation(undefined);
         setScreen('chat');
       }}
-      onScanStudent={(student) => {
-        setActiveStudent(student);
-        setScreen('homework');
-      }}
       onOpenTranscript={(student) => {
         setActiveStudent(student);
         setScreen('transcript');

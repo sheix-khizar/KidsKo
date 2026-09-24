@@ -9,12 +9,11 @@ type Student = { id: string; student_name: string };
 type Props = {
   onLoggedOut: () => void;
   onSelectStudent: (student: Student) => void;
-  onScanStudent: (student: Student) => void;
   onOpenTranscript: (student: Student) => void;
   onOpenVoiceCall: (student: Student) => void;
 };
 
-export default function HomeScreen({ onLoggedOut, onSelectStudent, onScanStudent, onOpenTranscript, onOpenVoiceCall }: Props) {
+export default function HomeScreen({ onLoggedOut, onSelectStudent, onOpenTranscript, onOpenVoiceCall }: Props) {
   const [students, setStudents] = useState<Student[]>([]);
   const [newName, setNewName] = useState('');
   const [loading, setLoading] = useState(true);
@@ -79,7 +78,7 @@ export default function HomeScreen({ onLoggedOut, onSelectStudent, onScanStudent
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Kidsko.ai 🦉</Text>
-      <Text style={styles.subtitle}>Select a student to chat, call live, or scan homework</Text>
+      <Text style={styles.subtitle}>Select a student to chat or call live</Text>
 
       <View style={styles.addRow}>
         <TextInput
@@ -110,9 +109,6 @@ export default function HomeScreen({ onLoggedOut, onSelectStudent, onScanStudent
               </Pressable>
               <Pressable style={styles.voiceBtn} onPress={() => onOpenVoiceCall(item)}>
                 <Text style={styles.voiceBtnText}>🎙️ Call</Text>
-              </Pressable>
-              <Pressable style={styles.scanBtn} onPress={() => onScanStudent(item)}>
-                <Text style={styles.scanBtnText}>📸 Scan</Text>
               </Pressable>
               <Pressable style={styles.chatBtn} onPress={() => onSelectStudent(item)}>
                 <Text style={styles.chatBtnText}>💬 Chat</Text>
@@ -192,15 +188,6 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   voiceBtnText: { fontSize: 11, fontWeight: '700', color: '#2E7D32' },
-  scanBtn: {
-    backgroundColor: '#FFF8E1',
-    borderWidth: 1,
-    borderColor: '#FFE082',
-    borderRadius: 8,
-    paddingHorizontal: 7,
-    paddingVertical: 6,
-  },
-  scanBtnText: { fontSize: 11, fontWeight: '700', color: '#B78103' },
   chatBtn: {
     backgroundColor: '#E6F4FE',
     borderWidth: 1,

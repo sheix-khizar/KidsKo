@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Modal, ActivityIndicator, AppState, AppStateStatus } from 'react-native';
+import { View, Text, Pressable, StyleSheet, ActivityIndicator, AppState, AppStateStatus } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission, usePhotoOutput } from 'react-native-vision-camera';
-import { VoiceSession, forceLoudspeakerAudio } from '../services/voiceSocket';
-import { pickImageFromGallery, captureImageFromCamera } from '../utils/imageHelper';
+import { VoiceSession } from '../services/voiceSocket';
 
 type Props = {
   studentId: string;
@@ -35,9 +34,6 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
   const [voiceState, setVoiceState] = useState<'listening' | 'thinking' | 'speaking'>('listening');
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [errorReason, setErrorReason] = useState<string | null>(null);
-  const [showOptionModal, setShowOptionModal] = useState(false);
-  const [isSendingSnapshot, setIsSendingSnapshot] = useState(false);
-  const [snapshotsRemaining, setSnapshotsRemaining] = useState<number | null>(null);
   const [lastSpokenTranscript, setLastSpokenTranscript] = useState<string>('');
   const [networkNotice, setNetworkNotice] = useState<string | null>(null);
 
@@ -163,18 +159,6 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
           console.warn('[LiveVoiceScreen] Network notice:', message);
           setNetworkNotice(message);
         },
-        onSnapshotAck: (remaining) => {
-          setSnapshotsRemaining(remaining);
-          setIsSendingSnapshot(false);
-        },
-        onSnapshotError: (reason) => {
-          setIsSendingSnapshot(false);
-          if (reason.toLowerCase().includes('upgrade') || reason.toLowerCase().includes('used up')) {
-            onLimitReached();
-          } else {
-            setErrorReason(reason);
-          }
-        },
       },
       studentId
     );
@@ -214,43 +198,6 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
     setIsVideoActive(false);
     await sessionRef.current?.end();
     onBack();
-  };
-
-  const handlePickGallery = async () => {
-    setShowOptionModal(false);
-    try {
-      const result = await pickImageFromGallery();
-      await forceLoudspeakerAudio().catch(() => {});
-      if (result) {
-        sendHomeworkPhoto(result.base64);
-      }
-    } catch (err: any) {
-      setErrorReason(err?.message || 'Could not pick image from gallery.');
-    }
-  };
-
-  const handleTakeCamera = async () => {
-    setShowOptionModal(false);
-    try {
-      const result = await captureImageFromCamera();
-      await forceLoudspeakerAudio().catch(() => {});
-      if (result) {
-        sendHomeworkPhoto(result.base64);
-      }
-    } catch (err: any) {
-      setErrorReason(err?.message || 'Could not capture image from camera.');
-    }
-  };
-
-  const sendHomeworkPhoto = (base64: string) => {
-    setIsSendingSnapshot(true);
-    setErrorReason(null);
-    const activeCaption = lastSpokenTranscript.trim()
-      ? `${lastSpokenTranscript.trim()}. Please look at my homework photo and guide me step-by-step.`
-      : 'Please look at my homework photo and guide me step-by-step.';
-    console.log('[LiveVoiceScreen] Sending captured homework photo with caption:', activeCaption);
-    sessionRef.current?.sendImageCapture(base64, activeCaption);
-    setLastSpokenTranscript('');
   };
 
   return (
@@ -350,7 +297,7 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
         </View>
       )}
 
-      {/* Video Toggle & Snapshot Actions */}
+      {/* Live Video Toggle Action */}
       {status === 'live' && (
         <View style={styles.actionRow}>
           <Pressable
@@ -361,24 +308,7 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
               {isVideoActive ? '📹 Turn Off Video' : '📹 Start Live Video'}
             </Text>
           </Pressable>
-
-          {!isVideoActive && (
-            isSendingSnapshot ? (
-              <View style={styles.analyzingBox}>
-                <ActivityIndicator size="small" color="#FFD54F" />
-                <Text style={styles.analyzingText}>Looking...</Text>
-              </View>
-            ) : (
-              <Pressable style={styles.showButton} onPress={() => setShowOptionModal(true)}>
-                <Text style={styles.showButtonText}>📷 Snap Photo</Text>
-              </Pressable>
-            )
-          )}
         </View>
-      )}
-
-      {snapshotsRemaining !== null && !isVideoActive && (
-        <Text style={styles.snapshotCount}>{snapshotsRemaining} photo helps left this week</Text>
       )}
 
       {errorReason && <Text style={styles.errorSub}>{errorReason}</Text>}
@@ -386,28 +316,6 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
       <Pressable style={styles.endButton} onPress={handleEnd}>
         <Text style={styles.endButtonText}>{status === 'ended' ? 'Close' : 'End Call'}</Text>
       </Pressable>
-
-      {/* Option Sheet Modal (Retained until Phase D per Plan v6) */}
-      <Modal visible={showOptionModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Show Homework to Kidsko</Text>
-            <Text style={styles.modalSubtitle}>How would you like to provide the homework photo?</Text>
-
-            <Pressable style={styles.optionButton} onPress={handleTakeCamera}>
-              <Text style={styles.optionButtonText}>📸 Take Photo with Camera</Text>
-            </Pressable>
-
-            <Pressable style={[styles.optionButton, styles.optionButtonSecondary]} onPress={handlePickGallery}>
-              <Text style={styles.optionButtonTextSecondary}>🖼️ Choose from Gallery</Text>
-            </Pressable>
-
-            <Pressable style={styles.cancelModalButton} onPress={() => setShowOptionModal(false)}>
-              <Text style={styles.cancelModalText}>Cancel</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -419,11 +327,6 @@ const styles = StyleSheet.create({
   errorSub: { fontSize: 14, color: '#FF8A80', fontWeight: '600', marginBottom: 20, textAlign: 'center' },
   endButton: { backgroundColor: '#EA4335', borderRadius: 30, paddingVertical: 14, paddingHorizontal: 40, marginTop: 10 },
   endButtonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  showButton: { backgroundColor: '#333355', borderRadius: 20, paddingVertical: 12, paddingHorizontal: 18, borderWidth: 1, borderColor: '#555577' },
-  showButtonText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-  snapshotCount: { color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: '600', marginBottom: 20 },
-  analyzingBox: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12 },
-  analyzingText: { color: '#FFD54F', fontSize: 14, fontWeight: '700' },
 
   actionRow: {
     flexDirection: 'row',
@@ -583,16 +486,4 @@ const styles = StyleSheet.create({
   },
   noticeBannerText: { color: '#ffe082', fontSize: 13, fontWeight: '700', textAlign: 'center' },
   noticeDismissText: { color: 'rgba(255,224,130,0.7)', fontSize: 11, fontWeight: '600', marginTop: 3 },
-
-  // Modal styles
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#22223b', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, alignItems: 'center', gap: 12 },
-  modalTitle: { fontSize: 18, fontWeight: '800', color: '#fff' },
-  modalSubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.7)', marginBottom: 8, textAlign: 'center' },
-  optionButton: { width: '100%', backgroundColor: '#1a73e8', borderRadius: 16, paddingVertical: 14, alignItems: 'center' },
-  optionButtonText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  optionButtonSecondary: { backgroundColor: '#333355', borderWidth: 1, borderColor: '#555577' },
-  optionButtonTextSecondary: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  cancelModalButton: { marginTop: 8, paddingVertical: 10 },
-  cancelModalText: { color: '#FF8A80', fontWeight: '700', fontSize: 15 },
 });
