@@ -1,0 +1,9 @@
+# EAS Build Ignore Rules
+# Excludes bulky generated files from cloud packaging while securely allowing local .env for builds
+node_modules/
+.expo/
+android/
+ios/
+dist/
+build/
+*.log

@@ -1,0 +1,21 @@
+import { getToken } from './api';
+import { getApiUrl } from './config';
+
+export async function analyzeHomework(studentId: string, imageBase64: string, threadId?: string, prompt?: string) {
+  const token = await getToken();
+  const res = await fetch(`${getApiUrl()}/api/homework/analyze`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ studentId, imageBase64, threadId, prompt }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    const err: any = new Error(data.error || 'Could not analyze homework image.');
+    err.status = res.status;
+    throw err;
+  }
+  return data as { threadId: string; explanation: string };
+}
