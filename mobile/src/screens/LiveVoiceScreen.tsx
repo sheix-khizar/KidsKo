@@ -74,18 +74,14 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
     }
 
     const captureFrame = async () => {
-      console.log('[LiveVoiceScreen] captureFrame called! isCapturing:', isCapturingRef.current, 'isCameraActive:', isCameraActive, 'isCameraReady:', isCameraReady);
       if (isCapturingRef.current || !isCameraActive || !isCameraReady) return;
       isCapturingRef.current = true;
       try {
-        console.log('[LiveVoiceScreen] Calling photoOutput.capturePhoto()...');
         const photo = await photoOutput.capturePhoto({ enableShutterSound: false }, {});
-        console.log('[LiveVoiceScreen] photo captured! Fetching data...');
         try {
           const fileData = await photo.getFileDataAsync();
           if (fileData && fileData.byteLength > 0) {
             const base64 = arrayBufferToBase64(fileData);
-            console.log('[LiveVoiceScreen] sendVideoFrame base64 length:', base64.length);
             sessionRef.current?.sendVideoFrame(base64);
           }
         } finally {

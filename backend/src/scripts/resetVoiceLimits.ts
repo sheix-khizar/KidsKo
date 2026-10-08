@@ -9,13 +9,12 @@ const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY! || process.env.SUP
 const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
 async function resetAllUsageLimits() {
-  console.log('🔄 Resetting ALL usage limits in Supabase (Voice Minutes, Live Snapshots, Messages, Chat Homework Scans)...\n');
+  console.log('🔄 Resetting ALL usage limits in Supabase (Voice Minutes, Messages, Chat Homework Scans)...\n');
 
   const { data, error } = await supabaseAdmin
     .from('family_usage')
     .update({
       weekly_voice_minutes_used: 0.0,
-      weekly_live_snapshots_used: 0,
       daily_message_count: 0,
       daily_scan_count: 0,
       last_weekly_reset_at: new Date().toISOString(),
@@ -27,7 +26,7 @@ async function resetAllUsageLimits() {
   if (error) {
     console.error('❌ Error resetting usage limits:', error.message);
   } else {
-    console.log(`✅ SUCCESS! Reset ALL limits (Voice, Snapshots, Chat, Scans) to 0 for ${data?.length || 0} family account(s).`);
+    console.log(`✅ SUCCESS! Reset ALL limits (Voice, Chat, Scans) to 0 for ${data?.length || 0} family account(s).`);
     console.log('🎉 You can now make new voice calls, send messages, and upload homework photos without hitting limit caps!\n');
   }
 }

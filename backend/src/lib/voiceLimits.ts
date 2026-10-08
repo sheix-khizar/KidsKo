@@ -51,7 +51,6 @@ export async function checkVoiceEligibility(
       .from('family_usage')
       .update({
         weekly_voice_minutes_used: 0,
-        weekly_live_snapshots_used: 0,
         daily_message_count: 0,
         daily_scan_count: 0,
         last_weekly_reset_at: now.toISOString(),

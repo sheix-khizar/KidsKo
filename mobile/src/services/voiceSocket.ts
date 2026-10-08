@@ -22,8 +22,6 @@ type VoiceCallbacks = {
   onError: (reason: string) => void;
   onClose: (reason?: string | number) => void;
   onTranscript?: (text: string) => void;
-  onSnapshotAck?: (remaining: number) => void;
-  onSnapshotError?: (reason: string) => void;
   onStateChange?: (state: 'listening' | 'thinking' | 'speaking') => void;
   onNetworkNotice?: (message: string) => void;
 };
@@ -215,12 +213,6 @@ export class VoiceSession {
           }
         } else if (msg.type === 'text') {
           callbacks.onTranscript?.(msg.data);
-        } else if (msg.type === 'snapshot_ack') {
-          console.log(`[Mobile Snapshot Ack]: ${msg.remaining} remaining this week`);
-          callbacks.onSnapshotAck?.(msg.remaining);
-        } else if (msg.type === 'snapshot_error') {
-          console.warn('[Mobile Snapshot Error]:', msg.reason);
-          callbacks.onSnapshotError?.(msg.reason);
         }
       } catch (err) {
         console.error('Error parsing WebSocket message:', err);
@@ -241,20 +233,6 @@ export class VoiceSession {
     };
 
     await this.startSpeechRecognition();
-  }
-
-  sendImageCapture(base64Jpeg: string, caption?: string) {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      console.log('[Mobile Sending Image Capture]:', base64Jpeg.length, 'base64 chars, caption:', caption || '(none)');
-      this.stopSpeechRecognition();
-      this.resetTurnState();
-      this.callbacks?.onStateChange?.('thinking');
-      this.promptSentTime = Date.now();
-      // Allow up to 25s for image upload, Sharp compression, and Gemini multimodal vision reasoning
-      this.startThinkingWatchdog(25000);
-      forceLoudspeakerAudio().catch(() => {});
-      this.ws.send(JSON.stringify({ type: 'image_capture', data: base64Jpeg, caption, turnId: this.currentTurnId }));
-    }
   }
 
   sendVideoFrame(base64Jpeg: string) {

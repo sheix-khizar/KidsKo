@@ -36,10 +36,44 @@ export async function checkAndIncrementUsage(
 
   const isPremium = profile?.is_premium || false;
 
-  // 2. Fetch (or lazily create) the family's pooled usage row
+  const limit =
+    type === 'message'
+      ? (isPremium ? PREMIUM_WEEKLY_MESSAGE_LIMIT : FREE_WEEKLY_MESSAGE_LIMIT)
+      : (isPremium ? PREMIUM_WEEKLY_SCAN_LIMIT : FREE_WEEKLY_SCAN_LIMIT);
+
+  // 2. Attempt atomic database RPC (thread-safe, concurrency-safe row lock)
+  try {
+    const { data: rpcRes, error: rpcErr } = await supabase.rpc('increment_weekly_usage', {
+      p_parent_id: parentId,
+      p_type: type,
+      p_limit: limit,
+    });
+
+    if (!rpcErr && rpcRes && typeof rpcRes.allowed === 'boolean') {
+      if (!rpcRes.allowed) {
+        return {
+          allowed: false,
+          isPremium,
+          remaining: 0,
+          reason: isPremium
+            ? `Weekly limit reached (${limit} ${type === 'message' ? 'messages' : 'homework scans'}/week on Premium). Your allowance resets each week.`
+            : `Weekly free limit reached (${limit} ${type === 'message' ? 'messages' : 'homework scans'}/week, shared across your children). Upgrade to Premium for more!`,
+        };
+      }
+      return {
+        allowed: true,
+        isPremium,
+        remaining: rpcRes.remaining ?? Math.max(0, limit - rpcRes.current),
+      };
+    }
+  } catch {
+    // If RPC is unavailable or not yet migrated, fall through to CAS logic below
+  }
+
+  // 3. Fallback: Concurrency-safe Compare-and-Swap (CAS) update
   let { data: usage } = await supabase
     .from('family_usage')
-    .select('daily_message_count, daily_scan_count, weekly_voice_minutes_used, weekly_live_snapshots_used, last_weekly_reset_at')
+    .select('daily_message_count, daily_scan_count, weekly_voice_minutes_used, last_weekly_reset_at')
     .eq('parent_id', parentId)
     .maybeSingle();
 
@@ -47,7 +81,7 @@ export async function checkAndIncrementUsage(
     const { data: created, error: createError } = await supabase
       .from('family_usage')
       .insert({ parent_id: parentId })
-      .select('daily_message_count, daily_scan_count, weekly_voice_minutes_used, weekly_live_snapshots_used, last_weekly_reset_at')
+      .select('daily_message_count, daily_scan_count, weekly_voice_minutes_used, last_weekly_reset_at')
       .single();
     if (createError) throw createError;
     usage = created;
@@ -68,16 +102,10 @@ export async function checkAndIncrementUsage(
         daily_message_count: 0,
         daily_scan_count: 0,
         weekly_voice_minutes_used: 0,
-        weekly_live_snapshots_used: 0,
         last_weekly_reset_at: now.toISOString(),
       })
       .eq('parent_id', parentId);
   }
-
-  const limit =
-    type === 'message'
-      ? (isPremium ? PREMIUM_WEEKLY_MESSAGE_LIMIT : FREE_WEEKLY_MESSAGE_LIMIT)
-      : (isPremium ? PREMIUM_WEEKLY_SCAN_LIMIT : FREE_WEEKLY_SCAN_LIMIT);
 
   const currentCount = type === 'message' ? messageCount : scanCount;
 
@@ -92,26 +120,47 @@ export async function checkAndIncrementUsage(
     };
   }
 
-  // 3. Increment and persist
-  const updates =
-    type === 'message'
-      ? {
-          daily_message_count: currentCount + 1,
-          daily_scan_count: scanCount,
-          last_weekly_reset_at: isNewWeek ? now.toISOString() : (usage!.last_weekly_reset_at || now.toISOString()),
-        }
-      : {
-          daily_scan_count: currentCount + 1,
-          daily_message_count: messageCount,
-          last_weekly_reset_at: isNewWeek ? now.toISOString() : (usage!.last_weekly_reset_at || now.toISOString()),
-        };
+  // Atomic Compare-And-Swap (CAS): update only if the counter hasn't changed under concurrency
+  const counterCol = type === 'message' ? 'daily_message_count' : 'daily_scan_count';
+  const newCount = currentCount + 1;
 
-  const { error: updateError } = await supabase.from('family_usage').update(updates).eq('parent_id', parentId);
+  const { data: updatedRows, error: updateError } = await supabase
+    .from('family_usage')
+    .update({
+      [counterCol]: newCount,
+      last_weekly_reset_at: isNewWeek ? now.toISOString() : (usage!.last_weekly_reset_at || now.toISOString()),
+    })
+    .eq('parent_id', parentId)
+    .eq(counterCol, currentCount)
+    .select(counterCol);
+
   if (updateError) throw updateError;
+
+  // If 0 rows were updated, another concurrent request modified the counter first
+  if (!updatedRows || updatedRows.length === 0) {
+    // Re-fetch the latest state to accurately evaluate the limit
+    const { data: latest } = await supabase
+      .from('family_usage')
+      .select('daily_message_count, daily_scan_count')
+      .eq('parent_id', parentId)
+      .single();
+
+    const latestCount = type === 'message' ? (latest?.daily_message_count || 0) : (latest?.daily_scan_count || 0);
+    if (latestCount >= limit) {
+      return {
+        allowed: false,
+        isPremium,
+        remaining: 0,
+        reason: isPremium
+          ? `Weekly limit reached (${limit} ${type === 'message' ? 'messages' : 'homework scans'}/week on Premium). Your allowance resets each week.`
+          : `Weekly free limit reached (${limit} ${type === 'message' ? 'messages' : 'homework scans'}/week, shared across your children). Upgrade to Premium for more!`,
+      };
+    }
+  }
 
   return {
     allowed: true,
     isPremium,
-    remaining: Math.max(0, limit - (currentCount + 1)),
+    remaining: Math.max(0, limit - newCount),
   };
 }

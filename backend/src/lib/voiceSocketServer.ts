@@ -1,9 +1,8 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { Server } from 'http';
-import sharp from 'sharp';
 import { supabase, supabaseAdmin } from './supabase';
 import { checkVoiceEligibility, recordVoiceMinutesUsed } from './voiceLimits';
-import { startLiveSession, sendAudioChunk, sendVideoChunk, sendTextPrompt, sendImagePrompt, closeLiveSession } from './geminiLive';
+import { startLiveSession, sendAudioChunk, sendVideoChunk, sendTextPrompt, closeLiveSession } from './geminiLive';
 import { logUsageEvent } from './usageEvents';
 
 const ACCOUNTING_INTERVAL_MS = 10_000;
@@ -204,23 +203,6 @@ export function attachVoiceSocketServer(httpServer: Server) {
               const currentElapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
               console.log(`[Voice Server User Turn Received]: Prompt="${msg.data}", turnId=${activeTurnId}, Elapsed=${currentElapsed}s / ${capSeconds}s, Gemini WS state=${liveSession?.readyState}`);
               sendTextPrompt(liveSession, msg.data);
-            } else if (msg.type === 'image_capture') {
-              isTurnInterrupted = false;
-              activeTurnId = msg.turnId || (activeTurnId + 1);
-              pcmBuffer = Buffer.alloc(0);
-
-              const rawBuffer = Buffer.from(msg.data, 'base64');
-              const compressedBuffer = await sharp(rawBuffer)
-                .resize({ width: 768, height: 768, fit: 'inside' })
-                .jpeg({ quality: 65, progressive: true })
-                .toBuffer();
-              const compressedBase64 = compressedBuffer.toString('base64');
-
-              console.log('[Voice Server] Injecting captured photo into live session, caption:', msg.caption || '(none)');
-              sendImagePrompt(liveSession, compressedBase64, msg.caption);
-              if (studentId) await logUsageEvent(dbClient, parentId, studentId, 'live_snapshot');
-
-              clientSocket.send(JSON.stringify({ type: 'snapshot_ack', remaining: 0 }));
             } else if (msg.type === 'video_frame') {
               if (liveSession && liveSession.readyState === WebSocket.OPEN && msg.data) {
                 console.log(`[Voice Server] Forwarding video_frame to Gemini Live (${msg.data.length} chars)`);
@@ -228,8 +210,7 @@ export function attachVoiceSocketServer(httpServer: Server) {
               }
             }
           } catch (err: any) {
-            console.error('[Voice Socket] Bad client message or snapshot processing error:', err.message);
-            clientSocket.send(JSON.stringify({ type: 'snapshot_error', reason: 'Could not process that photo.' }));
+            console.error('[Voice Socket] Bad client message:', err.message);
           }
         })();
       });
