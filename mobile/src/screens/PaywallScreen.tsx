@@ -23,7 +23,7 @@ export default function PaywallScreen({ onBack, onPurchased }: Props) {
 
     if (!targetPackage) {
       if (__DEV__) {
-        Alert.alert('Sandbox Mode', `Simulating ${selectedPlan === 'yearly' ? 'Yearly ($79.99/yr)' : 'Monthly ($9.99/mo)'} purchase for dev testing.`);
+        Alert.alert('Sandbox Mode', `Simulating ${selectedPlan === 'yearly' ? 'Annual ($199/yr)' : 'Monthly ($19.99/mo)'} purchase for dev testing.`);
         onPurchased();
         return;
       }
@@ -55,13 +55,13 @@ export default function PaywallScreen({ onBack, onPurchased }: Props) {
   const yearlyPackage = getAnnualPackage(offering);
   const monthlyPackage = getMonthlyPackage(offering);
 
-  const yearlyPriceText = yearlyPackage?.product?.priceString || '$79.99/year';
-  const monthlyPriceText = monthlyPackage?.product?.priceString || '$9.99/month';
+  const yearlyPriceText = yearlyPackage?.product?.priceString || '$199/year';
+  const monthlyPriceText = monthlyPackage?.product?.priceString || '$19.99/month';
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>Unlock Kidsko Premium 🦉</Text>
-      <Text style={styles.subtitle}>Supercharge your child's learning with unlimited guidance</Text>
+      <Text style={styles.subtitle}>Supercharge your child's learning with expanded Voice, Video & Chat guidance</Text>
 
       {/* Plan Selection Toggle Cards */}
       <View style={styles.plansContainer}>
@@ -71,12 +71,12 @@ export default function PaywallScreen({ onBack, onPurchased }: Props) {
           onPress={() => setSelectedPlan('yearly')}
         >
           <View style={styles.badge}>
-            <Text style={styles.badgeText}>33% OFF • BEST VALUE</Text>
+            <Text style={styles.badgeText}>SAVE 17% • BEST VALUE</Text>
           </View>
           <View style={styles.planHeader}>
             <View>
               <Text style={styles.planTitle}>Annual Plan</Text>
-              <Text style={styles.planPriceDetail}>$6.66 / month (billed yearly)</Text>
+              <Text style={styles.planPriceDetail}>$16.58 / month (billed yearly)</Text>
             </View>
             <Text style={styles.planPrice}>{yearlyPriceText}</Text>
           </View>
@@ -99,9 +99,10 @@ export default function PaywallScreen({ onBack, onPurchased }: Props) {
 
       {/* Features List */}
       <View style={styles.featuresContainer}>
-        <Text style={styles.featureItem}>✓ 2,000 text chat messages / month</Text>
-        <Text style={styles.featureItem}>✓ 25 live voice call minutes / week (~108 min/mo)</Text>
-        <Text style={styles.featureItem}>✓ 20 homework photo helps / week</Text>
+        <Text style={styles.featureItem}>✓ 100 Voice & Video minutes / week (vs. 10 free)</Text>
+        <Text style={styles.featureItem}>✓ 200 text chat messages / week (vs. 30 free)</Text>
+        <Text style={styles.featureItem}>✓ 15 homework photo uploads / week (vs. 3 free)</Text>
+        <Text style={styles.featureItem}>✓ Shared pooled family allowance across all children</Text>
         <Text style={styles.featureItem}>✓ Detailed parent progress reports & transcripts</Text>
       </View>
 
@@ -111,7 +112,7 @@ export default function PaywallScreen({ onBack, onPurchased }: Props) {
           <ActivityIndicator color="#fff" />
         ) : (
           <Text style={styles.buttonText}>
-            {selectedPlan === 'yearly' ? 'Start Annual Plan ($79.99/yr)' : 'Start Monthly Plan ($9.99/mo)'}
+            {selectedPlan === 'yearly' ? 'Start Annual Plan ($199/yr)' : 'Start Monthly Plan ($19.99/mo)'}
           </Text>
         )}
       </Pressable>

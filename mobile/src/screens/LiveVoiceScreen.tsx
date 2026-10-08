@@ -125,7 +125,7 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
         },
         onCapReached: () => {
           setStatus('ended');
-          setErrorReason('Voice limit for this session reached.');
+          setErrorReason('Voice & video limit reached for this session.');
           if (timerRef.current) clearInterval(timerRef.current);
         },
         onError: (reason) => {
@@ -207,7 +207,7 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
           ? 'Connecting to Kidsko Live...'
           : status === 'live'
           ? `Talking to Kidsko (${studentName})`
-          : 'Voice Session Ended'}
+          : 'Call Ended'}
       </Text>
 
       {secondsLeft !== null && status === 'live' && (
