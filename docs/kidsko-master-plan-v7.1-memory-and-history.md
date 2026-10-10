@@ -266,6 +266,7 @@ Scripted: say your name and an interest, and a memory row appears. New chat: "do
 | **Now, before v7** | Phase 1 (both bug fixes). Small, independent, shippable alone. |
 | Before v7 Phase 4 | Phase 2 (history backend). |
 | v7 Phase 4, Step 4.5 | Phase 3 (history drawer in the redesigned Chat). |
+| Before v7 Phase 5 (Call restyle) | Nothing from v7.1 (calls are untouched). Run the 5-minute budget-Android call test first: it is Phase 5's entry gate and baseline. |
 | Any time after Phase 2 | Phase 4 steps 4.1 to 4.4 and 4.6 (memory backend). |
 | v7 Step 6.3 | Phase 4 step 4.5 (Parents "What Kidsko remembers"). |
 | End | Phase 5. |

@@ -66,7 +66,8 @@ The plan builds that in this order: **safety net → design system → low-risk 
 - **One step = one branch commit.** Branch `ui/v7`. Commit message format: `ui(v7-P3.2): <what>`.
 - **Tag first:** `git tag pre-v7` on the current `dev` head (Step 0.1). Rollback for anything is `git revert` of that step's commit, or reset to the tag.
 - **After every step:** `npx tsc --noEmit` passes, the app launches on a real device, and the step's DoD is checked. Do not start the next step until it is.
-- **Diff discipline for fragile files** (`LiveVoiceScreen.tsx`, `ChatScreen.tsx`): after the step, `git diff` must show changes only inside the `styles` object and JSX `style`/text props, plus new wrapper views. Any change inside a hook, effect, handler or service call means revert.
+- **Diff discipline for `LiveVoiceScreen.tsx` (strictly visual, no exceptions):** after the step, `git diff` must show changes only inside the `styles` object and JSX `style`/text props, plus new wrapper views. Any change to a hook, ref, effect, frame loop, socket handler or service call means revert.
+- **Diff discipline for `ChatScreen.tsx` (visual by default, logic only in named steps):** logic changes are allowed in exactly these places and nowhere else: v7.1 Step 1.2 (shared `cleanMessageText`), Step 3.3 (the `embedded` prop that hides the back button inside the tab shell), Step 4.2 (wire the suggestion chips to the existing input, send and attach-modal handlers only, with no new state logic), and Step 4.5 with v7.1 Phase 3 (history drawer, active thread state, load and continue a chat, new chat). Every other change to this file must stay inside `styles` and JSX `style`/text props, plus new wrapper views. Anything beyond the named steps means revert.
 - **One step per agent session.** Paste only that step plus Sections 3 and 4.
 
 ---
@@ -233,6 +234,7 @@ Restyle bubbles (child: coral-strong with white text; Kidsko: white card with a 
 ### Step 4.2 — Empty state with suggestion chips
 When the thread is empty show the mascot, a greeting using the child's name, and 4 static chips (for example "Why is the sky blue?", "Help me with fractions", "Tell me about dinosaurs", "📸 Help with my homework").
 - Chips for questions **fill the input** (or send through the existing send path). They are real messages and count against the weekly limit like any other. The homework chip opens the existing attach modal.
+- **Logic limit:** this is a named exception in the `ChatScreen.tsx` diff rule (Section 4). The only logic allowed is calling the existing input setter, send handler and attach-modal opener from the chip `onPress`. No new state, effects or API calls.
 - **DoD:** tapping a chip behaves exactly like typing that text; the usage count goes up by one; the homework chip opens the attach choices.
 
 ### Step 4.3 — Usage pill and limit copy
@@ -257,7 +259,7 @@ Build exactly as specified in `kidsko-master-plan-v7.1-memory-and-history.md`, P
 
 ## Phase 5 — Call Restyle (highest-risk file: visual layer only)
 
-**Entry gate:** Phase 4 complete **and** the live-video device check from v6 (5+ minutes on a budget Android phone) either passed or consciously accepted as a known risk. **Time:** 1.5 to 2 days.
+**Entry gate:** Phase 4 complete **and** the 5-minute live-video device test from v6 done **before Step 5.1 starts**: a call of 5+ minutes on a budget Android phone, with video toggled on and off twice. Record the result in `docs/v7-regression-checklist.md`. Either it passes, or you consciously accept the risk in writing. This is the baseline Phase 5 is judged against (see the Exit KPI); Phase 7 only re-verifies it at the end. **Time:** 1.5 to 2 days.
 
 > `LiveVoiceScreen.tsx` is where the week of regressions happened. Every step here is judged by its diff. If the diff touches anything other than `styles` and JSX style/text props, revert it.
 
