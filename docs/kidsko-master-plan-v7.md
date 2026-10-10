@@ -39,7 +39,7 @@ The plan builds that in this order: **safety net → design system → low-risk 
 | Changes (this plan) | Never changes (v6 guardrail, stays in force) |
 |---|---|
 | Colors, fonts, spacing, radii, shadows | `mobile/src/services/voiceSocket.ts` |
-| Layout of every screen | `backend/**` (no backend edits in v7 UI phases) |
+| Layout of every screen | `backend/**` (no backend edits in v7 UI phases; the only exception is the history, memory and cache work in `kidsko-master-plan-v7.1-memory-and-history.md`, on its own branch) |
 | Navigation shell: bottom tabs and child switcher | `LiveVoiceScreen.tsx` hooks, effects, refs, handlers, the frame loop, audio logic |
 | Empty states, loading states, suggestion chips | `services/chat.ts`, `services/homework.ts`, `services/billing.ts`, `services/api.ts` call contracts |
 | Wording of labels (never of limits) | Tier numbers: Free 30 msgs / 3 uploads / 10 min per week; Premium 200 / 15 / 100 |
@@ -57,7 +57,7 @@ The plan builds that in this order: **safety net → design system → low-risk 
 | Study schedule, content filter toggles, daily report, limit alerts | **Not built** | No backend. Would be fake UI. |
 | "AI Vision" tap-to-capture homework in Call | **Not built** | v6 puts homework photos in Chat; Call video is continuous. |
 | Fake stats (23 questions, 7-day streak, 34m) | **Not built** | Never ship mock data. Show only data that exists. |
-| Chat history sidebar | **Deferred** | Needs a thread-list read path; Transcript covers it for now (see 0.3). |
+| Chat history drawer (ChatGPT-style, grouped by date, tap to continue) | **Built, see v7.1** | Needs the history endpoints from `kidsko-master-plan-v7.1-memory-and-history.md` (Phase 2); built in Step 4.5. |
 
 ---
 
@@ -95,11 +95,11 @@ Walk the current app and write down pass/fail in `docs/v7-regression-checklist.m
 
 ### Step 0.3 — Verify the three open questions (read-only)
 Search `backend/src/routes` and `mobile/src/services` and answer in writing at the top of the checklist file:
-1. Is there an endpoint that lists a child's chat threads?
+1. Is there an endpoint that lists a child's chat threads? *(Answered Oct 10: **no**. The history endpoints are built in v7.1 Phase 2.)*
 2. Where does the Chat usage pill get its numbers, and does anything expose remaining Voice & Video minutes and plan status (`is_premium`) to the mobile app?
 3. Is there an endpoint to rename or edit a child?
 
-- **DoD:** three answers recorded. Consequences: (1) no → no history sidebar (stays deferred). (2) minutes not exposed → Call card shows the plan limit text without a live count. (3) no → "Edit child" is omitted.
+- **DoD:** three answers recorded. Consequences: (1) no → build v7.1 Phase 2 before Phase 4, and the drawer in Step 4.5. (2) minutes not exposed → Call card shows the plan limit text without a live count. (3) no → "Edit child" is omitted.
 
 ### Step 0.4 — Docs housekeeping
 - Rename `docs/kidsko-v7.html.txt` → `docs/kidsko-v7-prototype.jsx`.
@@ -224,7 +224,7 @@ Hardware back: on full-screen routes go back to the tab shell; on the shell's no
 
 ## Phase 4 — Chat Restyle
 
-**Entry gate:** Phase 3 complete. **Time:** 1.5 days. Fragile-file rules apply (Section 4).
+**Entry gate:** Phase 3 complete, and v7.1 Phase 2 (history endpoints) deployed. **Time:** 2.5 to 3.5 days. Fragile-file rules apply (Section 4).
 
 ### Step 4.1 — Message list and input bar
 Restyle bubbles (child: coral-strong with white text; Kidsko: white card with a mascot avatar), the typing indicator, and the input bar (rounded, large send button, mic and attach buttons ≥44 pt).
@@ -243,7 +243,15 @@ Restyle the pill. **Verify the wording is weekly** ("left this week"); fix any l
 Restyle the attach bottom sheet and the preview strip. Wording stays: camera or gallery. No logic change.
 - **DoD:** baseline row 3 passes on both camera and gallery paths.
 
-**Phase 4 Exit KPI:** ✅ Chat looks like the prototype and behaves identically (baseline rows 2, 3, 4 pass).
+### Step 4.5 — Chat history drawer (ChatGPT-style)
+Build exactly as specified in `kidsko-master-plan-v7.1-memory-and-history.md`, Phase 3 (Steps 3.1 to 3.7), in v7 styling:
+- Hamburger in the Chat header opens a left drawer with a **New chat** button and the active child's chats grouped **Today / Yesterday / Previous 7 Days / Older**.
+- Tapping a chat loads it and continues it (same thread id). The app still opens on a new empty chat, with a "Continue where you left off" card.
+- Deleting a chat is behind the existing `ParentalGate`.
+- Viewing history never changes the usage pill count.
+- **DoD:** the v7.1 Phase 3 Exit KPI scenario passes on the emulator, and baseline rows 2, 3 and 4 still pass.
+
+**Phase 4 Exit KPI:** ✅ Chat looks like the prototype, behaves identically, and shows real chat history that can be continued (baseline rows 2, 3, 4 pass plus the history rows).
 
 ---
 
@@ -284,13 +292,14 @@ Restyle plan cards (Monthly $19.99, Annual $199 with a "best value" ribbon), fea
 - **DoD:** baseline row 4 passes; a production build (release mode) cannot trigger the simulated purchase.
 
 ### Step 6.2 — Transcript restyle
-Card-per-conversation list with date headers, readable message bubbles, an empty state ("No chats yet"). Read-only; still behind the gate.
+Card-per-conversation list with date headers, readable message bubbles, an empty state ("No chats yet"). Read-only; still behind the gate. Use the shared `cleanMessageText` from v7.1 Step 1.2 so raw `[STORAGE:...]` text never appears (shows "📷 Homework photo" instead).
 - **DoD:** baseline row 5 passes; long conversations scroll smoothly.
 
 ### Step 6.3 — Parents hub (real features only)
 Replace Step 3.5's temporary list with a designed hub, in `coralStrong`/navy parent styling:
 - **Children:** list with an **Add another child** form (name only, as today).
 - **Chat history** (the existing Transcript).
+- **What Kidsko remembers** (v7.1 Step 4.5): the child's remembered name and facts with remove buttons, a "Remember things about <child>" switch, and a "Forget everything" button. Behind the gate. Add it once the v7.1 memory backend exists.
 - **Plan:** shows Free or Premium and an Upgrade button (uses the existing paywall route).
 - **Sign out** (gated as today).
 - Add **Edit child** only if Step 0.3 found an existing endpoint.
@@ -321,7 +330,7 @@ Check cold start, tab switching and scrolling the transcript. If gradients or sh
 
 ### Step 7.4 — Remove scaffolding and re-run everything
 Delete the style-guide route and any unused imports/files. Run `tsc`, then the **entire** baseline checklist from Step 0.2, then the existing backend script `verifyPhaseFEndToEnd.ts` as a sanity check that the backend side is untouched.
-- **DoD:** every checklist row passes or is marked pre-existing; `git diff pre-v7..ui/v7 -- backend/` is **empty**; `voiceSocket.ts` is unchanged.
+- **DoD:** every checklist row passes or is marked pre-existing; `git diff pre-v7..ui/v7 -- backend/` is **empty** (or contains only the files listed in v7.1); `voiceSocket.ts` is unchanged.
 
 **Phase 7 Exit KPI:** ✅ Zero regressions against the baseline, backend diff empty, accessibility table complete.
 
@@ -375,7 +384,7 @@ Do these on their own branches so a UI revert never drags them along. None of th
 - Every screen uses the shared theme and components; no hardcoded hex remains in screen files (search for `#` in `mobile/src/screens` returns only theme imports).
 - Navigation is Chat / Call / Parents with a child switcher; Home is gone.
 - The full baseline checklist passes on a **release** build on one iOS and one budget Android device.
-- `backend/**` and `voiceSocket.ts` are unchanged versus `pre-v7`.
+- `backend/**` and `voiceSocket.ts` are unchanged versus `pre-v7`, except the files listed in v7.1 (history, memory, cache fix). Call code (`LiveVoiceScreen.tsx`, `voiceSocket.ts`, `voiceSocketServer.ts`, `geminiLive.ts`) is unchanged.
 - No mock data, no PIN, no fake stats anywhere in the app.
 
 ---
