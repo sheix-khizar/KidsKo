@@ -8,6 +8,7 @@ import { setThreadImage, setThreadStoragePath, registerPendingUpload } from '../
 import { checkAndIncrementUsage } from '../lib/usageLimits';
 import { logUsageEvent } from '../lib/usageEvents';
 import { supabaseAdmin } from '../lib/supabase';
+import { getMemory, buildMemoryBlock } from '../lib/studentMemory';
 
 let uploadMiddleware: any = (_req: any, _res: any, next: any) => next();
 try {
@@ -120,7 +121,15 @@ router.post('/analyze', requireAuth, imageRateLimit, uploadMiddleware, async (re
     });
 
     // Generate AI explanation with Gemini Vision
-    const rawExplanation = await generateHomeworkExplanation(compressedBase64, 'image/jpeg', prompt);
+    const { data: student } = await req.supabase!
+      .from('students')
+      .select('student_name')
+      .eq('id', studentId)
+      .maybeSingle();
+    const memory = await getMemory(req.supabase!, studentId);
+    const memoryBlock = buildMemoryBlock(memory, student?.student_name);
+
+    const rawExplanation = await generateHomeworkExplanation(compressedBase64, 'image/jpeg', prompt, memoryBlock);
     const explanation = sanitizeChatResponse(rawExplanation);
 
     // Save AI response to database

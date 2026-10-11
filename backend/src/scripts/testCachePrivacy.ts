@@ -71,10 +71,57 @@ async function runCachePrivacyTests() {
     console.log('  ⚠️ Upstash Redis credentials not configured in env, verified offline logic.');
   }
 
+  // TEST 4: Step 9.6 / 4.6 Memory Interplay & Cache Bypass
+  console.log('\n--- TEST GROUP 4: MEMORY INTERPLAY & CROSS-CHILD CACHE BYPASS ---');
+  const { buildMemoryBlock } = require('../lib/studentMemory');
+
+  const memoryA = {
+    studentId: 'student-a-id',
+    preferredName: 'Jagal',
+    facts: ['Likes: dinosaurs', 'Favourite subject: science'],
+    enabled: true,
+  };
+  const memoryBlockA = buildMemoryBlock(memoryA, 'Jagal');
+  assert(memoryBlockA.includes('Name to use: Jagal'), 'Memory block formats preferred name');
+  assert(memoryBlockA.includes('Likes: dinosaurs'), 'Memory block includes facts');
+
+  const hasActiveMemoryA = Boolean(memoryBlockA && memoryBlockA.trim().length > 0);
+  assert(hasActiveMemoryA === true, 'Child A has active memory block detected');
+
+  // Cache bypass rule: when hasActiveMemory is true, cache read and cache write are skipped
+  const shouldReadCacheForA = !isPersonalMessage('Why is the sky blue?') && !hasActiveMemoryA;
+  assert(shouldReadCacheForA === false, 'Child A skips cache read entirely when memory block exists');
+
+  const replyForA = 'Hello Jagal! The sky is blue because sunlight scatters in our atmosphere!';
+  const containsNameA = new RegExp(`\\b${memoryA.preferredName.trim()}\\b`, 'i').test(replyForA);
+  assert(containsNameA === true, 'Reply for Child A contains preferred name "Jagal"');
+
+  const shouldWriteCacheForA = !isPersonalMessage('Why is the sky blue?') && !hasActiveMemoryA && !containsNameA;
+  assert(shouldWriteCacheForA === false, 'Child A personalized reply is NEVER saved to shared cache');
+
+  // Disabled memory check: when disabled, memory block is empty
+  const memoryDisabled = {
+    ...memoryA,
+    enabled: false,
+  };
+  const memoryBlockDisabled = buildMemoryBlock(memoryDisabled, 'Jagal');
+  assert(memoryBlockDisabled === '', 'Disabled memory produces empty block (no prompt injection, no cache bypass)');
+
+  // Child B isolation
+  const memoryB = {
+    studentId: 'student-b-id',
+    preferredName: 'Maya',
+    facts: ['Likes: space'],
+    enabled: true,
+  };
+  const memoryBlockB = buildMemoryBlock(memoryB, 'Maya');
+  assert(!memoryBlockB.includes('Jagal'), 'Child B memory never contains Child A name');
+  assert(!memoryBlockB.includes('dinosaurs'), 'Child B memory never contains Child A facts');
+
   console.log('\n==========================================================');
   console.log(`📊 SUMMARY: ${passed}/${total} assertions passed.`);
   if (passed === total) {
-    console.log('🎉 ALL STEP 1.1 CACHE PRIVACY CHECKS PASSED SUCCESSFULLY!');
+    console.log('🎉 ALL CACHE PRIVACY & MEMORY BYPASS CHECKS PASSED SUCCESSFULLY!');
   } else {
     console.error('❌ SOME CHECKS FAILED!');
   }

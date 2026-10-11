@@ -4,7 +4,7 @@ export async function logUsageEvent(
   supabase: SupabaseClient,
   parentId: string,
   studentId: string,
-  eventType: 'message' | 'scan' | 'cache_hit' | 'live_snapshot'
+  eventType: 'message' | 'scan' | 'cache_hit' | 'live_snapshot' | 'voice_trial' | 'memory'
 ): Promise<void> {
   // Fire-and-forget by design — a logging failure should never break the user-facing request
   const { error } = await supabase.from('usage_events').insert({
