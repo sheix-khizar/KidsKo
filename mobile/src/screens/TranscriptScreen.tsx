@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
 import { getTranscript } from '../services/api';
+import { cleanMessageText } from '../utils/messageText';
 
 type Message = { role: string; content: string; message_type?: string; created_at: string };
 
@@ -52,7 +53,7 @@ export default function TranscriptScreen({ studentId, studentName, onBack }: Pro
               <View style={[styles.bubble, isUser ? styles.userBubble : styles.assistantBubble]}>
                 <Text style={styles.roleLabel}>{isUser ? studentName : 'Kidsko AI 🦉'}</Text>
                 <Text style={[styles.messageText, isUser ? styles.userText : styles.assistantText]}>
-                  {item.content}
+                  {cleanMessageText(item.content)}
                 </Text>
                 <Text style={styles.timeText}>
                   {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

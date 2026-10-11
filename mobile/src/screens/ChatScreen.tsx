@@ -16,6 +16,7 @@ import { sendMessage, Message } from '../services/chat';
 import { analyzeHomework } from '../services/homework';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import { pickImageFromGallery, captureImageFromCamera, ProcessedImage } from '../utils/imageHelper';
+import { cleanMessageText } from '../utils/messageText';
 
 type Props = {
   studentId: string;
@@ -52,15 +53,6 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
     setInput(transcript);
   });
 
-  const cleanBubbleContent = (content: string) => {
-    if (content.includes('[STORAGE:') || content.includes('[IMAGE:')) {
-      return content
-        .replace(/📸\s*\[STORAGE:.*?\]\s*/g, '📸 ')
-        .replace(/📸\s*\[IMAGE:.*?\]\s*/g, '📸 ')
-        .trim();
-    }
-    return content;
-  };
 
   const handleSend = async () => {
     const userText = input.trim();
@@ -187,7 +179,7 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
               </View>
               <View style={[styles.bubble, item.role === 'user' && styles.bubbleUser]}>
                 <Text style={[styles.bubbleText, item.role === 'user' && styles.bubbleTextUser]}>
-                  {cleanBubbleContent(item.content)}
+                  {cleanMessageText(item.content)}
                 </Text>
               </View>
             </View>
