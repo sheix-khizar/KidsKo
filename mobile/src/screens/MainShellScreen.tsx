@@ -27,6 +27,7 @@ type Props = {
   onOpenTranscript: (student: Student) => void;
   onStartCall: (student: Student) => void;
   onLimitReached: () => void;
+  billingVersion?: number;
 };
 
 export default function MainShellScreen({
@@ -35,6 +36,7 @@ export default function MainShellScreen({
   onOpenTranscript,
   onStartCall,
   onLimitReached,
+  billingVersion = 0,
 }: Props) {
   const [tab, setTab] = useState<TabKey>('chat');
   const [isPremium, setIsPremium] = useState(false);
@@ -87,6 +89,12 @@ export default function MainShellScreen({
     })();
     loadStudentList();
   }, []);
+
+  // Re-check the plan after a purchase (the shell stays mounted behind the paywall)
+  useEffect(() => {
+    if (billingVersion === 0) return;
+    isPremiumActive().then(setIsPremium).catch(() => {});
+  }, [billingVersion]);
 
   // Handle hardware back on Android: return to 'chat' tab before exiting
   useEffect(() => {
@@ -289,6 +297,7 @@ export default function MainShellScreen({
                   onOpenTranscript={onOpenTranscript}
                   onOpenPaywall={onOpenPaywall}
                   onRequestLogout={() => setLogoutGateVisible(true)}
+                  billingVersion={billingVersion}
                 />
 
                 {/* Logout Parental Gate */}

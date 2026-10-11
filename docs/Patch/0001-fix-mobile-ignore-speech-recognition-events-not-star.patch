@@ -1,0 +1,92 @@
+From a385f6826a529e3e531f310d43ae19a6dc308df4 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 12 Oct 2026 02:52:08 +0500
+Subject: [PATCH 1/2] fix(mobile): ignore speech-recognition events not started
+ by this chat's mic
+
+ChatScreen now stays mounted behind the call screen, and expo-speech-recognition
+events are app-wide, so words spoken during a live call could be typed into the
+hidden chat input. useVoiceInput now only reacts while its own mic is active.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01REAKZC8Lf9sZR4W9koY12Z
+---
+ mobile/src/hooks/useVoiceInput.ts | 32 +++++++++++++++++++++++--------
+ 1 file changed, 24 insertions(+), 8 deletions(-)
+
+diff --git a/mobile/src/hooks/useVoiceInput.ts b/mobile/src/hooks/useVoiceInput.ts
+index 62214e3..d92c535 100644
+--- a/mobile/src/hooks/useVoiceInput.ts
++++ b/mobile/src/hooks/useVoiceInput.ts
+@@ -1,4 +1,4 @@
+-import { useState, useCallback } from 'react';
++import { useState, useCallback, useRef } from 'react';
+ import { Alert } from 'react-native';
+ 
+ // Safely import expo-speech-recognition without crashing in standard Expo Go or clean APKs
+@@ -15,14 +15,30 @@ try {
+ 
+ export function useVoiceInput(onResult: (text: string) => void) {
+   const [listening, setListening] = useState(false);
++  // Speech-recognition events are app-wide. This ref makes sure this hook only reacts to
++  // sessions that its own mic button started, so e.g. a hidden-but-mounted ChatScreen never
++  // receives words spoken during a live call.
++  const listeningRef = useRef(false);
++
++  const setActive = useCallback((value: boolean) => {
++    listeningRef.current = value;
++    setListening(value);
++  }, []);
+ 
+   if (useSpeechRecognitionEvent && ExpoSpeechRecognitionModule) {
+     useSpeechRecognitionEvent('result', (event: any) => {
++      if (!listeningRef.current) return;
+       const transcript = event.results?.[0]?.transcript;
+       if (transcript) onResult(transcript);
+     });
+-    useSpeechRecognitionEvent('end', () => setListening(false));
+-    useSpeechRecognitionEvent('error', () => setListening(false));
++    useSpeechRecognitionEvent('end', () => {
++      if (!listeningRef.current) return;
++      setActive(false);
++    });
++    useSpeechRecognitionEvent('error', () => {
++      if (!listeningRef.current) return;
++      setActive(false);
++    });
+   }
+ 
+   const startListening = useCallback(async () => {
+@@ -38,7 +54,7 @@ export function useVoiceInput(onResult: (text: string) => void) {
+       const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+       if (!result.granted) return;
+ 
+-      setListening(true);
++      setActive(true);
+       ExpoSpeechRecognitionModule.start({
+         lang: 'en-US',
+         interimResults: false,
+@@ -46,16 +62,16 @@ export function useVoiceInput(onResult: (text: string) => void) {
+       });
+     } catch (err: any) {
+       Alert.alert('Speech Error', err.message);
+-      setListening(false);
++      setActive(false);
+     }
+-  }, []);
++  }, [setActive]);
+ 
+   const stopListening = useCallback(() => {
+     if (ExpoSpeechRecognitionModule) {
+       ExpoSpeechRecognitionModule.stop();
+     }
+-    setListening(false);
+-  }, []);
++    setActive(false);
++  }, [setActive]);
+ 
+   return { listening, startListening, stopListening };
+ }
+-- 
+2.43.0
+

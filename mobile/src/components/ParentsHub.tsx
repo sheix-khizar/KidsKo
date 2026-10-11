@@ -28,6 +28,7 @@ type Props = {
   onOpenTranscript: (student: Student) => void;
   onOpenPaywall: () => void;
   onRequestLogout: () => void;
+  billingVersion?: number;
 };
 
 export default function ParentsHub({
@@ -38,6 +39,7 @@ export default function ParentsHub({
   onOpenTranscript,
   onOpenPaywall,
   onRequestLogout,
+  billingVersion = 0,
 }: Props) {
   // Add child state
   const [newChildName, setNewChildName] = useState('');
@@ -57,7 +59,7 @@ export default function ParentsHub({
       const premium = await isPremiumActive();
       setIsPremium(premium);
     })();
-  }, []);
+  }, [billingVersion]);
 
   const fetchMemory = async (studentId: string) => {
     setLoadingMemory(true);

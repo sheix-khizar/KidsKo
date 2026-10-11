@@ -33,6 +33,8 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>('checking');
   const [activeStudent, setActiveStudent] = useState<Student | null>(null);
   const [gateVisible, setGateVisible] = useState(false);
+  // Bumped after a successful purchase so mounted screens re-check the plan.
+  const [billingVersion, setBillingVersion] = useState(0);
 
   useEffect(() => {
     (async () => {
@@ -101,6 +103,7 @@ export default function App() {
               setScreen('liveVoice');
             }}
             onLimitReached={handleLimitReached}
+            billingVersion={billingVersion}
           />
         </View>
 
@@ -108,6 +111,7 @@ export default function App() {
           <PaywallScreen
             onBack={() => setScreen('main')}
             onPurchased={() => {
+              setBillingVersion((v) => v + 1);
               setScreen('main');
             }}
           />
