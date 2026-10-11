@@ -11,13 +11,22 @@ import {
   ActivityIndicator,
   Modal,
   Image,
+  ScrollView,
 } from 'react-native';
+import { Mascot } from '../ui';
 import { sendMessage, Message } from '../services/chat';
 import { analyzeHomework } from '../services/homework';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import { pickImageFromGallery, captureImageFromCamera, ProcessedImage } from '../utils/imageHelper';
 import { cleanMessageText } from '../utils/messageText';
 import { colors, radii, typography, spacing } from '../theme';
+
+const SUGGESTION_CHIPS = [
+  { text: 'Why is the sky blue?', isHomework: false },
+  { text: 'Help me with fractions', isHomework: false },
+  { text: 'Tell me about dinosaurs', isHomework: false },
+  { text: '📸 Help with my homework', isHomework: true },
+];
 
 type Props = {
   studentId: string;
@@ -172,11 +181,34 @@ export default function ChatScreen({
       </View>
 
       {messages.length === 0 ? (
-        <View style={styles.welcome}>
-          <Text style={styles.welcomeEmoji}>🦉</Text>
-          <Text style={styles.welcomeTitle}>Ask me anything!</Text>
-          <Text style={styles.welcomeSubtitle}>Type, tap the mic 🎙️, or tap 📷 to send homework photos!</Text>
-        </View>
+        <ScrollView contentContainerStyle={styles.welcomeContainer}>
+          <Mascot size="m" style={{ marginBottom: 12 }} />
+          <Text style={styles.welcomeTitle}>Hi, {studentName}! 🦉</Text>
+          <Text style={styles.welcomeSubtitle}>What would you like to explore today?</Text>
+
+          <View style={styles.chipsContainer}>
+            {SUGGESTION_CHIPS.map((chip, idx) => (
+              <Pressable
+                key={idx}
+                style={({ pressed }) => [
+                  styles.chipButton,
+                  pressed && styles.chipButtonPressed,
+                ]}
+                onPress={() => {
+                  if (chip.isHomework) {
+                    setShowImagePickerModal(true);
+                  } else {
+                    setInput(chip.text);
+                  }
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={chip.text}
+              >
+                <Text style={styles.chipText}>{chip.text}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </ScrollView>
       ) : (
         <FlatList
           ref={listRef}
@@ -326,10 +358,51 @@ const styles = StyleSheet.create({
     borderColor: '#FDE047',
   },
   usagePillText: { ...typography.caption, fontSize: 11, fontWeight: '800', color: colors.text },
-  welcome: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
-  welcomeEmoji: { fontSize: 56, marginBottom: 10 },
-  welcomeTitle: { ...typography.heading, fontSize: 22, color: colors.text },
-  welcomeSubtitle: { ...typography.body, fontSize: 14, color: colors.subtext, marginTop: 6, textAlign: 'center' },
+  welcomeContainer: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  welcomeTitle: {
+    ...typography.heading,
+    fontSize: 22,
+    color: colors.text,
+    textAlign: 'center',
+  },
+  welcomeSubtitle: {
+    ...typography.body,
+    fontSize: 14,
+    color: colors.subtext,
+    marginTop: 6,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  chipsContainer: {
+    width: '100%',
+    maxWidth: 340,
+    gap: 10,
+  },
+  chipButton: {
+    backgroundColor: colors.cardBg,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: radii.lg,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chipButtonPressed: {
+    backgroundColor: colors.cardBgMuted,
+    borderColor: colors.coralStrong,
+  },
+  chipText: {
+    ...typography.body,
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text,
+  },
   messagesList: { flex: 1, backgroundColor: colors.background },
   msgRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
   msgRowUser: { flexDirection: 'row-reverse' },
