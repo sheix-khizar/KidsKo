@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import ChatScreen from './ChatScreen';
 import ParentalGate from '../components/ParentalGate';
+import ParentsHub from '../components/ParentsHub';
 import { getStudents, createStudent, clearToken, getSavedUserId } from '../services/api';
 import { configureBilling } from '../services/billing';
 import { TabBar, TabKey } from '../ui/TabBar';
@@ -275,54 +276,16 @@ export default function MainShellScreen({
                 />
               </View>
             ) : (
-              <ScrollView contentContainerStyle={styles.parentsContent}>
-                <Text style={styles.parentsTitle}>Parents Area 🔒</Text>
-                <Text style={styles.parentsSub}>Review chat history, plans, and parent settings.</Text>
-
-                <View style={styles.parentsList}>
-                  {activeStudent && (
-                    <Card
-                      style={styles.actionCard}
-                      onPress={() => onOpenTranscript(activeStudent)}
-                    >
-                      <View style={styles.actionCardRow}>
-                        <Text style={styles.actionCardIcon}>📜</Text>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.actionCardTitle}>Chat History & Transcripts</Text>
-                          <Text style={styles.actionCardSub}>
-                            View what {activeStudent.student_name} asked Kidsko
-                          </Text>
-                        </View>
-                        <Text style={styles.actionCardArrow}>→</Text>
-                      </View>
-                    </Card>
-                  )}
-
-                  <Card style={styles.actionCard} onPress={onOpenPaywall}>
-                    <View style={styles.actionCardRow}>
-                      <Text style={styles.actionCardIcon}>⭐</Text>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.actionCardTitle}>Subscription & Limits</Text>
-                        <Text style={styles.actionCardSub}>Manage Premium plan ($19.99/mo)</Text>
-                      </View>
-                      <Text style={styles.actionCardArrow}>→</Text>
-                    </View>
-                  </Card>
-
-                  <Card
-                    style={styles.actionCard}
-                    onPress={() => setLogoutGateVisible(true)}
-                  >
-                    <View style={styles.actionCardRow}>
-                      <Text style={styles.actionCardIcon}>🚪</Text>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.actionCardTitle}>Sign Out</Text>
-                        <Text style={styles.actionCardSub}>Log out of your parent account</Text>
-                      </View>
-                      <Text style={styles.actionCardArrow}>→</Text>
-                    </View>
-                  </Card>
-                </View>
+              <ScrollView contentContainerStyle={{ paddingBottom: 60 }} bounces={false}>
+                <ParentsHub
+                  students={students}
+                  activeStudent={activeStudent}
+                  onSelectStudent={(st) => setActiveStudent(st)}
+                  onRefreshStudents={loadStudentList}
+                  onOpenTranscript={onOpenTranscript}
+                  onOpenPaywall={onOpenPaywall}
+                  onRequestLogout={() => setLogoutGateVisible(true)}
+                />
 
                 {/* Logout Parental Gate */}
                 <ParentalGate

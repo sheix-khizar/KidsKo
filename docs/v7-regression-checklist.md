@@ -43,8 +43,8 @@ These rows represent new features introduced in Plan v7.1. They are expected to 
 | **H4** | 48-hour photo expiration note ("Photo removed after 2 days for privacy") | Stage 6 & 7 | ✅ **PASS** | Formatted in `cleanMessageForClient` and `ChatScreen.tsx`. |
 | **H5** | Delete chat thread behind ParentalGate | Stage 7 | ✅ **PASS** | Long-press triggers `ParentalGate` before calling DELETE endpoint. |
 | **M1** | Child memory recall in new chat ("knows my name across sessions") | Stage 9 | ✅ **PASS** | `student_memory` engine & prompt block in `gemini.ts` verified with live Gemini recall. |
-| **M2** | Memory toggle switch OFF stops fact extraction & prompt injection | Stage 9 & 10 | ✅ **PASS (Backend)** | Backend `enabled` flag stops injection & extraction; UI controls landing in Stage 10. |
-| **M3** | "Forget everything" button in Parents Hub erases all stored facts | Stage 9 & 10 | ✅ **PASS (Backend)** | `DELETE /api/students/:id/memory` endpoint verified; UI landing in Stage 10. |
+| **M2** | Memory toggle switch OFF stops fact extraction & prompt injection | Stage 9 & 10 | ✅ **PASS** | Switch toggle in `ParentsHub.tsx` connected to `updateStudentMemory`. |
+| **M3** | "Forget everything" button in Parents Hub erases all stored facts | Stage 9 & 10 | ✅ **PASS** | `Alert.alert` confirmation & `clearStudentMemory` in `ParentsHub.tsx`. |
 
 ---
 
@@ -66,5 +66,14 @@ These rows represent new features introduced in Plan v7.1. They are expected to 
 - **Parent Endpoints (9.5)**: `GET`, `PUT`, `DELETE /api/students/:id/memory` with parental ownership enforcement.
 - **Cache Interplay (9.6)**: Active memory bypasses cache read & write; `testCachePrivacy.ts` extended and passing 26/26.
 - **Test Suite (9.8)**: `testStudentMemory.ts` passes 35/35 (100%).
+
+---
+
+## 6. Stage 10 Paywall, Transcript & Parents Hub Verification (v7 Phase 6)
+
+- **Paywall (10.1)**: `PaywallScreen.tsx` restyled with v7 theme, annual best-value ribbon, parent-facing features, trust line ("🔒 No ads. Kids' data stays private."), clear close/cancel actions, and `__DEV__` guard on sandbox purchases.
+- **Transcript (10.2)**: `TranscriptScreen.tsx` restyled with card bubbles, grouped date headers, clean typography with `cleanMessageText`, and empty state.
+- **Parents Hub (10.3)**: `ParentsHub.tsx` designed hub behind `ParentalGate` with child switcher, add child form, "What Kidsko remembers" memory toggle switch & fact chips with ✕ remove, "Forget everything" alert, plan allowance status, and sign out.
+
 
 

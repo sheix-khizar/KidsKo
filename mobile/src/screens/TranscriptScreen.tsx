@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { View, Text, Pressable, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
 import { getTranscript } from '../services/api';
 import { cleanMessageText } from '../utils/messageText';
+import { colors, radii, spacing, typography } from '../theme';
 
 type Message = { role: string; content: string; message_type?: string; created_at: string };
 
@@ -10,6 +11,10 @@ type Props = {
   studentName: string;
   onBack: () => void;
 };
+
+type GroupedItem =
+  | { type: 'header'; date: string }
+  | { type: 'message'; message: Message; id: string };
 
 export default function TranscriptScreen({ studentId, studentName, onBack }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -29,39 +34,137 @@ export default function TranscriptScreen({ studentId, studentName, onBack }: Pro
     })();
   }, [studentId]);
 
+  // Group messages chronologically with friendly date headers
+  const listItems: GroupedItem[] = useMemo(() => {
+    if (!messages.length) return [];
+
+    const items: GroupedItem[] = [];
+    let lastDateStr = '';
+
+    messages.forEach((msg, idx) => {
+      const msgDate = new Date(msg.created_at);
+      const today = new Date();
+      const yesterday = new Date(Date.now() - 86400000);
+
+      let dateHeader = '';
+      if (msgDate.toDateString() === today.toDateString()) {
+        dateHeader = 'Today';
+      } else if (msgDate.toDateString() === yesterday.toDateString()) {
+        dateHeader = 'Yesterday';
+      } else {
+        dateHeader = msgDate.toLocaleDateString(undefined, {
+          month: 'short',
+          day: 'numeric',
+          year: msgDate.getFullYear() !== today.getFullYear() ? 'numeric' : undefined,
+        });
+      }
+
+      if (dateHeader !== lastDateStr) {
+        items.push({ type: 'header', date: dateHeader });
+        lastDateStr = dateHeader;
+      }
+
+      items.push({
+        type: 'message',
+        message: msg,
+        id: `${msg.created_at}_${idx}`,
+      });
+    });
+
+    return items;
+  }, [messages]);
+
   return (
     <View style={styles.container}>
+      {/* Header Bar */}
       <View style={styles.header}>
-        <Pressable onPress={onBack} style={styles.backBtn}>
+        <Pressable
+          onPress={onBack}
+          style={styles.backBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Back to Parents Hub"
+        >
           <Text style={styles.backText}>← Back</Text>
         </Pressable>
-        <Text style={styles.title}>{studentName}'s Chat Transcript 📜</Text>
+        <View style={styles.headerTitleWrap}>
+          <Text style={styles.title} numberOfLines={1}>
+            {studentName}'s Transcript
+          </Text>
+          <Text style={styles.subTitle}>Read-only parental oversight</Text>
+        </View>
+        <View style={{ width: 44 }} />
       </View>
 
-      {errorMsg && <Text style={styles.error}>{errorMsg}</Text>}
+      {errorMsg && (
+        <View style={styles.errorBox}>
+          <Text style={styles.errorText}>{errorMsg}</Text>
+        </View>
+      )}
 
       {loading ? (
-        <ActivityIndicator style={styles.center} size="large" color="#1a73e8" />
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={colors.coralStrong} />
+          <Text style={styles.loadingText}>Loading transcript…</Text>
+        </View>
       ) : (
         <FlatList
-          data={messages}
-          keyExtractor={(_, index) => index.toString()}
-          contentContainerStyle={{ padding: 16 }}
+          data={listItems}
+          keyExtractor={(item) => (item.type === 'header' ? `h_${item.date}` : item.id)}
+          contentContainerStyle={styles.listContent}
           renderItem={({ item }) => {
-            const isUser = item.role === 'user';
+            if (item.type === 'header') {
+              return (
+                <View style={styles.dateHeaderWrap}>
+                  <View style={styles.dateHeaderPill}>
+                    <Text style={styles.dateHeaderText}>{item.date}</Text>
+                  </View>
+                </View>
+              );
+            }
+
+            const { message } = item;
+            const isUser = message.role === 'user';
+            const timeStr = new Date(message.created_at).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+            });
+
             return (
-              <View style={[styles.bubble, isUser ? styles.userBubble : styles.assistantBubble]}>
-                <Text style={styles.roleLabel}>{isUser ? studentName : 'Kidsko AI 🦉'}</Text>
-                <Text style={[styles.messageText, isUser ? styles.userText : styles.assistantText]}>
-                  {cleanMessageText(item.content)}
-                </Text>
-                <Text style={styles.timeText}>
-                  {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              <View
+                style={[
+                  styles.bubbleCard,
+                  isUser ? styles.userBubbleCard : styles.assistantBubbleCard,
+                ]}
+              >
+                <View style={styles.bubbleHeader}>
+                  <Text style={[styles.roleLabel, isUser ? styles.userRoleLabel : styles.assistantRoleLabel]}>
+                    {isUser ? `🧒 ${studentName}` : '🦉 Kidsko'}
+                  </Text>
+                  <Text style={styles.timeText}>{timeStr}</Text>
+                </View>
+
+                <Text
+                  style={[
+                    styles.messageText,
+                    isUser ? styles.userMessageText : styles.assistantMessageText,
+                  ]}
+                >
+                  {cleanMessageText(message.content)}
                 </Text>
               </View>
             );
           }}
-          ListEmptyComponent={<Text style={styles.empty}>No transcript history available for this student.</Text>}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <View style={styles.emptyIconBadge}>
+                <Text style={styles.emptyIcon}>📜</Text>
+              </View>
+              <Text style={styles.emptyTitle}>No chats yet</Text>
+              <Text style={styles.emptySub}>
+                When {studentName} asks Kidsko questions, conversations will appear here.
+              </Text>
+            </View>
+          }
         />
       )}
     </View>
@@ -69,41 +172,180 @@ export default function TranscriptScreen({ studentId, studentName, onBack }: Pro
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f7f9fc', paddingTop: 50 },
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+    paddingTop: 48,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-    backgroundColor: '#fff',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
+    borderBottomWidth: 1.5,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.cardBg,
   },
-  backBtn: { paddingRight: 12 },
-  backText: { color: '#1a73e8', fontWeight: '700', fontSize: 16 },
-  title: { fontSize: 18, fontWeight: '800', color: '#111', flex: 1 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  error: { color: '#EA4335', textAlign: 'center', margin: 16 },
-  empty: { textAlign: 'center', color: '#9ca3af', marginTop: 40, fontSize: 15 },
-  bubble: {
-    maxWidth: '85%',
-    borderRadius: 16,
-    padding: 12,
-    marginBottom: 10,
+  backBtn: {
+    minHeight: 44,
+    minWidth: 44,
+    justifyContent: 'center',
+    alignItems: 'flex-start',
   },
-  userBubble: {
-    alignSelf: 'flex-end',
-    backgroundColor: '#1a73e8',
+  backText: {
+    color: colors.coralStrong,
+    fontWeight: '800',
+    fontSize: 15,
   },
-  assistantBubble: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#fff',
+  headerTitleWrap: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 17,
+    fontWeight: '900',
+    color: colors.text,
+  },
+  subTitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.subtext,
+    marginTop: 1,
+  },
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.subtext,
+  },
+  errorBox: {
+    margin: spacing.lg,
+    padding: spacing.md,
+    borderRadius: radii.md,
+    backgroundColor: '#FDE8E8',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: colors.error,
   },
-  roleLabel: { fontSize: 11, fontWeight: '700', marginBottom: 2, color: '#6b7280' },
-  messageText: { fontSize: 15, lineHeight: 20 },
-  userText: { color: '#fff' },
-  assistantText: { color: '#111' },
-  timeText: { fontSize: 10, color: '#9ca3af', marginTop: 4, alignSelf: 'flex-end' },
+  errorText: {
+    color: colors.error,
+    textAlign: 'center',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  listContent: {
+    padding: spacing.lg,
+    paddingBottom: 32,
+  },
+  dateHeaderWrap: {
+    alignItems: 'center',
+    marginVertical: spacing.md,
+  },
+  dateHeaderPill: {
+    backgroundColor: colors.cardBgMuted,
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  dateHeaderText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.subtext,
+    letterSpacing: 0.3,
+  },
+  bubbleCard: {
+    borderRadius: radii.lg,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    maxWidth: '88%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  userBubbleCard: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#FFF2EB',
+    borderWidth: 1.5,
+    borderColor: '#FBD3C1',
+  },
+  assistantBubbleCard: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.cardBg,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+  },
+  bubbleHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+    gap: 10,
+  },
+  roleLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  userRoleLabel: {
+    color: colors.coralStrong,
+  },
+  assistantRoleLabel: {
+    color: colors.parentNavy,
+  },
+  timeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: colors.subtext,
+  },
+  messageText: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '500',
+  },
+  userMessageText: {
+    color: colors.text,
+  },
+  assistantMessageText: {
+    color: colors.text,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: spacing.xl,
+  },
+  emptyIconBadge: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: colors.cardBg,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+  },
+  emptyIcon: {
+    fontSize: 32,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.text,
+    marginBottom: spacing.xs,
+  },
+  emptySub: {
+    textAlign: 'center',
+    color: colors.subtext,
+    fontSize: 13,
+    lineHeight: 18,
+  },
 });
