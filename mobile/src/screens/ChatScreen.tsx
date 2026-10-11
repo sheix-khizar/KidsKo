@@ -372,7 +372,12 @@ export default function ChatScreen({
             <Text style={styles.attachmentTitle}>Homework Photo Attached 📷</Text>
             <Text style={styles.attachmentSub}>Type your question below or tap send</Text>
           </View>
-          <Pressable style={styles.removeAttachmentBtn} onPress={() => setPreviewImage(null)}>
+          <Pressable
+            style={styles.removeAttachmentBtn}
+            onPress={() => setPreviewImage(null)}
+            accessibilityRole="button"
+            accessibilityLabel="Remove attached photo"
+          >
             <Text style={styles.removeAttachmentText}>✕</Text>
           </Pressable>
         </View>
@@ -449,7 +454,12 @@ export default function ChatScreen({
               <Text style={styles.optionButtonTextSecondary}>🖼️ Choose from Gallery</Text>
             </Pressable>
 
-            <Pressable style={styles.cancelModalButton} onPress={() => setShowImagePickerModal(false)}>
+            <Pressable
+              style={styles.cancelModalButton}
+              onPress={() => setShowImagePickerModal(false)}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel"
+            >
               <Text style={styles.cancelModalText}>Cancel</Text>
             </Pressable>
           </View>
@@ -751,16 +761,16 @@ const styles = StyleSheet.create({
   attachmentTitle: { ...typography.label, fontSize: 13, color: colors.text },
   attachmentSub: { ...typography.caption, fontSize: 11, color: colors.subtext },
   removeAttachmentBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: colors.white,
     borderWidth: 1,
     borderColor: colors.border,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  removeAttachmentText: { color: colors.subtext, fontSize: 14, fontWeight: '800' },
+  removeAttachmentText: { color: colors.subtext, fontSize: 16, fontWeight: '800' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalContent: {
     backgroundColor: colors.cardBg,
@@ -786,6 +796,13 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   optionButtonTextSecondary: { color: colors.text, fontWeight: '800', fontSize: 15 },
-  cancelModalButton: { marginTop: 8, paddingVertical: 10 },
+  cancelModalButton: {
+    marginTop: 8,
+    minHeight: 44,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   cancelModalText: { color: colors.subtext, fontWeight: '700', fontSize: 15 },
 });

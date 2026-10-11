@@ -47,10 +47,20 @@ export default function ParentalGate({ visible, onSuccess, onCancel }: Props) {
             autoFocus
           />
           {error && <Text style={styles.errorText}>That's not quite right — try again.</Text>}
-          <Pressable style={styles.button} onPress={handleSubmit}>
+          <Pressable
+            style={styles.button}
+            onPress={handleSubmit}
+            accessibilityRole="button"
+            accessibilityLabel="Continue"
+          >
             <Text style={styles.buttonText}>Continue</Text>
           </Pressable>
-          <Pressable onPress={onCancel}>
+          <Pressable
+            style={styles.cancelBtn}
+            onPress={onCancel}
+            accessibilityRole="button"
+            accessibilityLabel="Cancel"
+          >
             <Text style={styles.cancel}>Cancel</Text>
           </Pressable>
         </View>
@@ -77,7 +87,23 @@ const styles = StyleSheet.create({
   },
   inputError: { borderColor: '#EA4335' },
   errorText: { color: '#EA4335', fontSize: 12, marginBottom: 8 },
-  button: { backgroundColor: '#1a73e8', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 32, marginTop: 4 },
+  button: {
+    backgroundColor: '#1a73e8',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+    marginTop: 4,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   buttonText: { color: '#fff', fontWeight: '700' },
-  cancel: { color: '#9ca3af', marginTop: 12, fontWeight: '600' },
+  cancelBtn: {
+    marginTop: 8,
+    minHeight: 44,
+    paddingHorizontal: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cancel: { color: '#9ca3af', fontWeight: '600' },
 });

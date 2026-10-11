@@ -246,7 +246,13 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
                 <View style={styles.liveDot} />
                 <Text style={styles.liveVideoBadgeText}>LIVE VIDEO</Text>
               </View>
-              <Pressable style={styles.cameraOverlayToggle} onPress={handleToggleVideo}>
+              <Pressable
+                style={styles.cameraOverlayToggle}
+                onPress={handleToggleVideo}
+                accessibilityRole="button"
+                accessibilityLabel="Turn off live camera"
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
                 <Text style={styles.cameraOverlayToggleText}>✕ Turn Off</Text>
               </Pressable>
             </View>
@@ -301,6 +307,8 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
           <Pressable
             style={[styles.videoToggleButton, isVideoActive && styles.videoToggleButtonActive]}
             onPress={handleToggleVideo}
+            accessibilityRole="button"
+            accessibilityLabel={isVideoActive ? 'Turn off live video' : 'Start live video'}
           >
             <Text style={styles.videoToggleButtonText}>
               {isVideoActive ? '📹 Turn Off Video' : '📹 Start Live Video'}
@@ -398,6 +406,9 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     paddingVertical: 12,
     paddingHorizontal: 22,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
     borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.15)',
   },

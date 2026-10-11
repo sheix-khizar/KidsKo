@@ -16,12 +16,11 @@ import {
   Nunito_800ExtraBold,
   Nunito_900Black,
 } from '@expo-google-fonts/nunito';
-import StyleGuideScreen from './src/ui/StyleGuideScreen';
 import { getToken } from './src/services/api';
 import { loadSavedApiUrl } from './src/services/config';
 
 type Student = { id: string; student_name: string };
-type Screen = 'checking' | 'register' | 'login' | 'main' | 'paywall' | 'transcript' | 'liveVoice' | 'styleguide';
+type Screen = 'checking' | 'register' | 'login' | 'main' | 'paywall' | 'transcript' | 'liveVoice';
 
 export default function App() {
   const [fontsLoaded] = useFonts({
@@ -52,7 +51,7 @@ export default function App() {
   // Hardware back button on Android
   useEffect(() => {
     const onBackPress = () => {
-      if (screen === 'liveVoice' || screen === 'transcript' || screen === 'paywall' || screen === 'styleguide') {
+      if (screen === 'liveVoice' || screen === 'transcript' || screen === 'paywall') {
         setScreen('main');
         return true;
       }
@@ -130,9 +129,6 @@ export default function App() {
       );
     }
 
-    if (screen === 'styleguide') {
-      return <StyleGuideScreen onBack={() => setScreen('main')} />;
-    }
 
     return (
       <>

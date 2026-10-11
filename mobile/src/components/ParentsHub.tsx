@@ -249,6 +249,9 @@ export default function ParentsHub({
                 trackColor={{ false: '#D1D5DB', true: colors.green }}
                 thumbColor={colors.white}
                 disabled={loadingMemory || updatingMemory}
+                accessibilityRole="switch"
+                accessibilityLabel="Enable learning memory"
+                accessibilityState={{ checked: !!memory?.enabled }}
               />
               <Text style={styles.switchLabel}>
                 {memory?.enabled ? 'Active' : 'Off'}
@@ -279,7 +282,7 @@ export default function ParentsHub({
                       <Pressable
                         style={styles.factChipRemoveBtn}
                         onPress={() => handleRemoveFact(index)}
-                        hitSlop={8}
+                        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                         accessibilityRole="button"
                         accessibilityLabel={`Remove fact ${fact}`}
                       >
@@ -433,8 +436,10 @@ const styles = StyleSheet.create({
   childChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    minHeight: 44,
+    justifyContent: 'center',
     borderRadius: radii.pill,
     backgroundColor: colors.cardBgMuted,
     borderWidth: 1.5,
@@ -469,7 +474,8 @@ const styles = StyleSheet.create({
   },
   addChildInput: {
     flex: 1,
-    height: 42,
+    height: 44,
+    minHeight: 44,
     borderWidth: 1.5,
     borderColor: colors.border,
     borderRadius: radii.md,
@@ -481,7 +487,9 @@ const styles = StyleSheet.create({
   addChildBtn: {
     backgroundColor: colors.parentNavy,
     paddingHorizontal: 16,
-    height: 42,
+    height: 44,
+    minHeight: 44,
+    minWidth: 44,
     borderRadius: radii.md,
     justifyContent: 'center',
     alignItems: 'center',
@@ -581,8 +589,11 @@ const styles = StyleSheet.create({
   forgetBtn: {
     alignSelf: 'flex-start',
     marginTop: spacing.xs,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
     borderRadius: radii.sm,
   },
   forgetBtnText: {

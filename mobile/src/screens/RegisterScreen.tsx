@@ -146,7 +146,12 @@ export default function RegisterScreen({ onRegistered, onGoToLogin }: Props) {
               style={styles.submitButton}
             />
 
-            <Pressable onPress={onGoToLogin} style={styles.switchLink}>
+            <Pressable
+              onPress={onGoToLogin}
+              style={styles.switchLink}
+              accessibilityRole="button"
+              accessibilityLabel="Sign in to existing account"
+            >
               <Text style={styles.switchLinkText}>
                 Already have an account? <Text style={styles.switchLinkBold}>Sign In</Text>
               </Text>
@@ -285,6 +290,8 @@ const styles = StyleSheet.create({
   switchLink: {
     marginTop: spacing.sm,
     paddingVertical: spacing.xs,
+    minHeight: 44,
+    justifyContent: 'center',
     alignItems: 'center',
   },
   switchLinkText: {

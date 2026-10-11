@@ -142,7 +142,12 @@ export default function LoginScreen({ onLoggedIn, onGoToRegister }: Props) {
               style={styles.submitButton}
             />
 
-            <Pressable onPress={onGoToRegister} style={styles.switchLink}>
+            <Pressable
+              onPress={onGoToRegister}
+              style={styles.switchLink}
+              accessibilityRole="button"
+              accessibilityLabel="Create an account"
+            >
               <Text style={styles.switchLinkText}>
                 New to Kidsko? <Text style={styles.switchLinkBold}>Create an account</Text>
               </Text>
@@ -281,6 +286,8 @@ const styles = StyleSheet.create({
   switchLink: {
     marginTop: spacing.sm,
     paddingVertical: spacing.xs,
+    minHeight: 44,
+    justifyContent: 'center',
     alignItems: 'center',
   },
   switchLinkText: {

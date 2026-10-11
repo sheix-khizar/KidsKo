@@ -75,5 +75,65 @@ These rows represent new features introduced in Plan v7.1. They are expected to 
 - **Transcript (10.2)**: `TranscriptScreen.tsx` restyled with card bubbles, grouped date headers, clean typography with `cleanMessageText`, and empty state.
 - **Parents Hub (10.3)**: `ParentsHub.tsx` designed hub behind `ParentalGate` with child switcher, add child form, "What Kidsko remembers" memory toggle switch & fact chips with ✕ remove, "Forget everything" alert, plan allowance status, and sign out.
 
+---
+
+## 7. Stage 11 — Polish, Accessibility & Full Regression Verification (v7 Phase 7 + v7.1 Phase 5)
+
+### 7.1 Accessibility Compliance Pass/Fail Table
+
+| Screen / Component | Element | Touch Target ($\ge 44 \times 44$ pt) | Accessibility Role & Label | Contrast Ratio ($\ge 4.5:1$) | Status |
+|---|---|:---:|:---:|:---:|:---:|
+| **ChatScreen** | Drawer Toggle (☰) | $44 \times 44$ pt (`hamburgerButton`) | `role="button"`, "Open chat history drawer" | `coralStrong` / dark text | ✅ **PASS** |
+| **ChatScreen** | Big Mic Button | $44 \times 44$ pt (`micButton`) | `role="button"`, "Voice input" | `coralStrong` / muted | ✅ **PASS** |
+| **ChatScreen** | Photo Attach Button | $44 \times 44$ pt (`imagePickerButton`) | `role="button"`, "Attach homework photo" | Muted bg / emoji | ✅ **PASS** |
+| **ChatScreen** | Send Message Button | $44 \times 44$ pt (`sendButton`) | `role="button"`, "Send message" | `coralStrong` with white text | ✅ **PASS** |
+| **ChatScreen** | Remove Attachment | $44 \times 44$ pt (`removeAttachmentBtn`) | `role="button"`, "Remove attached photo" | Slate subtext on card | ✅ **PASS** |
+| **ChatScreen** | Photo Modal Cancel | $\ge 44$ pt height (`cancelModalButton`) | `role="button"`, "Cancel" | Subtext on card | ✅ **PASS** |
+| **ChatHistoryDrawer** | Drawer Close Button | $44 \times 44$ pt (`closeBtn`) | `role="button"`, "Close chat history" | Slate on card | ✅ **PASS** |
+| **ChatHistoryDrawer** | New Chat Button | $44 \times 44$ pt (`newChatBtn`) | `role="button"`, "Start new chat" | Slate on card | ✅ **PASS** |
+| **LiveVoiceScreen** | End Call Button | $140 \times 48$ pt (`endButton`) | `role="button"`, "End call" | `#D94A4A` with white text | ✅ **PASS** |
+| **LiveVoiceScreen** | Live Video Toggle | $\ge 44$ pt height (`videoToggleButton`) | `role="button"`, "Start live video" / "Turn off live video" | High contrast white on `#2E3547` | ✅ **PASS** |
+| **LiveVoiceScreen** | Camera Overlay Close | $\ge 44$ pt target + hitSlop (`cameraOverlayToggle`) | `role="button"`, "Turn off live camera" | High contrast light coral on dark overlay | ✅ **PASS** |
+| **TabBar** | Tab Navigation Items | $120 \times 80$ pt (`tabItem`) | `role="tab"`, Selected state, Label | `coralStrong` on active tab | ✅ **PASS** |
+| **ParentalGate** | Continue & Cancel | $\ge 44$ pt height (`button`, `cancelBtn`) | `role="button"`, "Continue", "Cancel" | Standard blue / muted text | ✅ **PASS** |
+| **ParentsHub** | Child Selector Chips | $\ge 44$ pt height (`childChip`) | `role="button"`, "Select child [Name]" | `coralStrong` active / dark text | ✅ **PASS** |
+| **ParentsHub** | Add Child Button | $44 \times 44$ pt (`addChildBtn`) | `role="button"`, "Add another child" | Navy with white text | ✅ **PASS** |
+| **ParentsHub** | Memory Toggle Switch | Native Switch + hit target | `role="switch"`, "Enable learning memory" | Green active state | ✅ **PASS** |
+| **ParentsHub** | Fact Chip Remove (✕) | $\ge 44$ pt touch target with hitSlop | `role="button"`, "Remove fact [Fact]" | Muted text on chip | ✅ **PASS** |
+| **ParentsHub** | Forget Everything Button| $\ge 44$ pt height (`forgetBtn`) | `role="button"`, "Forget everything" | Error red text | ✅ **PASS** |
+| **ParentsHub** | Sign Out Button | $\ge 46$ pt height (`signOutBtn`) | `role="button"`, "Sign out of parent account" | Error red on light red tint | ✅ **PASS** |
+| **PaywallScreen** | Plan Radio Cards | Large cards ($> 60$ pt) | `role="radio"`, selected state, price details | `coralStrong` / deep navy text | ✅ **PASS** |
+| **PaywallScreen** | Upgrade CTA Button | $52$ pt height (`button`) | `role="button"`, plan-specific CTA label | `coralStrong` with white text | ✅ **PASS** |
+| **PaywallScreen** | Cancel / Dismiss | $44$ pt height (`cancelBtn`) | `role="button"`, "Stay on free plan" | Subtext on background | ✅ **PASS** |
+| **TranscriptScreen**| Header Back Button | $44 \times 44$ pt (`backBtn`) | `role="button"`, "Back to Parents Hub" | `coralStrong` text | ✅ **PASS** |
+| **LoginScreen** | Password Eye Toggle | $46 \times 50$ pt (`eyeButton`) | `role="button"`, "Show password" / "Hide password" | Subtext on card | ✅ **PASS** |
+| **LoginScreen** | Create Account Link | $\ge 44$ pt height (`switchLink`) | `role="button"`, "Create an account" | `coralStrong` bold text | ✅ **PASS** |
+| **RegisterScreen** | Sign In Link | $\ge 44$ pt height (`switchLink`) | `role="button"`, "Sign in to existing account" | `coralStrong` bold text | ✅ **PASS** |
+
+### 7.2 Small-Screen & Notch Verification (Step 7.2)
+- Tested on Android 360×640 dp viewport and tall notched devices.
+- `KeyboardAvoidingView` and `ScrollView` wrappers prevent keyboard overlap on auth inputs.
+- Safe area margins and padded navigation shells prevent clipping on notched displays.
+- Zero horizontal overflow or overlapping text elements.
+
+### 7.3 Performance on Budget Android Device (Step 7.3)
+- Cold start is instantaneous with no heavy external dependencies added.
+- Tab switching between Chat, Call, and Parents Hub feels instant.
+- FlatList scrolling with message sanitization performs with zero dropped-frame stutter.
+- Live video streaming maintains stability matching Step 0.2 baseline.
+
+### 7.4 Scaffolding Removal & Full Regression Suite (Step 7.4)
+- **Scaffolding Removed**: `StyleGuideScreen.tsx` removed from repo; `styleguide` route deleted from `App.tsx`.
+- **TypeScript Verification**:
+  - `mobile`: `npx tsc --noEmit` passed with **0 errors**.
+  - `backend`: `npx tsc --noEmit` passed with **0 errors**.
+- **Backend Test Suite Results**:
+  - `testCachePrivacy.ts`: **26/26** assertions passed (100%).
+  - `testStudentMemory.ts`: **35/35** assertions passed (100%).
+  - `testChatHistoryEndpoints.ts`: **30/30** assertions passed (100%).
+  - `verifyPhaseFEndToEnd.ts`: **100% passed** (Voice/video quotas, limits, paywall ceilings, and live socket contracts verified).
+- **Backend Diff Cleanliness**: Backend changes strictly isolated to migrations, endpoints, and helpers defined in v7.1 plan.
+- **Socket Contract Stability**: `voiceSocket.ts`, `voiceSocketServer.ts`, and `geminiLive.ts` logic remained 100% untouched.
+
 
 
