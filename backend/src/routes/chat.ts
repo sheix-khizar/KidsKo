@@ -4,7 +4,7 @@ import { requireAuth } from '../middleware/auth';
 import { userRateLimit } from '../middleware/userRateLimit';
 import { generateChatReply, sanitizeChatResponse, ChatMessage } from '../lib/gemini';
 import { checkAndIncrementUsage } from '../lib/usageLimits';
-import { getCachedAnswer, setCachedAnswer } from '../lib/cache';
+import { getCachedAnswer, setCachedAnswer, isPersonalMessage } from '../lib/cache';
 import { logUsageEvent } from '../lib/usageEvents';
 import { getThreadImage, setThreadImage, getThreadStoragePath, awaitPendingUpload } from '../lib/threadImageStore';
 import { downloadHomeworkImageFromStorage, deleteThreadImagesFromStorage } from '../lib/homeworkStorage';
@@ -222,12 +222,13 @@ router.post('/', requireAuth, userRateLimit, async (req: Request, res: Response)
 
     const { data: student } = await req.supabase!
       .from('students')
-      .select('grade_band')
+      .select('grade_band, student_name')
       .eq('id', studentId)
       .maybeSingle();
     const gradeBand = student?.grade_band || 'Grade 3';
+    const studentName = student?.student_name;
 
-    if (isFreshThread) {
+    if (isFreshThread && !isPersonalMessage(message)) {
       const cached = await getCachedAnswer(message, gradeBand);
       if (cached) {
         aiReply = sanitizeChatResponse(cached);
@@ -243,7 +244,10 @@ router.post('/', requireAuth, userRateLimit, async (req: Request, res: Response)
 
     if (!servedFromCache) {
       aiReply = await processChatTurnCore(req.supabase!, activeThreadId, studentId, message);
-      if (isFreshThread) await setCachedAnswer(message, aiReply, gradeBand);
+      const containsStudentName = !!(studentName && new RegExp(`\\b${studentName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(aiReply));
+      if (isFreshThread && !isPersonalMessage(message) && !containsStudentName) {
+        await setCachedAnswer(message, aiReply, gradeBand);
+      }
     }
 
     await logUsageEvent(req.supabase!, req.user!.id, studentId, 'message');

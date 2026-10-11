@@ -8,10 +8,28 @@ const redis = new Redis({
 
 const TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
+export function isPersonalMessage(message: string): boolean {
+  if (!message || typeof message !== 'string') return true;
+  const normalized = message.trim().toLowerCase();
+  if (!normalized) return true;
+
+  const personalPatterns = [
+    /\bmy\s+name\b/i,
+    /\bcall\s+me\b/i,
+    /\bi\s+am\b/i,
+    /\bi'm\b/i,
+    /\bim\s+/i,
+    /\bmy\s+(mom|mum|dad|mother|father|school|teacher|friend|brother|sister|age|birthday|address|phone|favou?rite)\b/i,
+    /\bremember\b/i,
+  ];
+
+  return personalPatterns.some((pattern) => pattern.test(normalized));
+}
+
 function cacheKey(question: string, gradeBand: string = 'general'): string {
   const normalized = question.trim().toLowerCase().replace(/[^\w\s]/g, '');
-  const hash = crypto.createHash('sha256').update(`${gradeBand}:${normalized}`).digest('hex');
-  return `qa:${gradeBand}:${hash}`;
+  const hash = crypto.createHash('sha256').update(`v2:${gradeBand}:${normalized}`).digest('hex');
+  return `qa:v2:${gradeBand}:${hash}`;
 }
 
 export async function getCachedAnswer(question: string, gradeBand: string = 'general'): Promise<string | null> {
