@@ -1,6 +1,5 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 import { colors, typography } from '../theme';
 
 export type TabKey = 'chat' | 'call' | 'parents';
@@ -17,10 +16,8 @@ const TABS: { key: TabKey; label: string; icon: string }[] = [
 ];
 
 export function TabBar({ activeTab, onSelectTab }: TabBarProps) {
-  const insets = useSafeAreaInsets();
-
   return (
-    <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+    <View style={[styles.container, { paddingBottom: Platform.OS === 'ios' ? 24 : 8 }]}>
       {TABS.map((tab) => {
         const isActive = activeTab === tab.key;
         return (

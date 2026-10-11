@@ -10,7 +10,6 @@ import {
   BackHandler,
   ScrollView,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ChatScreen from './ChatScreen';
 import ParentalGate from '../components/ParentalGate';
 import { getStudents, createStudent, clearToken, getSavedUserId } from '../services/api';
@@ -40,7 +39,6 @@ export default function MainShellScreen({
   scanThreadId,
   scanExplanation,
 }: Props) {
-  const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<TabKey>('chat');
   const [students, setStudents] = useState<Student[]>([]);
   const [activeStudent, setActiveStudent] = useState<Student | null>(null);
@@ -153,7 +151,7 @@ export default function MainShellScreen({
   return (
     <Screen safeBottom={false}>
       {/* Shell Header: Child Switcher Chip */}
-      <View style={[styles.shellHeader, { paddingTop: Math.max(insets.top, 8) }]}>
+      <View style={[styles.shellHeader, { paddingTop: spacing.sm }]}>
         <View style={styles.brandRow}>
           <Text style={styles.brandText}>Kidsko.ai 🦉</Text>
         </View>

@@ -1,6 +1,5 @@
 import React from 'react';
 import { View, Text, StyleSheet, ViewStyle } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { colors, radii, shadows } from '../theme';
 
 type MascotSize = 's' | 'm' | 'l';
@@ -21,21 +20,19 @@ export function Mascot({ size = 'm', style }: MascotProps) {
 
   return (
     <View style={[styles.wrapper, shadows.card, style]}>
-      <LinearGradient
-        colors={[colors.sun, colors.orange]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+      <View
         style={[
           styles.container,
           {
             width: config.container,
             height: config.container,
             borderRadius: config.radius,
+            backgroundColor: colors.sun,
           },
         ]}
       >
         <Text style={{ fontSize: config.emoji }}>🦉</Text>
-      </LinearGradient>
+      </View>
     </View>
   );
 }

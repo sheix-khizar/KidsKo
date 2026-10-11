@@ -66,56 +66,90 @@ export default function App() {
     setGateVisible(true);
   };
 
-  if (screen === 'checking' || !fontsLoaded) {
-    return (
-      <View style={styles.brandedSplash}>
-        <View style={styles.splashContent}>
-          <Mascot size="l" />
-          <Text style={styles.splashTitle}>Kidsko.ai</Text>
-          <Text style={styles.splashSubtitle}>Your Friendly AI Study Buddy 🦉</Text>
-          <ActivityIndicator size="small" color="#FF6B6B" style={styles.splashSpinner} />
+  const renderContent = () => {
+    if (screen === 'checking' || !fontsLoaded) {
+      return (
+        <View style={styles.brandedSplash}>
+          <View style={styles.splashContent}>
+            <Mascot size="l" />
+            <Text style={styles.splashTitle}>Kidsko.ai</Text>
+            <Text style={styles.splashSubtitle}>Your Friendly AI Study Buddy 🦉</Text>
+            <ActivityIndicator size="small" color="#D94A4A" style={styles.splashSpinner} />
+          </View>
         </View>
-      </View>
-    );
-  }
+      );
+    }
 
-  if (screen === 'register') {
-    return <RegisterScreen onRegistered={() => setScreen('main')} onGoToLogin={() => setScreen('login')} />;
-  }
+    if (screen === 'register') {
+      return <RegisterScreen onRegistered={() => setScreen('main')} onGoToLogin={() => setScreen('login')} />;
+    }
 
-  if (screen === 'login') {
-    return <LoginScreen onLoggedIn={() => setScreen('main')} onGoToRegister={() => setScreen('register')} />;
-  }
+    if (screen === 'login') {
+      return <LoginScreen onLoggedIn={() => setScreen('main')} onGoToRegister={() => setScreen('register')} />;
+    }
 
-  if (screen === 'paywall') {
-    return (
-      <PaywallScreen
-        onBack={() => setScreen('main')}
-        onPurchased={() => {
-          setScreen('main');
-        }}
-      />
-    );
-  }
+    if (screen === 'paywall') {
+      return (
+        <PaywallScreen
+          onBack={() => setScreen('main')}
+          onPurchased={() => {
+            setScreen('main');
+          }}
+        />
+      );
+    }
 
-  if (screen === 'transcript' && activeStudent) {
-    return (
-      <TranscriptScreen
-        studentId={activeStudent.id}
-        studentName={activeStudent.student_name}
-        onBack={() => setScreen('main')}
-      />
-    );
-  }
-
-  if (screen === 'liveVoice' && activeStudent) {
-    return (
-      <>
-        <LiveVoiceScreen
+    if (screen === 'transcript' && activeStudent) {
+      return (
+        <TranscriptScreen
           studentId={activeStudent.id}
           studentName={activeStudent.student_name}
           onBack={() => setScreen('main')}
+        />
+      );
+    }
+
+    if (screen === 'liveVoice' && activeStudent) {
+      return (
+        <>
+          <LiveVoiceScreen
+            studentId={activeStudent.id}
+            studentName={activeStudent.student_name}
+            onBack={() => setScreen('main')}
+            onLimitReached={handleLimitReached}
+          />
+          <ParentalGate
+            visible={gateVisible}
+            onSuccess={() => {
+              setGateVisible(false);
+              setScreen('paywall');
+            }}
+            onCancel={() => setGateVisible(false)}
+          />
+        </>
+      );
+    }
+
+    if (screen === 'styleguide') {
+      return <StyleGuideScreen onBack={() => setScreen('main')} />;
+    }
+
+    return (
+      <>
+        <MainShellScreen
+          onLogout={() => setScreen('login')}
+          onOpenPaywall={() => setScreen('paywall')}
+          onOpenTranscript={(student) => {
+            setActiveStudent(student);
+            setScreen('transcript');
+          }}
+          onStartCall={(student) => {
+            setActiveStudent(student);
+            setScreen('liveVoice');
+          }}
           onLimitReached={handleLimitReached}
+          scanThreadId={scanThreadId}
+          scanExplanation={scanExplanation}
         />
         <ParentalGate
           visible={gateVisible}
@@ -127,38 +161,12 @@ export default function App() {
         />
       </>
     );
-  }
-
-  if (screen === 'styleguide') {
-    return <StyleGuideScreen onBack={() => setScreen('main')} />;
-  }
+  };
 
   return (
-    <>
-      <MainShellScreen
-        onLogout={() => setScreen('login')}
-        onOpenPaywall={() => setScreen('paywall')}
-        onOpenTranscript={(student) => {
-          setActiveStudent(student);
-          setScreen('transcript');
-        }}
-        onStartCall={(student) => {
-          setActiveStudent(student);
-          setScreen('liveVoice');
-        }}
-        onLimitReached={handleLimitReached}
-        scanThreadId={scanThreadId}
-        scanExplanation={scanExplanation}
-      />
-      <ParentalGate
-        visible={gateVisible}
-        onSuccess={() => {
-          setGateVisible(false);
-          setScreen('paywall');
-        }}
-        onCancel={() => setGateVisible(false)}
-      />
-    </>
+    <View style={{ flex: 1, backgroundColor: '#FFF8F0' }}>
+      {renderContent()}
+    </View>
   );
 }
 
