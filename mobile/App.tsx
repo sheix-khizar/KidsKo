@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { Mascot } from './src/ui';
 import RegisterScreen from './src/screens/RegisterScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import HomeScreen from './src/screens/HomeScreen';
@@ -56,8 +57,13 @@ export default function App() {
 
   if (screen === 'checking' || !fontsLoaded) {
     return (
-      <View style={styles.loading}>
-        <ActivityIndicator size="large" color="#1a73e8" />
+      <View style={styles.brandedSplash}>
+        <View style={styles.splashContent}>
+          <Mascot size="l" />
+          <Text style={styles.splashTitle}>Kidsko.ai</Text>
+          <Text style={styles.splashSubtitle}>Your Friendly AI Study Buddy 🦉</Text>
+          <ActivityIndicator size="small" color="#FF6B6B" style={styles.splashSpinner} />
+        </View>
       </View>
     );
   }
@@ -191,5 +197,31 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  loading: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f7f9fc' },
+  loading: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFF8F0' },
+  brandedSplash: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFF8F0',
+  },
+  splashContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  splashTitle: {
+    fontSize: 32,
+    fontWeight: '900',
+    color: '#D94A4A',
+    marginTop: 8,
+    letterSpacing: -0.5,
+  },
+  splashSubtitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#636E72',
+  },
+  splashSpinner: {
+    marginTop: 16,
+  },
 });
