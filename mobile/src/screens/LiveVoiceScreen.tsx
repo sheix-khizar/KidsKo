@@ -207,7 +207,9 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
       </Text>
 
       {secondsLeft !== null && status === 'live' && (
-        <Text style={styles.timer}>{secondsLeft}s remaining</Text>
+        <View style={styles.timerPill}>
+          <Text style={styles.timerText}>⏱️ {secondsLeft}s remaining</Text>
+        </View>
       )}
 
       {networkNotice && status === 'live' && (
@@ -257,19 +259,19 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
                 >
                   <Text style={styles.avatarEmoji}>🦉</Text>
                   <View style={styles.speakingBadge}>
-                    <Text style={styles.speakingBadgeText}>🔊 Kidsko is Talking... (Tap to speak)</Text>
+                    <Text style={styles.speakingBadgeText}>Kidsko is talking… (Tap to speak)</Text>
                   </View>
                 </Pressable>
               ) : voiceState === 'thinking' ? (
                 <View style={[styles.avatarCircle, styles.avatarThinking]}>
-                  <ActivityIndicator size="large" color="#FFD54F" />
-                  <Text style={styles.thinkingText}>💡 Thinking...</Text>
+                  <ActivityIndicator size="large" color="#FFE66D" />
+                  <Text style={styles.thinkingText}>Thinking…</Text>
                 </View>
               ) : (
                 <View style={[styles.avatarCircle, styles.avatarListening]}>
                   <Text style={styles.avatarEmoji}>🎙️</Text>
                   <View style={styles.listeningBadge}>
-                    <Text style={styles.listeningBadgeText}>🟢 Listening to You...</Text>
+                    <Text style={styles.listeningBadgeText}>Listening…</Text>
                   </View>
                 </View>
               )}
@@ -309,21 +311,80 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
 
       {errorReason && <Text style={styles.errorSub}>{errorReason}</Text>}
 
-      <Pressable style={styles.endButton} onPress={handleEnd}>
-        <Text style={styles.endButtonText}>{status === 'ended' ? 'Close' : 'End Call'}</Text>
+      <Pressable
+        style={[styles.endButton, status === 'ended' && styles.endButtonEnded]}
+        onPress={handleEnd}
+        accessibilityRole="button"
+        accessibilityLabel={status === 'ended' ? 'Close call' : 'End call'}
+      >
+        <Text style={styles.endButtonText}>{status === 'ended' ? 'Close' : '✕ End'}</Text>
       </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1a1a2e', padding: 24 },
-  title: { fontSize: 20, fontWeight: '800', color: '#fff', marginBottom: 8, textAlign: 'center' },
-  timer: { fontSize: 16, color: '#FFD54F', fontWeight: '700', marginBottom: 16 },
-  errorSub: { fontSize: 14, color: '#FF8A80', fontWeight: '600', marginBottom: 20, textAlign: 'center' },
-  endButton: { backgroundColor: '#EA4335', borderRadius: 30, paddingVertical: 14, paddingHorizontal: 40, marginTop: 10 },
-  endButtonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#1A1D27',
+    padding: 24,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  timerPill: {
+    backgroundColor: '#262A38',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    marginBottom: 16,
+  },
+  timerText: {
+    fontSize: 13,
+    color: '#FFE66D',
+    fontWeight: '800',
+  },
+  errorSub: {
+    fontSize: 14,
+    color: '#FF8A80',
+    fontWeight: '600',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  endButton: {
+    backgroundColor: '#D94A4A',
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 10,
+    elevation: 4,
+    shadowColor: '#D94A4A',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+  },
+  endButtonEnded: {
+    width: 'auto',
+    minWidth: 140,
+    height: 48,
+    borderRadius: 24,
+    paddingHorizontal: 32,
+  },
+  endButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+    fontSize: 14,
+  },
   actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -333,21 +394,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   videoToggleButton: {
-    backgroundColor: '#00897B',
-    borderRadius: 20,
+    backgroundColor: '#2E3547',
+    borderRadius: 22,
     paddingVertical: 12,
     paddingHorizontal: 22,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.15)',
   },
   videoToggleButtonActive: {
-    backgroundColor: '#D32F2F',
+    backgroundColor: '#D94A4A',
+    borderColor: '#D94A4A',
   },
   videoToggleButtonText: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontWeight: '800',
     fontSize: 14,
   },
@@ -355,30 +414,33 @@ const styles = StyleSheet.create({
   // State Card Styles
   stateCard: {
     width: '100%',
-    backgroundColor: '#252542',
+    maxWidth: 340,
+    backgroundColor: '#232838',
     borderRadius: 24,
     padding: 20,
     alignItems: 'center',
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    marginBottom: 18,
+    borderWidth: 1.5,
+    borderColor: '#333A4D',
   },
   cameraContainer: {
     width: '100%',
     height: 240,
-    borderRadius: 18,
+    borderRadius: 20,
     overflow: 'hidden',
     marginBottom: 14,
     position: 'relative',
     backgroundColor: '#000',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.15)',
   },
   liveVideoBadge: {
     position: 'absolute',
-    top: 10,
-    left: 10,
+    top: 12,
+    left: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.65)',
+    backgroundColor: 'rgba(0,0,0,0.7)',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 12,
@@ -398,9 +460,9 @@ const styles = StyleSheet.create({
   },
   cameraOverlayToggle: {
     position: 'absolute',
-    top: 10,
-    right: 10,
-    backgroundColor: 'rgba(0,0,0,0.65)',
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(0,0,0,0.7)',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 12,
@@ -411,75 +473,78 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   avatarCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 110,
+    height: 110,
+    borderRadius: 55,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 18,
     position: 'relative',
   },
   avatarListening: {
-    backgroundColor: '#1b3a2b',
+    backgroundColor: '#152E22',
     borderWidth: 3,
-    borderColor: '#4CAF50',
+    borderColor: '#00B894',
   },
   avatarThinking: {
-    backgroundColor: '#3a351b',
+    backgroundColor: '#2E2815',
     borderWidth: 3,
-    borderColor: '#FFC107',
+    borderColor: '#FFE66D',
   },
   avatarSpeaking: {
-    backgroundColor: '#3a251b',
+    backgroundColor: '#2E1C15',
     borderWidth: 3,
-    borderColor: '#FF9800',
+    borderColor: '#FF9F43',
   },
-  avatarEmoji: { fontSize: 44 },
-  thinkingText: { color: '#FFD54F', fontWeight: '700', fontSize: 13, marginTop: 6 },
+  avatarEmoji: { fontSize: 50 },
+  thinkingText: { color: '#FFE66D', fontWeight: '800', fontSize: 13, marginTop: 6 },
 
   listeningBadge: {
     position: 'absolute',
     bottom: -10,
-    backgroundColor: '#2e7d32',
-    paddingHorizontal: 12,
+    backgroundColor: '#00B894',
+    paddingHorizontal: 14,
     paddingVertical: 4,
     borderRadius: 12,
   },
-  listeningBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
+  listeningBadgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
 
   speakingBadge: {
     position: 'absolute',
     bottom: -10,
-    backgroundColor: '#e65100',
-    paddingHorizontal: 12,
+    backgroundColor: '#FF9F43',
+    paddingHorizontal: 14,
     paddingVertical: 4,
     borderRadius: 12,
   },
-  speakingBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
+  speakingBadgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
 
   transcriptBox: {
     backgroundColor: 'rgba(0,0,0,0.3)',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    width: '100%',
-    alignItems: 'center',
-  },
-  transcriptLabel: { color: '#FFD54F', fontSize: 11, fontWeight: '700', marginBottom: 2 },
-  transcriptText: { color: '#fff', fontSize: 13, fontWeight: '600', fontStyle: 'italic', textAlign: 'center' },
-  promptHint: { color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: '600', textAlign: 'center' },
-
-  noticeBanner: {
-    backgroundColor: '#3e2723',
-    borderColor: '#ffb74d',
-    borderWidth: 1.5,
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    marginBottom: 12,
+    width: '100%',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  transcriptLabel: { color: '#FFE66D', fontSize: 11, fontWeight: '700', marginBottom: 2 },
+  transcriptText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600', fontStyle: 'italic', textAlign: 'center' },
+  promptHint: { color: 'rgba(255,255,255,0.65)', fontSize: 12, fontWeight: '600', textAlign: 'center' },
+
+  noticeBanner: {
+    backgroundColor: '#35211B',
+    borderColor: '#FF9F43',
+    borderWidth: 1.5,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 14,
     alignItems: 'center',
     width: '100%',
+    maxWidth: 340,
   },
-  noticeBannerText: { color: '#ffe082', fontSize: 13, fontWeight: '700', textAlign: 'center' },
+  noticeBannerText: { color: '#FFE082', fontSize: 13, fontWeight: '800', textAlign: 'center' },
   noticeDismissText: { color: 'rgba(255,224,130,0.7)', fontSize: 11, fontWeight: '600', marginTop: 3 },
 });

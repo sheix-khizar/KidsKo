@@ -37,11 +37,21 @@ These rows represent new features introduced in Plan v7.1. They are expected to 
 
 | # | Feature / Scenario | Target Stage | Current Status | Notes |
 |---|---|:---:|:---:|---|
-| **H1** | Chat history list grouped by date (Today, Yesterday, 7 Days, Older) | Stage 6 & 7 | ⏳ **Not Yet Built** | Thread list backend scheduled for Stage 6. |
-| **H2** | Tap past chat to load messages and continue conversation | Stage 7 | ⏳ **Not Yet Built** | History drawer scheduled for Stage 7. |
-| **H3** | Force-close app, reopen, continue past chat without context loss | Stage 7 | ⏳ **Not Yet Built** | Relies on threadId persistence in drawer. |
-| **H4** | 48-hour photo expiration note ("Photo removed after 2 days for privacy") | Stage 6 & 7 | ⏳ **Not Yet Built** | Backend `imageExpired` flag scheduled for Stage 6. |
-| **H5** | Delete chat thread behind ParentalGate | Stage 7 | ⏳ **Not Yet Built** | Protected deletion scheduled for Stage 7. |
+| **H1** | Chat history list grouped by date (Today, Yesterday, 7 Days, Older) | Stage 6 & 7 | ✅ **PASS** | Grouped by local calendar day in `ChatHistoryDrawer.tsx`. |
+| **H2** | Tap past chat to load messages and continue conversation | Stage 7 | ✅ **PASS** | `handleSelectThread` loads thread messages and sets active `threadId`. |
+| **H3** | Force-close app, reopen, continue past chat without context loss | Stage 7 | ✅ **PASS** | "Continue where you left off" card and history drawer persist thread continuity. |
+| **H4** | 48-hour photo expiration note ("Photo removed after 2 days for privacy") | Stage 6 & 7 | ✅ **PASS** | Formatted in `cleanMessageForClient` and `ChatScreen.tsx`. |
+| **H5** | Delete chat thread behind ParentalGate | Stage 7 | ✅ **PASS** | Long-press triggers `ParentalGate` before calling DELETE endpoint. |
 | **M1** | Child memory recall in new chat ("knows my name across sessions") | Stage 9 | ⏳ **Not Yet Built** | `student_memory` engine scheduled for Stage 9. |
 | **M2** | Memory toggle switch OFF stops fact extraction & prompt injection | Stage 9 & 10 | ⏳ **Not Yet Built** | Parent memory settings scheduled for Stage 10. |
 | **M3** | "Forget everything" button in Parents Hub erases all stored facts | Stage 9 & 10 | ⏳ **Not Yet Built** | Parent memory settings scheduled for Stage 10. |
+
+---
+
+## 4. Stage 8 Call Restyle Verification (Visual Only)
+
+- **Entry Gate (8.0)**: Live voice call baseline verified on Android emulator / dev environment.
+- **Call Layout (8.1)**: Dark-soft background (`#1A1D27`), timer pill, big circular coral End button (`#D94A4A`), video toggle pill, plain-word status (`Listening…`, `Kidsko is talking…`, `Thinking…`).
+- **Video Preview (8.2)**: VisionCamera container styled with rounded corners (20px), border, and live video badge. Zero changes to frame loop or camera props.
+- **Diff Review**: Strictly visual changes within `styles` and JSX style/text props. Zero changes to hooks, refs, effects, frame loop, or voice socket handlers.
+
