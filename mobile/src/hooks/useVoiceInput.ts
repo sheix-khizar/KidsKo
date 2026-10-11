@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { Alert } from 'react-native';
 
 // Safely import expo-speech-recognition without crashing in standard Expo Go or clean APKs
@@ -15,14 +15,30 @@ try {
 
 export function useVoiceInput(onResult: (text: string) => void) {
   const [listening, setListening] = useState(false);
+  // Speech-recognition events are app-wide. This ref makes sure this hook only reacts to
+  // sessions that its own mic button started, so e.g. a hidden-but-mounted ChatScreen never
+  // receives words spoken during a live call.
+  const listeningRef = useRef(false);
+
+  const setActive = useCallback((value: boolean) => {
+    listeningRef.current = value;
+    setListening(value);
+  }, []);
 
   if (useSpeechRecognitionEvent && ExpoSpeechRecognitionModule) {
     useSpeechRecognitionEvent('result', (event: any) => {
+      if (!listeningRef.current) return;
       const transcript = event.results?.[0]?.transcript;
       if (transcript) onResult(transcript);
     });
-    useSpeechRecognitionEvent('end', () => setListening(false));
-    useSpeechRecognitionEvent('error', () => setListening(false));
+    useSpeechRecognitionEvent('end', () => {
+      if (!listeningRef.current) return;
+      setActive(false);
+    });
+    useSpeechRecognitionEvent('error', () => {
+      if (!listeningRef.current) return;
+      setActive(false);
+    });
   }
 
   const startListening = useCallback(async () => {
@@ -38,7 +54,7 @@ export function useVoiceInput(onResult: (text: string) => void) {
       const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
       if (!result.granted) return;
 
-      setListening(true);
+      setActive(true);
       ExpoSpeechRecognitionModule.start({
         lang: 'en-US',
         interimResults: false,
@@ -46,16 +62,16 @@ export function useVoiceInput(onResult: (text: string) => void) {
       });
     } catch (err: any) {
       Alert.alert('Speech Error', err.message);
-      setListening(false);
+      setActive(false);
     }
-  }, []);
+  }, [setActive]);
 
   const stopListening = useCallback(() => {
     if (ExpoSpeechRecognitionModule) {
       ExpoSpeechRecognitionModule.stop();
     }
-    setListening(false);
-  }, []);
+    setActive(false);
+  }, [setActive]);
 
   return { listening, startListening, stopListening };
 }
