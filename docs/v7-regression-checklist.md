@@ -135,5 +135,27 @@ These rows represent new features introduced in Plan v7.1. They are expected to 
 - **Backend Diff Cleanliness**: Backend changes strictly isolated to migrations, endpoints, and helpers defined in v7.1 plan.
 - **Socket Contract Stability**: `voiceSocket.ts`, `voiceSocketServer.ts`, and `geminiLive.ts` logic remained 100% untouched.
 
+---
+
+## 8. Stage 12 — Ship (v7 Phase 8 Redesign Merged to `dev`)
+
+- **Merge Status**: `ui/v7` successfully merged into `dev` via commit `9721de9`.
+- **Baseline Integrity**: `pre-v7` tag preserved at `bcb92e3`.
+- **Remote Push**: `origin/dev` updated and in sync with local `dev`.
+- **Regression Suite on `dev`**:
+  - `npx tsc --noEmit` on `mobile`: **0 errors**.
+  - `npx tsc --noEmit` on `backend`: **0 errors**.
+  - `testCachePrivacy.ts`: **26/26** assertions passed (100%).
+  - `testStudentMemory.ts`: **35/35** assertions passed (100%).
+  - `testChatHistoryEndpoints.ts`: **30/30** assertions passed (100%).
+  - `verifyPhaseFEndToEnd.ts`: **100% passed** (Quotas, ceilings, and live socket contracts verified).
+- **Device Verification on `dev`**: Verified live on Android emulator across Chat, Call landing, ParentalGate math challenge, and Parents Hub.
+- **Next Steps (Track B)**: Handover to non-UI launch items (parallel Track B in separate branches):
+  1. Drop `weekly_live_snapshots_used` and rename `daily_*` to `weekly_*`.
+  2. Budget-Android 5-minute live-video stability test.
+  3. Account deletion endpoint & in-app flow.
+  4. Minimal Settings inside Parents Hub.
+  5. 10-prompt jailbreak safety tests and store submission assets.
+
 
 
