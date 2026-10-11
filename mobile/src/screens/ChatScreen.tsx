@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,9 @@ import { useVoiceInput } from '../hooks/useVoiceInput';
 import { pickImageFromGallery, captureImageFromCamera, ProcessedImage } from '../utils/imageHelper';
 import { cleanMessageText } from '../utils/messageText';
 import { colors, radii, typography, spacing } from '../theme';
+import ChatHistoryDrawer from '../components/ChatHistoryDrawer';
+import ParentalGate from '../components/ParentalGate';
+import { ThreadSummary, getThreads, getThreadMessages, deleteThread } from '../services/threads';
 
 const SUGGESTION_CHIPS = [
   { text: 'Why is the sky blue?', isHomework: false },
@@ -66,11 +69,105 @@ export default function ChatScreen({
   const [showImagePickerModal, setShowImagePickerModal] = useState(false);
   const [previewImage, setPreviewImage] = useState<ProcessedImage | null>(null);
 
+  // History drawer and continuity states (L4)
+  const [showDrawer, setShowDrawer] = useState(false);
+  const [lastThread, setLastThread] = useState<ThreadSummary | null>(null);
+  const [threadToDelete, setThreadToDelete] = useState<ThreadSummary | null>(null);
+  const [showParentalGate, setShowParentalGate] = useState(false);
+  const [deletedThreadId, setDeletedThreadId] = useState<string | null>(null);
+
   const listRef = useRef<FlatList>(null);
 
   const { listening, startListening, stopListening } = useVoiceInput((transcript) => {
     setInput(transcript);
   });
+
+  // Fetch recent thread on mount or when studentId changes
+  useEffect(() => {
+    let isMounted = true;
+    getThreads(studentId)
+      .then((res) => {
+        if (isMounted && res.threads && res.threads.length > 0) {
+          setLastThread(res.threads[0]);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, [studentId]);
+
+  const handleSelectThread = async (thread: ThreadSummary) => {
+    try {
+      setShowDrawer(false);
+      setSending(true);
+      setErrorMsg(null);
+      const fetchedMessages = await getThreadMessages(thread.id);
+      const formattedMessages: Message[] = fetchedMessages.map((m) => {
+        let content = m.text;
+        if (m.imageExpired) {
+          content =
+            '📷 Photo removed after 2 days for privacy. Send it again to keep working on it.' +
+            (m.text && m.text !== '📷 Homework photo' ? `\n\n${m.text}` : '');
+        }
+        return {
+          role: m.role,
+          content: content || '',
+        };
+      });
+      setMessages(formattedMessages);
+      setThreadId(thread.id);
+      setPreviewImage(null);
+      setInput('');
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: false }), 100);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to load thread');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleNewChat = () => {
+    setMessages([]);
+    setThreadId(undefined);
+    setPreviewImage(null);
+    setInput('');
+    setErrorMsg(null);
+    getThreads(studentId)
+      .then((res) => {
+        if (res.threads && res.threads.length > 0) {
+          setLastThread(res.threads[0]);
+        }
+      })
+      .catch(() => {});
+  };
+
+  const handleRequestDeleteThread = (thread: ThreadSummary) => {
+    setShowDrawer(false);
+    setThreadToDelete(thread);
+    setShowParentalGate(true);
+  };
+
+  const handleParentalGateSuccess = async () => {
+    setShowParentalGate(false);
+    if (!threadToDelete) return;
+    const targetId = threadToDelete.id;
+    setThreadToDelete(null);
+    try {
+      await deleteThread(targetId);
+      setDeletedThreadId(targetId);
+      if (threadId === targetId) {
+        handleNewChat();
+      } else {
+        if (lastThread?.id === targetId) {
+          const res = await getThreads(studentId);
+          setLastThread(res.threads[0] || null);
+        }
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to delete chat');
+    }
+  };
 
 
   const handleSend = async () => {
@@ -164,13 +261,27 @@ export default function ChatScreen({
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View style={styles.header}>
-        {!embedded && (
-          <Pressable onPress={onBack}>
-            <Text style={styles.backButton}>← Back</Text>
-          </Pressable>
-        )}
-        <Text style={styles.headerTitle}>Kidsko.ai 🦉</Text>
-        <Text style={styles.headerSubtitle}>{studentName}</Text>
+        <View style={styles.headerTopRow}>
+          <View style={styles.headerLeftActions}>
+            {!embedded && (
+              <Pressable onPress={onBack} style={styles.backButtonTouch}>
+                <Text style={styles.backButton}>← Back</Text>
+              </Pressable>
+            )}
+            <Pressable
+              onPress={() => setShowDrawer(true)}
+              style={styles.hamburgerButton}
+              accessibilityRole="button"
+              accessibilityLabel="Open chat history drawer"
+            >
+              <Text style={styles.hamburgerIcon}>☰</Text>
+            </Pressable>
+          </View>
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitle}>Kidsko.ai 🦉</Text>
+            <Text style={styles.headerSubtitle}>{studentName}</Text>
+          </View>
+        </View>
         {remaining !== null && (
           <View style={[styles.usagePill, isPremium && styles.usagePillPremium, remaining <= 5 && !isPremium && styles.usagePillLow]}>
             <Text style={styles.usagePillText}>
@@ -182,6 +293,28 @@ export default function ChatScreen({
 
       {messages.length === 0 ? (
         <ScrollView contentContainerStyle={styles.welcomeContainer}>
+          {lastThread && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.continueCard,
+                pressed && styles.continueCardPressed,
+              ]}
+              onPress={() => handleSelectThread(lastThread)}
+              accessibilityRole="button"
+              accessibilityLabel={`Continue chat: ${lastThread.title}`}
+            >
+              <View style={styles.continueCardContent}>
+                <View style={styles.continueCardHeader}>
+                  <Text style={styles.continueCardTag}>Continue where you left off ⏱️</Text>
+                </View>
+                <Text style={styles.continueCardTitle} numberOfLines={1}>
+                  {lastThread.title}
+                </Text>
+              </View>
+              <Text style={styles.continueCardArrow}>→</Text>
+            </Pressable>
+          )}
+
           <Mascot size="m" style={{ marginBottom: 12 }} />
           <Text style={styles.welcomeTitle}>Hi, {studentName}! 🦉</Text>
           <Text style={styles.welcomeSubtitle}>What would you like to explore today?</Text>
@@ -322,6 +455,30 @@ export default function ChatScreen({
           </View>
         </View>
       </Modal>
+
+      {/* Chat History Drawer (L4) */}
+      <ChatHistoryDrawer
+        visible={showDrawer}
+        onClose={() => setShowDrawer(false)}
+        studentId={studentId}
+        studentName={studentName}
+        activeThreadId={threadId}
+        deletedThreadId={deletedThreadId}
+        onSelectThread={handleSelectThread}
+        onNewChat={handleNewChat}
+        onRequestDeleteThread={handleRequestDeleteThread}
+      />
+
+      {/* Parental Gate for deleting chat thread (L4) */}
+      <ParentalGate
+        visible={showParentalGate}
+        onSuccess={handleParentalGateSuccess}
+        onCancel={() => {
+          setShowParentalGate(false);
+          setThreadToDelete(null);
+          setShowDrawer(true);
+        }}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -336,9 +493,42 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  backButton: { color: colors.coralStrong, fontWeight: '700', marginBottom: 6, fontSize: 14 },
+  headerTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerLeftActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  backButtonTouch: {
+    paddingVertical: 4,
+    paddingRight: 4,
+  },
+  backButton: { color: colors.coralStrong, fontWeight: '700', fontSize: 14 },
+  hamburgerButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: colors.cardBgMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  hamburgerIcon: {
+    fontSize: 20,
+    color: colors.text,
+    fontWeight: '800',
+    marginTop: -2,
+  },
+  headerTitleContainer: {
+    flex: 1,
+  },
   headerTitle: { ...typography.subheading, fontSize: 18, fontWeight: '900', color: colors.coralStrong },
-  headerSubtitle: { ...typography.caption, fontSize: 13, color: colors.subtext, fontWeight: '700', marginTop: 2 },
+  headerSubtitle: { ...typography.caption, fontSize: 13, color: colors.subtext, fontWeight: '700', marginTop: 1 },
   usagePill: {
     alignSelf: 'flex-start',
     marginTop: 8,
@@ -363,6 +553,47 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
+  },
+  continueCard: {
+    width: '100%',
+    maxWidth: 340,
+    backgroundColor: colors.cardBg,
+    borderRadius: radii.lg,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    padding: 14,
+    marginBottom: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  continueCardPressed: {
+    backgroundColor: colors.cardBgMuted,
+    borderColor: colors.coralStrong,
+  },
+  continueCardContent: {
+    flex: 1,
+    paddingRight: 10,
+  },
+  continueCardHeader: {
+    marginBottom: 4,
+  },
+  continueCardTag: {
+    ...typography.caption,
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.coralStrong,
+    textTransform: 'uppercase',
+  },
+  continueCardTitle: {
+    ...typography.label,
+    fontSize: 14,
+    color: colors.text,
+  },
+  continueCardArrow: {
+    fontSize: 18,
+    color: colors.coralStrong,
+    fontWeight: '900',
   },
   welcomeTitle: {
     ...typography.heading,
