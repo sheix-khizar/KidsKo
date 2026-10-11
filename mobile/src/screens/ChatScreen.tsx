@@ -25,9 +25,18 @@ type Props = {
   initialThreadId?: string;
   initialExplanation?: string;
   onLimitReached?: () => void;
+  embedded?: boolean;
 };
 
-export default function ChatScreen({ studentId, studentName, onBack, initialThreadId, initialExplanation, onLimitReached }: Props) {
+export default function ChatScreen({
+  studentId,
+  studentName,
+  onBack,
+  initialThreadId,
+  initialExplanation,
+  onLimitReached,
+  embedded = false,
+}: Props) {
   const [messages, setMessages] = useState<Message[]>(
     initialExplanation
       ? [
@@ -145,9 +154,11 @@ export default function ChatScreen({ studentId, studentName, onBack, initialThre
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View style={styles.header}>
-        <Pressable onPress={onBack}>
-          <Text style={styles.backButton}>← Back</Text>
-        </Pressable>
+        {!embedded && (
+          <Pressable onPress={onBack}>
+            <Text style={styles.backButton}>← Back</Text>
+          </Pressable>
+        )}
         <Text style={styles.headerTitle}>Kidsko.ai 🦉</Text>
         <Text style={styles.headerSubtitle}>{studentName}</Text>
         {remaining !== null && (
