@@ -8,6 +8,7 @@ import { getCachedAnswer, setCachedAnswer, isPersonalMessage } from '../lib/cach
 import { logUsageEvent } from '../lib/usageEvents';
 import { getThreadImage, setThreadImage, getThreadStoragePath, awaitPendingUpload } from '../lib/threadImageStore';
 import { downloadHomeworkImageFromStorage, deleteThreadImagesFromStorage } from '../lib/homeworkStorage';
+import { cleanMessageForClient } from '../lib/chatHistory';
 import { supabaseAdmin } from '../lib/supabase';
 
 const router = Router();
@@ -164,6 +165,148 @@ router.post('/cleanup', requireAuth, async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error(`[Chat Cleanup Error]: ${err.message}`);
     return res.status(500).json({ error: 'Could not cleanup thread images' });
+  }
+});
+
+// GET /api/chat/threads?studentId=&limit=30&before=<ISO> (Step 6.2 / 2.2)
+router.get('/threads', requireAuth, async (req: Request, res: Response) => {
+  const studentId = req.query.studentId as string;
+  if (!studentId) {
+    return res.status(400).json({ error: 'studentId is required' });
+  }
+
+  try {
+    // 1. Verify student belongs to caller (same check as transcript.ts)
+    const { data: student, error: studentError } = await req.supabase!
+      .from('students')
+      .select('id')
+      .eq('id', studentId)
+      .eq('parent_id', req.user!.id)
+      .maybeSingle();
+
+    if (studentError || !student) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    // 2. Pagination & limit setup (default 30, bounded 1-100)
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string, 10) || 30, 1), 100);
+    const before = req.query.before as string | undefined;
+
+    let rawThreads: any[] | null = null;
+    let query = req.supabase!
+      .from('chat_threads')
+      .select('id, title, updated_at, created_at')
+      .eq('student_id', studentId)
+      .order('updated_at', { ascending: false })
+      .limit(limit + 1);
+
+    if (before) {
+      query = query.lt('updated_at', before);
+    }
+
+    const { data, error } = await query;
+    if (error && error.message?.includes('updated_at')) {
+      // Defensive fallback if migration 20261011_chat_history.sql has not yet been executed in Supabase
+      let fallbackQuery = req.supabase!
+        .from('chat_threads')
+        .select('id, title, created_at')
+        .eq('student_id', studentId)
+        .order('created_at', { ascending: false })
+        .limit(limit + 1);
+
+      if (before) {
+        fallbackQuery = fallbackQuery.lt('created_at', before);
+      }
+      const fallbackRes = await fallbackQuery;
+      if (fallbackRes.error) {
+        console.error('[Get Threads Fallback Error]:', fallbackRes.error.message);
+        return res.status(500).json({ error: 'Failed to fetch threads' });
+      }
+      rawThreads = fallbackRes.data;
+    } else if (error) {
+      console.error('[Get Threads Error]:', error.message);
+      return res.status(500).json({ error: 'Failed to fetch threads' });
+    } else {
+      rawThreads = data;
+    }
+
+    const hasMore = (rawThreads?.length || 0) > limit;
+    const sliced = hasMore ? (rawThreads || []).slice(0, limit) : (rawThreads || []);
+    const nextBefore = hasMore && sliced.length > 0
+      ? (sliced[sliced.length - 1].updated_at || sliced[sliced.length - 1].created_at)
+      : null;
+
+    const threads = sliced.map((t: any) => ({
+      id: t.id,
+      title: t.title && t.title.trim() ? t.title.trim() : 'New chat',
+      updatedAt: t.updated_at || t.created_at,
+    }));
+
+    return res.status(200).json({
+      threads,
+      nextBefore,
+    });
+  } catch (err: any) {
+    console.error('[Get Threads Exception]:', err.message);
+    return res.status(500).json({ error: 'Could not fetch threads' });
+  }
+});
+
+// GET /api/chat/threads/:threadId/messages?limit=200 (Step 6.3 / 2.3)
+router.get('/threads/:threadId/messages', requireAuth, async (req: Request, res: Response) => {
+  const { threadId } = req.params;
+  if (!threadId) {
+    return res.status(400).json({ error: 'threadId is required' });
+  }
+
+  try {
+    // 1. Verify thread belongs to one of caller's students
+    const { data: thread, error: threadErr } = await req.supabase!
+      .from('chat_threads')
+      .select('id, student_id')
+      .eq('id', threadId)
+      .maybeSingle();
+
+    if (threadErr || !thread) {
+      return res.status(404).json({ error: 'Thread not found' });
+    }
+
+    const { data: student, error: studentErr } = await req.supabase!
+      .from('students')
+      .select('id')
+      .eq('id', thread.student_id)
+      .eq('parent_id', req.user!.id)
+      .maybeSingle();
+
+    if (studentErr || !student) {
+      return res.status(404).json({ error: 'Thread not found' });
+    }
+
+    // 2. Fetch messages in ascending order (default 200, max 200)
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string, 10) || 200, 1), 200);
+
+    const { data: rawMessages, error: msgsErr } = await req.supabase!
+      .from('messages')
+      .select('role, content, created_at')
+      .eq('thread_id', threadId)
+      .order('created_at', { ascending: true })
+      .limit(limit);
+
+    if (msgsErr) {
+      console.error('[Get Messages Error]:', msgsErr.message);
+      return res.status(500).json({ error: 'Failed to fetch messages' });
+    }
+
+    const messages = (rawMessages || []).map((m: any) =>
+      cleanMessageForClient(m.role, m.content || '', m.created_at)
+    );
+
+    return res.status(200).json({
+      messages,
+    });
+  } catch (err: any) {
+    console.error('[Get Messages Exception]:', err.message);
+    return res.status(500).json({ error: 'Could not fetch messages' });
   }
 });
 
