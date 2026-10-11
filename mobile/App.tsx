@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet, BackHandler } from 'react-native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Mascot } from './src/ui';
 import RegisterScreen from './src/screens/RegisterScreen';
 import LoginScreen from './src/screens/LoginScreen';
@@ -144,9 +143,9 @@ export default function App() {
   };
 
   return (
-    <SafeAreaProvider style={{ flex: 1, backgroundColor: '#FFF8F0' }}>
+    <View style={{ flex: 1, backgroundColor: '#FFF8F0' }}>
       {renderContent()}
-    </SafeAreaProvider>
+    </View>
   );
 }
 
