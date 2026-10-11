@@ -53,7 +53,8 @@
           "microphonePermission": "Kidsko needs microphone access so your child can ask questions by voice.",
           "speechRecognitionPermission": "Kidsko needs speech recognition to understand your child's questions."
         }
-      ]
+      ],
+      "expo-font"
     ],
     "extra": {
       "eas": {
