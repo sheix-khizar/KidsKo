@@ -1,11 +1,9 @@
 import { useState, useEffect } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet, BackHandler } from 'react-native';
 import { Mascot } from './src/ui';
 import RegisterScreen from './src/screens/RegisterScreen';
 import LoginScreen from './src/screens/LoginScreen';
-import HomeScreen from './src/screens/HomeScreen';
-import ChatScreen from './src/screens/ChatScreen';
-import HomeworkScreen from './src/screens/HomeworkScreen';
+import MainShellScreen from './src/screens/MainShellScreen';
 import PaywallScreen from './src/screens/PaywallScreen';
 import TranscriptScreen from './src/screens/TranscriptScreen';
 import LiveVoiceScreen from './src/screens/LiveVoiceScreen';
@@ -23,7 +21,7 @@ import { getToken } from './src/services/api';
 import { loadSavedApiUrl } from './src/services/config';
 
 type Student = { id: string; student_name: string };
-type Screen = 'checking' | 'register' | 'login' | 'home' | 'chat' | 'homework' | 'paywall' | 'transcript' | 'liveVoice' | 'styleguide';
+type Screen = 'checking' | 'register' | 'login' | 'main' | 'paywall' | 'transcript' | 'liveVoice' | 'styleguide';
 
 export default function App() {
   const [fontsLoaded] = useFonts({
@@ -44,12 +42,25 @@ export default function App() {
       await loadSavedApiUrl();
       const token = await getToken();
       if (token) {
-        setScreen('home');
+        setScreen('main');
       } else {
         setScreen('login');
       }
     })();
   }, []);
+
+  // Hardware back button on Android
+  useEffect(() => {
+    const onBackPress = () => {
+      if (screen === 'liveVoice' || screen === 'transcript' || screen === 'paywall' || screen === 'styleguide') {
+        setScreen('main');
+        return true;
+      }
+      return false; // On 'main', let shell handle tab or OS exit app
+    };
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => sub.remove();
+  }, [screen]);
 
   const handleLimitReached = () => {
     setGateVisible(true);
@@ -69,19 +80,19 @@ export default function App() {
   }
 
   if (screen === 'register') {
-    return <RegisterScreen onRegistered={() => setScreen('home')} onGoToLogin={() => setScreen('login')} />;
+    return <RegisterScreen onRegistered={() => setScreen('main')} onGoToLogin={() => setScreen('login')} />;
   }
 
   if (screen === 'login') {
-    return <LoginScreen onLoggedIn={() => setScreen('home')} onGoToRegister={() => setScreen('register')} />;
+    return <LoginScreen onLoggedIn={() => setScreen('main')} onGoToRegister={() => setScreen('register')} />;
   }
 
   if (screen === 'paywall') {
     return (
       <PaywallScreen
-        onBack={() => setScreen('home')}
+        onBack={() => setScreen('main')}
         onPurchased={() => {
-          setScreen('home');
+          setScreen('main');
         }}
       />
     );
@@ -92,7 +103,7 @@ export default function App() {
       <TranscriptScreen
         studentId={activeStudent.id}
         studentName={activeStudent.student_name}
-        onBack={() => setScreen('home')}
+        onBack={() => setScreen('main')}
       />
     );
   }
@@ -103,60 +114,7 @@ export default function App() {
         <LiveVoiceScreen
           studentId={activeStudent.id}
           studentName={activeStudent.student_name}
-          onBack={() => setScreen('home')}
-          onLimitReached={handleLimitReached}
-        />
-        <ParentalGate
-          visible={gateVisible}
-          onSuccess={() => {
-            setGateVisible(false);
-            setScreen('paywall');
-          }}
-          onCancel={() => setGateVisible(false)}
-        />
-      </>
-    );
-  }
-
-  if (screen === 'homework' && activeStudent) {
-    return (
-      <>
-        <HomeworkScreen
-          studentId={activeStudent.id}
-          studentName={activeStudent.student_name}
-          onBack={() => setScreen('home')}
-          onScanSuccess={(threadId, reply) => {
-            setScanThreadId(threadId);
-            setScanExplanation(reply);
-            setScreen('chat');
-          }}
-          onLimitReached={handleLimitReached}
-        />
-        <ParentalGate
-          visible={gateVisible}
-          onSuccess={() => {
-            setGateVisible(false);
-            setScreen('paywall');
-          }}
-          onCancel={() => setGateVisible(false)}
-        />
-      </>
-    );
-  }
-
-  if (screen === 'chat' && activeStudent) {
-    return (
-      <>
-        <ChatScreen
-          studentId={activeStudent.id}
-          studentName={activeStudent.student_name}
-          onBack={() => {
-            setScanThreadId(undefined);
-            setScanExplanation(undefined);
-            setScreen('home');
-          }}
-          initialThreadId={scanThreadId}
-          initialExplanation={scanExplanation}
+          onBack={() => setScreen('main')}
           onLimitReached={handleLimitReached}
         />
         <ParentalGate
@@ -172,27 +130,35 @@ export default function App() {
   }
 
   if (screen === 'styleguide') {
-    return <StyleGuideScreen onBack={() => setScreen('home')} />;
+    return <StyleGuideScreen onBack={() => setScreen('main')} />;
   }
 
   return (
-    <HomeScreen
-      onLoggedOut={() => setScreen('login')}
-      onSelectStudent={(student) => {
-        setActiveStudent(student);
-        setScanThreadId(undefined);
-        setScanExplanation(undefined);
-        setScreen('chat');
-      }}
-      onOpenTranscript={(student) => {
-        setActiveStudent(student);
-        setScreen('transcript');
-      }}
-      onOpenVoiceCall={(student) => {
-        setActiveStudent(student);
-        setScreen('liveVoice');
-      }}
-    />
+    <>
+      <MainShellScreen
+        onLogout={() => setScreen('login')}
+        onOpenPaywall={() => setScreen('paywall')}
+        onOpenTranscript={(student) => {
+          setActiveStudent(student);
+          setScreen('transcript');
+        }}
+        onStartCall={(student) => {
+          setActiveStudent(student);
+          setScreen('liveVoice');
+        }}
+        onLimitReached={handleLimitReached}
+        scanThreadId={scanThreadId}
+        scanExplanation={scanExplanation}
+      />
+      <ParentalGate
+        visible={gateVisible}
+        onSuccess={() => {
+          setGateVisible(false);
+          setScreen('paywall');
+        }}
+        onCancel={() => setGateVisible(false)}
+      />
+    </>
   );
 }
 
