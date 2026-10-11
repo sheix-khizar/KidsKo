@@ -16,6 +16,24 @@ const router = Router();
 
 export const MAX_HISTORY_MESSAGES = 10; // Ticket 2.9: bound the payload sent to Gemini for cost control
 
+/**
+ * Filter out transient task/progress phrases (e.g. "I'm stuck", "I'm done")
+ * that contain the token "I'm" / "I am" but contain zero long-term facts,
+ * so we avoid firing unneeded background extraction calls.
+ */
+export function isExtractableStatement(message: string): boolean {
+  if (!message || typeof message !== 'string') return false;
+  const normalized = message.trim().toLowerCase();
+  const transientPhrases = [
+    /\bi('m| am)\s+(stuck|confused|done|finished|lost|ready|here|tired|bored|reading|looking|trying|working|thinking)\b/i,
+    /\bi('m| am)\s+(not\s+sure|asking|wondering)\b/i,
+  ];
+  if (transientPhrases.some((p) => p.test(normalized))) {
+    return false;
+  }
+  return isPersonalMessage(message);
+}
+
 // Core chat processing pipeline — exported so production routes and integration tests use the exact same single source of truth
 export async function processChatTurnCore(
   supabase: SupabaseClient,
@@ -284,14 +302,14 @@ router.get('/threads/:threadId/messages', requireAuth, async (req: Request, res:
       return res.status(404).json({ error: 'Thread not found' });
     }
 
-    // 2. Fetch messages in ascending order (default 200, max 200)
+    // 2. Fetch latest messages (default 200, max 200) in chronological order
     const limit = Math.min(Math.max(parseInt(req.query.limit as string, 10) || 200, 1), 200);
 
     const { data: rawMessages, error: msgsErr } = await req.supabase!
       .from('messages')
       .select('role, content, created_at')
       .eq('thread_id', threadId)
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: false })
       .limit(limit);
 
     if (msgsErr) {
@@ -299,7 +317,9 @@ router.get('/threads/:threadId/messages', requireAuth, async (req: Request, res:
       return res.status(500).json({ error: 'Failed to fetch messages' });
     }
 
-    const messages = (rawMessages || []).map((m: any) =>
+    const chronological = (rawMessages || []).reverse();
+
+    const messages = chronological.map((m: any) =>
       cleanMessageForClient(m.role, m.content || '', m.created_at)
     );
 
@@ -374,7 +394,14 @@ router.post('/', requireAuth, userRateLimit, async (req: Request, res: Response)
     const studentName = student?.student_name;
 
     const memory = await getMemory(req.supabase!, studentId);
-    const memoryBlock = buildMemoryBlock(memory, studentName);
+    // Custom memory exists if enabled AND has a stored preferredName or stored facts
+    const hasCustomMemory = Boolean(
+      memory?.enabled && (
+        (memory.preferredName && memory.preferredName.trim().length > 0) ||
+        (Array.isArray(memory.facts) && memory.facts.length > 0)
+      )
+    );
+    const memoryBlock = hasCustomMemory ? buildMemoryBlock(memory, studentName) : '';
     const hasActiveMemory = Boolean(memoryBlock && memoryBlock.trim().length > 0);
 
     if (isFreshThread && !isPersonalMessage(message) && !hasActiveMemory) {
@@ -402,11 +429,11 @@ router.post('/', requireAuth, userRateLimit, async (req: Request, res: Response)
 
     await logUsageEvent(req.supabase!, req.user!.id, studentId, 'message');
 
-    // Step 9.4: Run memory extraction unawaited (when enabled, and either isPersonalMessage or every 8th user message)
+    // Step 9.4: Run memory extraction unawaited (when enabled, and either isExtractableStatement or every 8th user message)
     if (memory.enabled) {
-      const isPersonal = isPersonalMessage(message);
+      const isExtractable = isExtractableStatement(message);
       const triggerExtraction = async () => {
-        let shouldRun = isPersonal;
+        let shouldRun = isExtractable;
         if (!shouldRun) {
           try {
             const { count } = await req.supabase!

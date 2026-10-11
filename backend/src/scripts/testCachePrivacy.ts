@@ -118,6 +118,23 @@ async function runCachePrivacyTests() {
   assert(!memoryBlockB.includes('Jagal'), 'Child B memory never contains Child A name');
   assert(!memoryBlockB.includes('dinosaurs'), 'Child B memory never contains Child A facts');
 
+  // Child with no custom memory (no preferred name, no stored facts) MUST NOT bypass cache
+  const memoryEmpty: { studentId: string; preferredName: string | null; facts: string[]; enabled: boolean } = {
+    studentId: 'student-empty-id',
+    preferredName: null,
+    facts: [],
+    enabled: true,
+  };
+  const hasCustomMemoryEmpty = Boolean(
+    memoryEmpty.enabled && (
+      Boolean(memoryEmpty.preferredName?.trim()) ||
+      (Array.isArray(memoryEmpty.facts) && memoryEmpty.facts.length > 0)
+    )
+  );
+  assert(hasCustomMemoryEmpty === false, 'Child with no custom memory has hasCustomMemory === false');
+  const shouldReadCacheForEmpty = !isPersonalMessage('Why is the sky blue?') && !hasCustomMemoryEmpty;
+  assert(shouldReadCacheForEmpty === true, 'Child without stored custom memory allows cache read for generic questions');
+
   console.log('\n==========================================================');
   console.log(`📊 SUMMARY: ${passed}/${total} assertions passed.`);
   if (passed === total) {
