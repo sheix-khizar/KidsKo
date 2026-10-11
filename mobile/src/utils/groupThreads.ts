@@ -21,10 +21,10 @@ export function groupThreadsByDate(
   threads: ThreadSummary[],
   now: Date = new Date()
 ): GroupedThreadsSection[] {
-  // Midnight of current local day
+  // Exact calendar midnights (robust against daylight savings and clock changes)
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const startOfYesterday = startOfToday - 24 * 60 * 60 * 1000;
-  const startOfPrevious7Days = startOfToday - 7 * 24 * 60 * 60 * 1000;
+  const startOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).getTime();
+  const startOfPrevious7Days = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7).getTime();
 
   const todayList: ThreadSummary[] = [];
   const yesterdayList: ThreadSummary[] = [];

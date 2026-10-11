@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet, BackHandler } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Mascot } from './src/ui';
 import RegisterScreen from './src/screens/RegisterScreen';
 import LoginScreen from './src/screens/LoginScreen';
@@ -32,8 +33,6 @@ export default function App() {
   });
   const [screen, setScreen] = useState<Screen>('checking');
   const [activeStudent, setActiveStudent] = useState<Student | null>(null);
-  const [scanThreadId, setScanThreadId] = useState<string | undefined>(undefined);
-  const [scanExplanation, setScanExplanation] = useState<string | undefined>(undefined);
   const [gateVisible, setGateVisible] = useState(false);
 
   useEffect(() => {
@@ -87,66 +86,51 @@ export default function App() {
       return <LoginScreen onLoggedIn={() => setScreen('main')} onGoToRegister={() => setScreen('register')} />;
     }
 
-    if (screen === 'paywall') {
-      return (
-        <PaywallScreen
-          onBack={() => setScreen('main')}
-          onPurchased={() => {
-            setScreen('main');
-          }}
-        />
-      );
-    }
+    // Authenticated screens: keep MainShellScreen mounted in background so calls/transcripts/paywall don't drop chat state
+    return (
+      <View style={{ flex: 1 }}>
+        <View style={[{ flex: 1 }, screen !== 'main' && { display: 'none' }]}>
+          <MainShellScreen
+            onLogout={() => setScreen('login')}
+            onOpenPaywall={() => setScreen('paywall')}
+            onOpenTranscript={(student) => {
+              setActiveStudent(student);
+              setScreen('transcript');
+            }}
+            onStartCall={(student) => {
+              setActiveStudent(student);
+              setScreen('liveVoice');
+            }}
+            onLimitReached={handleLimitReached}
+          />
+        </View>
 
-    if (screen === 'transcript' && activeStudent) {
-      return (
-        <TranscriptScreen
-          studentId={activeStudent.id}
-          studentName={activeStudent.student_name}
-          onBack={() => setScreen('main')}
-        />
-      );
-    }
+        {screen === 'paywall' && (
+          <PaywallScreen
+            onBack={() => setScreen('main')}
+            onPurchased={() => {
+              setScreen('main');
+            }}
+          />
+        )}
 
-    if (screen === 'liveVoice' && activeStudent) {
-      return (
-        <>
+        {screen === 'transcript' && activeStudent && (
+          <TranscriptScreen
+            studentId={activeStudent.id}
+            studentName={activeStudent.student_name}
+            onBack={() => setScreen('main')}
+          />
+        )}
+
+        {screen === 'liveVoice' && activeStudent && (
           <LiveVoiceScreen
             studentId={activeStudent.id}
             studentName={activeStudent.student_name}
             onBack={() => setScreen('main')}
             onLimitReached={handleLimitReached}
           />
-          <ParentalGate
-            visible={gateVisible}
-            onSuccess={() => {
-              setGateVisible(false);
-              setScreen('paywall');
-            }}
-            onCancel={() => setGateVisible(false)}
-          />
-        </>
-      );
-    }
+        )}
 
-
-    return (
-      <>
-        <MainShellScreen
-          onLogout={() => setScreen('login')}
-          onOpenPaywall={() => setScreen('paywall')}
-          onOpenTranscript={(student) => {
-            setActiveStudent(student);
-            setScreen('transcript');
-          }}
-          onStartCall={(student) => {
-            setActiveStudent(student);
-            setScreen('liveVoice');
-          }}
-          onLimitReached={handleLimitReached}
-          scanThreadId={scanThreadId}
-          scanExplanation={scanExplanation}
-        />
         <ParentalGate
           visible={gateVisible}
           onSuccess={() => {
@@ -155,19 +139,18 @@ export default function App() {
           }}
           onCancel={() => setGateVisible(false)}
         />
-      </>
+      </View>
     );
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#FFF8F0' }}>
+    <SafeAreaProvider style={{ flex: 1, backgroundColor: '#FFF8F0' }}>
       {renderContent()}
-    </View>
+    </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  loading: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFF8F0' },
   brandedSplash: {
     flex: 1,
     justifyContent: 'center',

@@ -134,6 +134,20 @@ export default function ParentsHub({
     }
   };
 
+  // Clear preferred name
+  const handleClearPreferredName = async () => {
+    if (!activeStudent || !memory) return;
+    setUpdatingMemory(true);
+    try {
+      const updated = await updateStudentMemory(activeStudent.id, { preferredName: null });
+      setMemory(updated);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to remove preferred name');
+    } finally {
+      setUpdatingMemory(false);
+    }
+  };
+
   // Forget everything
   const handleForgetEverything = () => {
     if (!activeStudent) return;
@@ -269,6 +283,15 @@ export default function ParentsHub({
                   <Text style={styles.preferredNameLabel}>Name to call {activeStudent.student_name}:</Text>
                   <View style={styles.nameBadge}>
                     <Text style={styles.nameBadgeText}>{memory.preferredName}</Text>
+                    <Pressable
+                      style={styles.nameBadgeRemoveBtn}
+                      onPress={handleClearPreferredName}
+                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                      accessibilityRole="button"
+                      accessibilityLabel="Remove preferred name"
+                    >
+                      <Text style={styles.nameBadgeRemoveText}>✕</Text>
+                    </Pressable>
                   </View>
                 </View>
               )}
@@ -299,8 +322,8 @@ export default function ParentsHub({
                 )}
               </View>
 
-              {/* Forget Everything Button */}
-              {memory?.facts && memory.facts.length > 0 && (
+              {/* Forget Everything Button — visible whenever any preferred name OR facts are stored */}
+              {Boolean(memory?.preferredName || (memory?.facts && memory.facts.length > 0)) && (
                 <Pressable
                   style={styles.forgetBtn}
                   onPress={handleForgetEverything}
@@ -536,16 +559,27 @@ const styles = StyleSheet.create({
     color: colors.subtext,
   },
   nameBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#FFF2EB',
     paddingHorizontal: 10,
     paddingVertical: 3,
     borderRadius: radii.pill,
     borderWidth: 1,
     borderColor: '#FBD3C1',
+    gap: 6,
   },
   nameBadgeText: {
     fontSize: 12,
     fontWeight: '800',
+    color: colors.coralStrong,
+  },
+  nameBadgeRemoveBtn: {
+    padding: 2,
+  },
+  nameBadgeRemoveText: {
+    fontSize: 11,
+    fontWeight: '900',
     color: colors.coralStrong,
   },
   factsContainer: {

@@ -14,7 +14,7 @@ import ChatScreen from './ChatScreen';
 import ParentalGate from '../components/ParentalGate';
 import ParentsHub from '../components/ParentsHub';
 import { getStudents, createStudent, clearToken, getSavedUserId } from '../services/api';
-import { configureBilling } from '../services/billing';
+import { configureBilling, isPremiumActive } from '../services/billing';
 import { TabBar, TabKey } from '../ui/TabBar';
 import { Screen, Mascot, Button, Card, Pill } from '../ui';
 import { colors, radii, typography, spacing } from '../theme';
@@ -27,8 +27,6 @@ type Props = {
   onOpenTranscript: (student: Student) => void;
   onStartCall: (student: Student) => void;
   onLimitReached: () => void;
-  scanThreadId?: string;
-  scanExplanation?: string;
 };
 
 export default function MainShellScreen({
@@ -37,10 +35,9 @@ export default function MainShellScreen({
   onOpenTranscript,
   onStartCall,
   onLimitReached,
-  scanThreadId,
-  scanExplanation,
 }: Props) {
   const [tab, setTab] = useState<TabKey>('chat');
+  const [isPremium, setIsPremium] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
   const [activeStudent, setActiveStudent] = useState<Student | null>(null);
   const [loadingStudents, setLoadingStudents] = useState(true);
@@ -83,6 +80,10 @@ export default function MainShellScreen({
       if (savedUserId) {
         configureBilling(savedUserId);
       }
+      try {
+        const prem = await isPremiumActive();
+        setIsPremium(prem);
+      } catch {}
     })();
     loadStudentList();
   }, []);
@@ -104,10 +105,13 @@ export default function MainShellScreen({
     return () => backHandler.remove();
   }, [tab, showSwitcherModal]);
 
-  // Tab change handler: re-lock parents tab whenever leaving it
+  // Tab change handler: re-lock parents tab whenever leaving it, refresh billing on call tab
   const handleTabSelect = (nextTab: TabKey) => {
     if (tab === 'parents' && nextTab !== 'parents') {
       setParentsUnlocked(false);
+    }
+    if (nextTab === 'call') {
+      isPremiumActive().then(setIsPremium).catch(() => {});
     }
     setTab(nextTab);
   };
@@ -175,53 +179,49 @@ export default function MainShellScreen({
 
       {/* Main Tab Body */}
       <View style={styles.bodyContainer}>
-        {/* TAB 1: CHAT */}
-        {tab === 'chat' && (
-          <>
-            {students.length === 0 ? (
-              // Ungated first-run empty state
-              <ScrollView contentContainerStyle={styles.firstRunContent}>
-                <Mascot size="l" style={styles.firstRunMascot} />
-                <Text style={styles.firstRunTitle}>Welcome to Kidsko! 🦉</Text>
-                <Text style={styles.firstRunSub}>
-                  Add your child's name to get started with friendly homework help and chats.
-                </Text>
+        {/* TAB 1: CHAT (Kept mounted to preserve scroll, draft text, and attachments across tabs) */}
+        <View style={[{ flex: 1 }, tab !== 'chat' && { display: 'none' }]}>
+          {students.length === 0 ? (
+            // Ungated first-run empty state
+            <ScrollView contentContainerStyle={styles.firstRunContent}>
+              <Mascot size="l" style={styles.firstRunMascot} />
+              <Text style={styles.firstRunTitle}>Welcome to Kidsko! 🦉</Text>
+              <Text style={styles.firstRunSub}>
+                Add your child's name to get started with friendly homework help and chats.
+              </Text>
 
-                <Card style={styles.firstRunCard}>
-                  <Text style={styles.firstRunLabel}>Child's Name</Text>
-                  <TextInput
-                    style={styles.firstRunInput}
-                    placeholder="e.g. Aisha"
-                    placeholderTextColor={colors.subtext}
-                    value={firstRunName}
-                    onChangeText={setFirstRunName}
-                  />
-                  {firstRunError && (
-                    <Text style={styles.firstRunErrorText}>{firstRunError}</Text>
-                  )}
-                  <Button
-                    title="Add Child & Start Learning"
-                    onPress={handleAddFirstChild}
-                    loading={addingFirstRun}
-                    variant="primary"
-                    style={{ marginTop: 8 }}
-                  />
-                </Card>
-              </ScrollView>
-            ) : activeStudent ? (
-              <ChatScreen
-                key={activeStudent.id}
-                studentId={activeStudent.id}
-                studentName={activeStudent.student_name}
-                embedded={true}
-                onBack={() => {}}
-                initialThreadId={scanThreadId}
-                initialExplanation={scanExplanation}
-                onLimitReached={onLimitReached}
-              />
-            ) : null}
-          </>
-        )}
+              <Card style={styles.firstRunCard}>
+                <Text style={styles.firstRunLabel}>Child's Name</Text>
+                <TextInput
+                  style={styles.firstRunInput}
+                  placeholder="e.g. Aisha"
+                  placeholderTextColor={colors.subtext}
+                  value={firstRunName}
+                  onChangeText={setFirstRunName}
+                />
+                {firstRunError && (
+                  <Text style={styles.firstRunErrorText}>{firstRunError}</Text>
+                )}
+                <Button
+                  title="Add Child & Start Learning"
+                  onPress={handleAddFirstChild}
+                  loading={addingFirstRun}
+                  variant="primary"
+                  style={{ marginTop: 8 }}
+                />
+              </Card>
+            </ScrollView>
+          ) : activeStudent ? (
+            <ChatScreen
+              key={activeStudent.id}
+              studentId={activeStudent.id}
+              studentName={activeStudent.student_name}
+              embedded={true}
+              onBack={() => {}}
+              onLimitReached={onLimitReached}
+            />
+          ) : null}
+        </View>
 
         {/* TAB 2: CALL */}
         {tab === 'call' && (
@@ -238,9 +238,13 @@ export default function MainShellScreen({
 
                 <View style={styles.callPillWrapper}>
                   <Pill
-                    label="Free plan: 10 Voice & Video minutes a week"
-                    color={colors.cardBgMuted}
-                    borderColor={colors.border}
+                    label={
+                      isPremium
+                        ? 'Premium plan: 100 Voice & Video minutes a week'
+                        : 'Free plan: 10 Voice & Video minutes a week'
+                    }
+                    color={isPremium ? colors.mint : colors.cardBgMuted}
+                    borderColor={isPremium ? colors.green : colors.border}
                   />
                 </View>
 

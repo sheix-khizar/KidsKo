@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, StyleSheet, ViewStyle, StatusBar, SafeAreaView, Platform } from 'react-native';
+import { StyleSheet, ViewStyle, StatusBar } from 'react-native';
+import { SafeAreaView, Edge } from 'react-native-safe-area-context';
 import { colors } from '../theme';
 
 type ScreenProps = {
@@ -9,14 +10,12 @@ type ScreenProps = {
 };
 
 export function Screen({ children, style, safeBottom = true }: ScreenProps) {
+  const edges: Edge[] = safeBottom
+    ? ['top', 'bottom', 'left', 'right']
+    : ['top', 'left', 'right'];
+
   return (
-    <SafeAreaView
-      style={[
-        styles.container,
-        Platform.OS === 'android' && { paddingTop: StatusBar.currentHeight ? StatusBar.currentHeight / 2 : 0 },
-        style,
-      ]}
-    >
+    <SafeAreaView edges={edges} style={[styles.container, style]}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       {children}
     </SafeAreaView>
