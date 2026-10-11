@@ -89,3 +89,51 @@ export async function getTranscript(studentId: string) {
     messages: { role: string; content: string; message_type: string; created_at: string }[];
   };
 }
+
+// ---- Student Memory endpoints (Stage 10 / Step 4.5 mobile half) ----
+export type StudentMemoryData = {
+  studentId: string;
+  studentName?: string;
+  preferredName: string | null;
+  facts: string[];
+  enabled: boolean;
+};
+
+export async function getStudentMemory(studentId: string): Promise<StudentMemoryData> {
+  const token = await getToken();
+  const res = await fetch(`${getApiUrl()}/api/students/${studentId}/memory`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Could not load student memory');
+  return data as StudentMemoryData;
+}
+
+export async function updateStudentMemory(
+  studentId: string,
+  updates: { enabled?: boolean; preferredName?: string | null; facts?: string[] }
+): Promise<StudentMemoryData> {
+  const token = await getToken();
+  const res = await fetch(`${getApiUrl()}/api/students/${studentId}/memory`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(updates),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Could not update student memory');
+  return data as StudentMemoryData;
+}
+
+export async function clearStudentMemory(studentId: string): Promise<{ success: boolean; studentId: string }> {
+  const token = await getToken();
+  const res = await fetch(`${getApiUrl()}/api/students/${studentId}/memory`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Could not clear student memory');
+  return data as { success: boolean; studentId: string };
+}

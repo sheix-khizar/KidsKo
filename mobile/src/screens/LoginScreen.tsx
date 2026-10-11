@@ -1,8 +1,19 @@
 import { useState, useEffect } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+} from 'react-native';
 import { login, saveToken } from '../services/api';
 import { getApiUrl, loadSavedApiUrl } from '../services/config';
 import ServerConfigModal from '../components/ServerConfigModal';
+import { Screen, Mascot, Button, Card } from '../ui';
+import { colors, radii, typography, spacing } from '../theme';
 
 type Props = {
   onLoggedIn: () => void;
@@ -12,6 +23,7 @@ type Props = {
 export default function LoginScreen({ onLoggedIn, onGoToRegister }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showServerModal, setShowServerModal] = useState(false);
@@ -26,7 +38,7 @@ export default function LoginScreen({ onLoggedIn, onGoToRegister }: Props) {
   const handleLogin = async () => {
     setErrorMsg(null);
     if (!email || !password) {
-      setErrorMsg('Please fill in both fields.');
+      setErrorMsg('Please fill in both email and password.');
       return;
     }
     setLoading(true);
@@ -35,7 +47,7 @@ export default function LoginScreen({ onLoggedIn, onGoToRegister }: Props) {
       await saveToken(result.session.access_token, result.userId);
       onLoggedIn();
     } catch (err: any) {
-      setErrorMsg(err.message);
+      setErrorMsg(err.message || 'Login failed. Please check your credentials.');
     } finally {
       setLoading(false);
     }
@@ -49,47 +61,108 @@ export default function LoginScreen({ onLoggedIn, onGoToRegister }: Props) {
       errorMsg.includes('Network request failed'));
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Welcome Back 🦉</Text>
+    <Screen>
+      <KeyboardAvoidingView
+        style={styles.keyboardContainer}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Header with Mascot */}
+          <View style={styles.header}>
+            <Mascot size="m" />
+            <Text style={styles.title}>Welcome Back!</Text>
+            <Text style={styles.subtitle}>Sign in to keep learning with Kidsko 🦉</Text>
+          </View>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        autoCapitalize="none"
-        keyboardType="email-address"
-        value={email}
-        onChangeText={setEmail}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-      />
+          {/* Form Card */}
+          <Card style={styles.card}>
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Parent Email</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="parent@example.com"
+                placeholderTextColor={colors.subtext}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                autoCorrect={false}
+                value={email}
+                onChangeText={setEmail}
+              />
+            </View>
 
-      {errorMsg && <Text style={styles.error}>{errorMsg}</Text>}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Password</Text>
+              <View style={styles.passwordRow}>
+                <TextInput
+                  style={styles.passwordInput}
+                  placeholder="Enter your password"
+                  placeholderTextColor={colors.subtext}
+                  secureTextEntry={!showPassword}
+                  value={password}
+                  onChangeText={setPassword}
+                />
+                <Pressable
+                  style={styles.eyeButton}
+                  onPress={() => setShowPassword((prev) => !prev)}
+                  accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.eyeIcon}>{showPassword ? '🙈' : '👁️'}</Text>
+                </Pressable>
+              </View>
+            </View>
 
-      {isNetworkError && (
-        <Pressable style={styles.connectionFixCard} onPress={() => setShowServerModal(true)}>
-          <Text style={styles.connectionFixTitle}>⚠️ Cannot reach {serverUrl}</Text>
-          <Text style={styles.connectionFixSub}>
-            Tap here to change Server IP to your computer's local Wi-Fi IP (e.g. http://192.168.18.95:3003)
-          </Text>
-        </Pressable>
-      )}
+            {errorMsg && (
+              <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>{errorMsg}</Text>
+              </View>
+            )}
 
-      <Pressable style={styles.button} onPress={handleLogin} disabled={loading}>
-        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign In</Text>}
-      </Pressable>
+            {isNetworkError && (
+              <Pressable
+                style={styles.connectionFixCard}
+                onPress={() => setShowServerModal(true)}
+              >
+                <Text style={styles.connectionFixTitle}>⚠️ Cannot reach {serverUrl}</Text>
+                <Text style={styles.connectionFixSub}>
+                  Tap here to change Server IP to your computer's local Wi-Fi IP
+                </Text>
+              </Pressable>
+            )}
 
-      <Pressable onPress={onGoToRegister}>
-        <Text style={styles.link}>New here? Create an account</Text>
-      </Pressable>
+            <Button
+              title="Sign In"
+              onPress={handleLogin}
+              loading={loading}
+              variant="primary"
+              style={styles.submitButton}
+            />
 
-      <Pressable style={styles.footerContainer} onPress={() => setShowServerModal(true)}>
-        <Text style={styles.footerText}>⚙️ Server: {serverUrl} (Tap to change)</Text>
-      </Pressable>
+            <Pressable
+              onPress={onGoToRegister}
+              style={styles.switchLink}
+              accessibilityRole="button"
+              accessibilityLabel="Create an account"
+            >
+              <Text style={styles.switchLinkText}>
+                New to Kidsko? <Text style={styles.switchLinkBold}>Create an account</Text>
+              </Text>
+            </Pressable>
+          </Card>
+
+          {/* Server Config Footer */}
+          <Pressable
+            style={styles.footerContainer}
+            onPress={() => setShowServerModal(true)}
+          >
+            <Text style={styles.footerText}>⚙️ Server: {serverUrl} (Tap to change)</Text>
+          </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       <ServerConfigModal
         visible={showServerModal}
@@ -99,55 +172,139 @@ export default function LoginScreen({ onLoggedIn, onGoToRegister }: Props) {
           setErrorMsg(null);
         }}
       />
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f7f9fc', justifyContent: 'center', padding: 24 },
-  title: { fontSize: 26, fontWeight: '800', color: '#1a73e8', textAlign: 'center', marginBottom: 24 },
-  input: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 12,
-    fontSize: 15,
+  keyboardContainer: {
+    flex: 1,
   },
-  button: { backgroundColor: '#1a73e8', borderRadius: 14, padding: 15, marginTop: 8 },
-  buttonText: { color: '#fff', textAlign: 'center', fontWeight: '700', fontSize: 16 },
-  link: { color: '#1a73e8', textAlign: 'center', marginTop: 16, fontWeight: '600' },
-  error: { color: '#EA4335', marginBottom: 10, textAlign: 'center', fontSize: 13 },
-  connectionFixCard: {
-    backgroundColor: '#fff3cd',
-    borderColor: '#ffeeba',
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  title: {
+    ...typography.title,
+    color: colors.text,
+    marginTop: spacing.md,
+    textAlign: 'center',
+  },
+  subtitle: {
+    ...typography.body,
+    color: colors.subtext,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  card: {
+    padding: spacing.xl,
+    gap: spacing.md,
+  },
+  inputGroup: {
+    gap: 6,
+  },
+  inputLabel: {
+    ...typography.label,
+    fontSize: 14,
+    color: colors.text,
+  },
+  input: {
+    backgroundColor: colors.cardBg,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: colors.text,
+  },
+  passwordRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.cardBg,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+  },
+  passwordInput: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: colors.text,
+  },
+  eyeButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  eyeIcon: {
+    fontSize: 18,
+  },
+  errorContainer: {
+    backgroundColor: '#FFEAEA',
     borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 14,
+    borderColor: colors.coralStrong,
+    borderRadius: radii.sm,
+    padding: spacing.sm,
+  },
+  errorText: {
+    ...typography.caption,
+    color: colors.coralStrong,
+    textAlign: 'center',
+    fontWeight: '700',
+  },
+  connectionFixCard: {
+    backgroundColor: '#FFF4E5',
+    borderColor: colors.orange,
+    borderWidth: 1.5,
+    borderRadius: radii.md,
+    padding: spacing.md,
   },
   connectionFixTitle: {
-    color: '#856404',
-    fontWeight: '700',
+    color: colors.text,
+    fontWeight: '800',
     fontSize: 13,
     marginBottom: 4,
     textAlign: 'center',
   },
   connectionFixSub: {
-    color: '#856404',
+    color: colors.subtext,
     fontSize: 12,
     textAlign: 'center',
     textDecorationLine: 'underline',
   },
-  footerContainer: {
-    marginTop: 30,
+  submitButton: {
+    marginTop: spacing.xs,
+  },
+  switchLink: {
+    marginTop: spacing.sm,
+    paddingVertical: spacing.xs,
+    minHeight: 44,
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 8,
+  },
+  switchLinkText: {
+    ...typography.body,
+    color: colors.subtext,
+  },
+  switchLinkBold: {
+    color: colors.coralStrong,
+    fontWeight: '800',
+  },
+  footerContainer: {
+    marginTop: spacing.xl,
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
   },
   footerText: {
-    color: '#9ca3af',
-    fontSize: 12,
-    fontWeight: '500',
+    ...typography.caption,
+    color: colors.subtext,
   },
 });
