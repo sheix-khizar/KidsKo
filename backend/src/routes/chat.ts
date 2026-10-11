@@ -10,6 +10,7 @@ import { getThreadImage, setThreadImage, getThreadStoragePath, awaitPendingUploa
 import { downloadHomeworkImageFromStorage, deleteThreadImagesFromStorage } from '../lib/homeworkStorage';
 import { cleanMessageForClient } from '../lib/chatHistory';
 import { supabaseAdmin } from '../lib/supabase';
+import { getMemory, buildMemoryBlock, extractFactsAfterTurn } from '../lib/studentMemory';
 
 const router = Router();
 
@@ -20,7 +21,8 @@ export async function processChatTurnCore(
   supabase: SupabaseClient,
   activeThreadId: string,
   studentId: string,
-  message: string
+  message: string,
+  memoryBlock?: string
 ): Promise<string> {
   // 1. Save user message
   const { error: userMsgError } = await supabase.from('messages').insert({
@@ -136,7 +138,7 @@ export async function processChatTurnCore(
       };
     });
 
-    aiReply = await generateChatReply(history, threadImage);
+    aiReply = await generateChatReply(history, threadImage, memoryBlock);
     aiReply = sanitizeChatResponse(aiReply);
   }
 
@@ -371,7 +373,11 @@ router.post('/', requireAuth, userRateLimit, async (req: Request, res: Response)
     const gradeBand = student?.grade_band || 'Grade 3';
     const studentName = student?.student_name;
 
-    if (isFreshThread && !isPersonalMessage(message)) {
+    const memory = await getMemory(req.supabase!, studentId);
+    const memoryBlock = buildMemoryBlock(memory, studentName);
+    const hasActiveMemory = Boolean(memoryBlock && memoryBlock.trim().length > 0);
+
+    if (isFreshThread && !isPersonalMessage(message) && !hasActiveMemory) {
       const cached = await getCachedAnswer(message, gradeBand);
       if (cached) {
         aiReply = sanitizeChatResponse(cached);
@@ -386,14 +392,48 @@ router.post('/', requireAuth, userRateLimit, async (req: Request, res: Response)
     }
 
     if (!servedFromCache) {
-      aiReply = await processChatTurnCore(req.supabase!, activeThreadId, studentId, message);
+      aiReply = await processChatTurnCore(req.supabase!, activeThreadId, studentId, message, memoryBlock);
       const containsStudentName = !!(studentName && new RegExp(`\\b${studentName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(aiReply));
-      if (isFreshThread && !isPersonalMessage(message) && !containsStudentName) {
+      const containsPreferredName = !!(memory.preferredName && new RegExp(`\\b${memory.preferredName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(aiReply));
+      if (isFreshThread && !isPersonalMessage(message) && !hasActiveMemory && !containsStudentName && !containsPreferredName) {
         await setCachedAnswer(message, aiReply, gradeBand);
       }
     }
 
     await logUsageEvent(req.supabase!, req.user!.id, studentId, 'message');
+
+    // Step 9.4: Run memory extraction unawaited (when enabled, and either isPersonalMessage or every 8th user message)
+    if (memory.enabled) {
+      const isPersonal = isPersonalMessage(message);
+      const triggerExtraction = async () => {
+        let shouldRun = isPersonal;
+        if (!shouldRun) {
+          try {
+            const { count } = await req.supabase!
+              .from('messages')
+              .select('*', { count: 'exact', head: true })
+              .eq('thread_id', activeThreadId)
+              .eq('role', 'user');
+            if (count && count % 8 === 0) {
+              shouldRun = true;
+            }
+          } catch {}
+        }
+        if (shouldRun) {
+          await extractFactsAfterTurn(
+            req.supabase!,
+            studentId,
+            req.user!.id,
+            message,
+            activeThreadId,
+            memory
+          );
+        }
+      };
+      void triggerExtraction().catch((extractErr: any) => {
+        console.error('[Memory Extraction Background Error]:', extractErr?.message || extractErr);
+      });
+    }
 
     return res.status(200).json({
       threadId: activeThreadId,

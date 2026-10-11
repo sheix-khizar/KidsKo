@@ -10,7 +10,7 @@ if (!apiKey) {
   throw new Error('Missing GEMINI_API_KEY_DEV in .env');
 }
 
-const ai = new GoogleGenAI({ apiKey });
+export const ai = new GoogleGenAI({ apiKey });
 
 export const SYSTEM_PROMPT = `You are "Kidsko", a warm, enthusiastic elementary school teacher AI companion for kids aged 5 to 12.
 
@@ -72,7 +72,8 @@ export function sanitizeChatResponse(text: string): string {
 
 export async function generateChatReply(
   history: ChatMessage[],
-  threadImage?: { base64: string; mimeType: string }
+  threadImage?: { base64: string; mimeType: string },
+  memoryBlock?: string
 ): Promise<string> {
   // Attach the active homework image to the latest user message in history
   const lastUserIndex = history.map((m) => m.role).lastIndexOf('user');
@@ -94,11 +95,15 @@ export async function generateChatReply(
     };
   });
 
+  const systemInstruction = memoryBlock?.trim()
+    ? `${SYSTEM_PROMPT}\n\n${memoryBlock.trim()}`
+    : SYSTEM_PROMPT;
+
   const response = await ai.models.generateContent({
     model: 'gemini-3.1-flash-lite',
     contents,
     config: {
-      systemInstruction: SYSTEM_PROMPT,
+      systemInstruction,
       maxOutputTokens: 250, // NFR-3: cost control
       temperature: 0.3,
     },
@@ -111,11 +116,16 @@ export async function generateChatReply(
 export async function generateHomeworkExplanation(
   imageBase64: string,
   mimeType: string,
-  userPrompt?: string
+  userPrompt?: string,
+  memoryBlock?: string
 ): Promise<string> {
   const promptInstruction = userPrompt?.trim()
     ? `Look at this homework image and answer the student's specific request: "${userPrompt.trim()}". Do NOT give the direct final answer. Explain the concept in 2 to 3 short, super simple sentences for a 7-year-old child using digits for numbers (e.g. 5 x 5 x 5 = 5³), then ask a small question.`
     : 'Look at this homework image. Explain ONLY the first problem in 2 to 3 short, super simple sentences for a 7-year-old child using digits for numbers (e.g. 5 x 5 x 5 = 5³), then ask a small question.';
+
+  const systemInstruction = memoryBlock?.trim()
+    ? `${SYSTEM_PROMPT}\n\n${memoryBlock.trim()}`
+    : SYSTEM_PROMPT;
 
   const response = await ai.models.generateContent({
     model: 'gemini-3.1-flash-lite',
@@ -129,7 +139,7 @@ export async function generateHomeworkExplanation(
       },
     ],
     config: {
-      systemInstruction: SYSTEM_PROMPT,
+      systemInstruction,
       maxOutputTokens: 250,
       temperature: 0.3,
     },
