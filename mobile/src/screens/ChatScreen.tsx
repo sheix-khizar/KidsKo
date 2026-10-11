@@ -17,6 +17,7 @@ import { analyzeHomework } from '../services/homework';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import { pickImageFromGallery, captureImageFromCamera, ProcessedImage } from '../utils/imageHelper';
 import { cleanMessageText } from '../utils/messageText';
+import { colors, radii, typography, spacing } from '../theme';
 
 type Props = {
   studentId: string;
@@ -185,7 +186,7 @@ export default function ChatScreen({
           contentContainerStyle={{ padding: 14, gap: 12 }}
           renderItem={({ item }) => (
             <View style={[styles.msgRow, item.role === 'user' && styles.msgRowUser]}>
-              <View style={styles.avatar}>
+              <View style={[styles.avatar, item.role === 'user' && styles.avatarUser]}>
                 <Text>{item.role === 'user' ? '🧒' : '🦉'}</Text>
               </View>
               <View style={[styles.bubble, item.role === 'user' && styles.bubbleUser]}>
@@ -214,7 +215,7 @@ export default function ChatScreen({
 
       {sending && (
         <View style={styles.typingRow}>
-          <ActivityIndicator size="small" color="#1a73e8" />
+          <ActivityIndicator size="small" color={colors.coralStrong} />
           <Text style={styles.typingText}>Kidsko is thinking...</Text>
         </View>
       )}
@@ -225,6 +226,8 @@ export default function ChatScreen({
         <Pressable
           style={styles.imagePickerButton}
           onPress={() => setShowImagePickerModal(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Attach homework photo"
         >
           <Text style={styles.imagePickerButtonText}>📷</Text>
         </Pressable>
@@ -232,6 +235,8 @@ export default function ChatScreen({
         <Pressable
           style={[styles.micButton, listening && styles.micButtonListening]}
           onPress={listening ? stopListening : startListening}
+          accessibilityRole="button"
+          accessibilityLabel="Voice input"
         >
           <Text style={styles.micButtonText}>{listening ? '🔴' : '🎙️'}</Text>
         </Pressable>
@@ -245,6 +250,7 @@ export default function ChatScreen({
               ? 'Ask a question about this photo...'
               : 'Ask Kidsko anything...'
           }
+          placeholderTextColor={colors.subtext}
           value={input}
           onChangeText={setInput}
           multiline
@@ -256,6 +262,8 @@ export default function ChatScreen({
           ]}
           onPress={handleSend}
           disabled={(!input.trim() && !previewImage) || sending}
+          accessibilityRole="button"
+          accessibilityLabel="Send message"
         >
           <Text style={styles.sendButtonText}>➤</Text>
         </Pressable>
@@ -287,145 +295,193 @@ export default function ChatScreen({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
+  container: { flex: 1, backgroundColor: colors.background },
   header: {
-    paddingTop: 55,
-    paddingBottom: 14,
+    paddingTop: 16,
+    paddingBottom: 12,
     paddingHorizontal: 16,
+    backgroundColor: colors.cardBg,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: colors.border,
   },
-  backButton: { color: '#1a73e8', fontWeight: '700', marginBottom: 6 },
-  headerTitle: { fontSize: 18, fontWeight: '800', color: '#111' },
-  headerSubtitle: { fontSize: 12, color: '#6b7280', fontWeight: '600' },
+  backButton: { color: colors.coralStrong, fontWeight: '700', marginBottom: 6, fontSize: 14 },
+  headerTitle: { ...typography.subheading, fontSize: 18, fontWeight: '900', color: colors.coralStrong },
+  headerSubtitle: { ...typography.caption, fontSize: 13, color: colors.subtext, fontWeight: '700', marginTop: 2 },
   usagePill: {
     alignSelf: 'flex-start',
-    marginTop: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: '#e8f0fe',
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: radii.full,
+    backgroundColor: colors.cardBgMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  usagePillLow: { backgroundColor: '#fff3e0' },
-  usagePillPremium: { backgroundColor: '#FFD54F' },
-  usagePillText: { fontSize: 11, fontWeight: '800', color: '#1a73e8' },
+  usagePillLow: {
+    backgroundColor: '#FFF0F0',
+    borderColor: colors.coralStrong,
+  },
+  usagePillPremium: {
+    backgroundColor: '#FEF08A',
+    borderColor: '#FDE047',
+  },
+  usagePillText: { ...typography.caption, fontSize: 11, fontWeight: '800', color: colors.text },
   welcome: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   welcomeEmoji: { fontSize: 56, marginBottom: 10 },
-  welcomeTitle: { fontSize: 20, fontWeight: '800', color: '#111' },
-  welcomeSubtitle: { fontSize: 13, color: '#6b7280', marginTop: 4, textAlign: 'center' },
-  messagesList: { flex: 1 },
+  welcomeTitle: { ...typography.heading, fontSize: 22, color: colors.text },
+  welcomeSubtitle: { ...typography.body, fontSize: 14, color: colors.subtext, marginTop: 6, textAlign: 'center' },
+  messagesList: { flex: 1, backgroundColor: colors.background },
   msgRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
   msgRowUser: { flexDirection: 'row-reverse' },
   avatar: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#FFD54F',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.sun,
+    borderWidth: 1.5,
+    borderColor: colors.white,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  bubble: {
-    backgroundColor: '#f4f4f4',
-    borderRadius: 18,
-    padding: 12,
-    maxWidth: '75%',
+  avatarUser: {
+    backgroundColor: colors.cardBgMuted,
+    borderColor: colors.border,
   },
-  bubbleUser: { backgroundColor: '#1a73e8' },
-  bubbleText: { fontSize: 14, color: '#111', lineHeight: 20 },
-  bubbleTextUser: { color: '#fff' },
-  typingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingBottom: 6 },
-  typingText: { fontSize: 12, color: '#6b7280' },
-  error: { color: '#EA4335', textAlign: 'center', paddingHorizontal: 16, paddingBottom: 6, fontSize: 12 },
+  bubble: {
+    backgroundColor: colors.cardBg,
+    borderRadius: 20,
+    borderBottomLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 14,
+    maxWidth: '78%',
+  },
+  bubbleUser: {
+    backgroundColor: colors.coralStrong,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 4,
+    borderWidth: 0,
+  },
+  bubbleText: { ...typography.body, fontSize: 15, color: colors.text, lineHeight: 22 },
+  bubbleTextUser: { color: colors.white },
+  typingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingBottom: 8 },
+  typingText: { ...typography.caption, fontSize: 13, color: colors.subtext, fontWeight: '600' },
+  error: { color: colors.error, textAlign: 'center', paddingHorizontal: 16, paddingBottom: 6, fontSize: 12, fontWeight: '700' },
   inputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 8,
-    padding: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: colors.cardBg,
     borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
+    borderTopColor: colors.border,
   },
   imagePickerButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#e8f0fe',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.cardBgMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  imagePickerButtonText: { fontSize: 18 },
+  imagePickerButtonText: { fontSize: 20 },
   micButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#f4f4f4',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.cardBgMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
     justifyContent: 'center',
     alignItems: 'center',
   },
   micButtonListening: {
     backgroundColor: '#FEE2E2',
-    borderWidth: 1,
-    borderColor: '#EF4444',
+    borderWidth: 1.5,
+    borderColor: colors.coralStrong,
   },
-  micButtonText: { fontSize: 18 },
+  micButtonText: { fontSize: 20 },
   input: {
     flex: 1,
-    backgroundColor: '#f4f4f4',
-    borderRadius: 20,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 22,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    fontSize: 14,
-    maxHeight: 100,
+    fontSize: 15,
+    maxHeight: 110,
+    color: colors.text,
   },
   inputListening: {
-    backgroundColor: '#FEF2F2',
-    borderColor: '#F87171',
-    borderWidth: 1,
+    backgroundColor: '#FFF0F0',
+    borderColor: colors.coralStrong,
   },
   sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#111',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.coralStrong,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  sendButtonInactive: { backgroundColor: '#ccc' },
-  sendButtonText: { color: '#fff', fontSize: 16 },
-
-  // Attachment Bar styles (Thumbnail + Title + X button)
+  sendButtonInactive: {
+    backgroundColor: '#E2E8F0',
+  },
+  sendButtonText: { color: colors.white, fontSize: 18, fontWeight: '900' },
   attachmentBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F1F5F9',
+    backgroundColor: colors.cardBgMuted,
     borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 10,
+    borderTopColor: colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 12,
   },
-  attachmentThumbnail: { width: 44, height: 44, borderRadius: 8, backgroundColor: '#CBD5E1' },
+  attachmentThumbnail: { width: 44, height: 44, borderRadius: 10, backgroundColor: '#CBD5E1' },
   attachmentInfo: { flex: 1, justifyContent: 'center' },
-  attachmentTitle: { fontSize: 12, fontWeight: '700', color: '#1E293B' },
-  attachmentSub: { fontSize: 11, color: '#64748B' },
+  attachmentTitle: { ...typography.label, fontSize: 13, color: colors.text },
+  attachmentSub: { ...typography.caption, fontSize: 11, color: colors.subtext },
   removeAttachmentBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#E2E8F0',
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.border,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  removeAttachmentText: { color: '#475569', fontSize: 14, fontWeight: '800' },
-
-  // Modal styles
+  removeAttachmentText: { color: colors.subtext, fontSize: 14, fontWeight: '800' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, alignItems: 'center', gap: 12 },
-  modalTitle: { fontSize: 18, fontWeight: '800', color: '#111' },
-  modalSubtitle: { fontSize: 13, color: '#6b7280', marginBottom: 8, textAlign: 'center' },
-  optionButton: { width: '100%', backgroundColor: '#1a73e8', borderRadius: 16, paddingVertical: 14, alignItems: 'center' },
-  optionButtonText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  optionButtonSecondary: { backgroundColor: '#f4f4f4', borderWidth: 1, borderColor: '#e0e0e0' },
-  optionButtonTextSecondary: { color: '#111', fontWeight: '700', fontSize: 15 },
+  modalContent: {
+    backgroundColor: colors.cardBg,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 24,
+    alignItems: 'center',
+    gap: 12,
+  },
+  modalTitle: { ...typography.heading, fontSize: 19, color: colors.text },
+  modalSubtitle: { ...typography.caption, fontSize: 13, color: colors.subtext, marginBottom: 8, textAlign: 'center' },
+  optionButton: {
+    width: '100%',
+    backgroundColor: colors.coralStrong,
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  optionButtonText: { color: colors.white, fontWeight: '800', fontSize: 15 },
+  optionButtonSecondary: {
+    backgroundColor: colors.cardBg,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+  },
+  optionButtonTextSecondary: { color: colors.text, fontWeight: '800', fontSize: 15 },
   cancelModalButton: { marginTop: 8, paddingVertical: 10 },
-  cancelModalText: { color: '#EA4335', fontWeight: '700', fontSize: 15 },
+  cancelModalText: { color: colors.subtext, fontWeight: '700', fontSize: 15 },
 });
