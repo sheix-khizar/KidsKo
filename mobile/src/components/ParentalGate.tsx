@@ -1,7 +1,5 @@
 import { useState, useMemo } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, Modal } from 'react-native';
-import { LinearGradient } from '../ui';
-import { colors, radii, gradients } from '../theme';
 
 type Props = {
   visible: boolean;
@@ -19,8 +17,7 @@ export default function ParentalGate({ visible, onSuccess, onCancel }: Props) {
   }, [visible]);
 
   const handleSubmit = () => {
-    const trimmed = answer.trim();
-    if (parseInt(trimmed, 10) === a + b || trimmed === '1234') {
+    if (parseInt(answer, 10) === a + b) {
       setAnswer('');
       setError(false);
       onSuccess();
@@ -30,25 +27,14 @@ export default function ParentalGate({ visible, onSuccess, onCancel }: Props) {
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+    <Modal visible={visible} transparent animationType="fade">
       <View style={styles.overlay}>
         <View style={styles.card}>
-          {/* Glass Lock Icon */}
-          <View style={styles.lockBadge}>
-            <Text style={styles.emoji}>🔐</Text>
-          </View>
-
+          <Text style={styles.emoji}>🔒</Text>
           <Text style={styles.title}>Parents Only</Text>
-          <Text style={styles.subtitle}>This area is protected for parents</Text>
-
-          {/* Math Challenge Question */}
-          <View style={styles.questionBox}>
-            <Text style={styles.questionLabel}>Solve this math problem to continue:</Text>
-            <Text style={styles.question}>
-              What is <Text style={styles.mathHighlight}>{a} + {b}</Text>?
-            </Text>
-          </View>
-
+          <Text style={styles.question}>
+            What is {a} + {b}?
+          </Text>
           <TextInput
             style={[styles.input, error && styles.inputError]}
             keyboardType="number-pad"
@@ -57,31 +43,18 @@ export default function ParentalGate({ visible, onSuccess, onCancel }: Props) {
               setAnswer(t);
               setError(false);
             }}
-            placeholder="Type answer (or PIN: 1234)"
-            placeholderTextColor="rgba(255,255,255,0.4)"
+            placeholder="Type the answer"
             autoFocus
           />
-
-          {error && (
-            <Text style={styles.errorText}>That's not quite right — try again!</Text>
-          )}
-
+          {error && <Text style={styles.errorText}>That's not quite right — try again.</Text>}
           <Pressable
-            style={styles.submitPressable}
+            style={styles.button}
             onPress={handleSubmit}
             accessibilityRole="button"
             accessibilityLabel="Continue"
           >
-            <LinearGradient
-              colors={gradients.primary}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.buttonGradient}
-            >
-              <Text style={styles.buttonText}>Continue →</Text>
-            </LinearGradient>
+            <Text style={styles.buttonText}>Continue</Text>
           </Pressable>
-
           <Pressable
             style={styles.cancelBtn}
             onPress={onCancel}
@@ -97,131 +70,40 @@ export default function ParentalGate({ visible, onSuccess, onCancel }: Props) {
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(10, 10, 20, 0.75)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  card: {
-    backgroundColor: '#1E2433',
-    borderRadius: 28,
-    padding: 26,
-    width: '100%',
-    maxWidth: 340,
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.5,
-    shadowRadius: 28,
-    elevation: 10,
-  },
-  lockBadge: {
-    width: 72,
-    height: 72,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  emoji: {
-    fontSize: 36,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.5)',
-    textAlign: 'center',
-    marginBottom: 18,
-  },
-  questionBox: {
-    width: '100%',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 16,
-    padding: 14,
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  questionLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: 'rgba(255, 255, 255, 0.5)',
-    marginBottom: 4,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  question: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#FFFFFF',
-  },
-  mathHighlight: {
-    color: '#FFE66D',
-    fontWeight: '900',
-  },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  card: { backgroundColor: '#fff', borderRadius: 20, padding: 24, width: '80%', alignItems: 'center' },
+  emoji: { fontSize: 40, marginBottom: 8 },
+  title: { fontSize: 18, fontWeight: '800', color: '#111', marginBottom: 12 },
+  question: { fontSize: 16, fontWeight: '700', color: '#1a73e8', marginBottom: 12 },
   input: {
     width: '100%',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    borderWidth: 1.5,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    padding: 12,
     textAlign: 'center',
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    marginBottom: 12,
-  },
-  inputError: {
-    borderColor: colors.coralStrong,
-    backgroundColor: 'rgba(255, 107, 107, 0.12)',
-  },
-  errorText: {
-    color: colors.coralStrong,
-    fontSize: 13,
-    fontWeight: '700',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  submitPressable: {
-    width: '100%',
-    borderRadius: 20,
-    overflow: 'hidden',
-    marginTop: 4,
-  },
-  buttonGradient: {
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  buttonText: {
-    color: '#FFFFFF',
-    fontWeight: '900',
     fontSize: 16,
+    marginBottom: 8,
   },
+  inputError: { borderColor: '#EA4335' },
+  errorText: { color: '#EA4335', fontSize: 12, marginBottom: 8 },
+  button: {
+    backgroundColor: '#1a73e8',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+    marginTop: 4,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  buttonText: { color: '#fff', fontWeight: '700' },
   cancelBtn: {
-    marginTop: 12,
+    marginTop: 8,
     minHeight: 44,
     paddingHorizontal: 20,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  cancel: {
-    color: 'rgba(255, 255, 255, 0.5)',
-    fontWeight: '700',
-    fontSize: 14,
-  },
+  cancel: { color: '#9ca3af', fontWeight: '600' },
 });

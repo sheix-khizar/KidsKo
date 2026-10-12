@@ -10,8 +10,7 @@ import {
   RefreshControl,
   Platform,
 } from 'react-native';
-import { LinearGradient } from '../ui';
-import { colors, radii, typography, gradients } from '../theme';
+import { colors, radii, typography, spacing, shadows } from '../theme';
 import { ThreadSummary, getThreads } from '../services/threads';
 import { groupThreadsByDate, GroupedThreadsSection } from '../utils/groupThreads';
 
@@ -26,8 +25,6 @@ type ChatHistoryDrawerProps = {
   onNewChat: () => void;
   onRequestDeleteThread: (thread: ThreadSummary) => void;
 };
-
-const CATEGORY_ICONS = ['🔬', '🔢', '🌍', '🦕', '📚', '🎨', '🚀', '⭐'];
 
 export default function ChatHistoryDrawer({
   visible,
@@ -121,23 +118,10 @@ export default function ChatHistoryDrawer({
 
         {/* Drawer Panel */}
         <View style={styles.drawerPanel}>
-          {/* Prototype Gradient Header */}
-          <LinearGradient
-            colors={gradients.primary}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.drawerHeader}
-          >
-            <View style={styles.drawerHeaderTop}>
-              <View style={styles.studentBadge}>
-                <Text style={styles.studentEmoji}>👧</Text>
-              </View>
-              <View style={styles.studentInfo}>
-                <Text style={styles.studentNameText} numberOfLines={1}>
-                  {studentName || 'Student'}
-                </Text>
-                <Text style={styles.studentGradeText}>Grade 5 · Active 🌟</Text>
-              </View>
+          {/* Drawer Header */}
+          <View style={styles.drawerHeader}>
+            <View style={styles.drawerHeaderTitleRow}>
+              <Text style={styles.drawerTitle}>Chat History 📜</Text>
               <Pressable
                 style={styles.closeBtn}
                 onPress={onClose}
@@ -147,10 +131,9 @@ export default function ChatHistoryDrawer({
                 <Text style={styles.closeBtnText}>✕</Text>
               </Pressable>
             </View>
-          </LinearGradient>
+            <Text style={styles.drawerSubtitle}>{studentName}'s Conversations</Text>
 
-          {/* New Chat Button (Prototype Dashed Style) */}
-          <View style={styles.actionContainer}>
+            {/* New Chat Button */}
             <Pressable
               style={({ pressed }) => [
                 styles.newChatBtn,
@@ -163,7 +146,7 @@ export default function ChatHistoryDrawer({
               accessibilityRole="button"
               accessibilityLabel="Start a new chat"
             >
-              <Text style={styles.newChatBtnText}>✏️ New Chat</Text>
+              <Text style={styles.newChatBtnText}>✨ + New chat</Text>
             </Pressable>
           </View>
 
@@ -196,14 +179,13 @@ export default function ChatHistoryDrawer({
                   <Text style={styles.sectionHeaderText}>{title}</Text>
                 </View>
               )}
-              renderItem={({ item, section, index }) => {
+              renderItem={({ item, section }) => {
                 const isActive = item.id === activeThreadId;
-                const icon = CATEGORY_ICONS[index % CATEGORY_ICONS.length];
                 return (
                   <Pressable
                     style={({ pressed }) => [
                       styles.threadRow,
-                      isActive && styles.threadRowActive,
+                       isActive && styles.threadRowActive,
                       pressed && styles.threadRowPressed,
                     ]}
                     onPress={() => {
@@ -215,9 +197,6 @@ export default function ChatHistoryDrawer({
                     accessibilityRole="button"
                     accessibilityLabel={`Chat: ${item.title}. Long press to delete.`}
                   >
-                    <View style={styles.threadIconBox}>
-                      <Text style={styles.threadIconEmoji}>{icon}</Text>
-                    </View>
                     <View style={styles.threadRowContent}>
                       <Text
                         style={[
@@ -232,11 +211,7 @@ export default function ChatHistoryDrawer({
                         {formatThreadTime(item.updatedAt, section.title)}
                       </Text>
                     </View>
-                    {isActive ? (
-                      <View style={styles.activeDot} />
-                    ) : (
-                      <Text style={styles.chevron}>›</Text>
-                    )}
+                    {isActive && <Text style={styles.activeCheck}>●</Text>}
                   </Pressable>
                 );
               }}
@@ -273,88 +248,68 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill as any,
   },
   drawerPanel: {
-    width: '84%',
+    width: '82%',
     maxWidth: 320,
     height: '100%',
-    backgroundColor: '#FFFFFF',
-    borderRightWidth: 2,
+    backgroundColor: colors.cardBg,
+    paddingTop: Platform.OS === 'android' ? 24 : 44,
+    borderRightWidth: 1.5,
     borderRightColor: colors.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 4, height: 0 },
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
-    elevation: 8,
+    ...shadows.card,
   },
   drawerHeader: {
-    paddingTop: Platform.OS === 'android' ? 44 : 54,
     paddingHorizontal: 16,
-    paddingBottom: 20,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
-  drawerHeaderTop: {
+  drawerHeaderTitleRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  studentBadge: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     alignItems: 'center',
   },
-  studentEmoji: {
-    fontSize: 24,
-  },
-  studentInfo: {
-    flex: 1,
-  },
-  studentNameText: {
-    fontSize: 17,
+  drawerTitle: {
+    ...typography.subheading,
+    fontSize: 18,
     fontWeight: '900',
-    color: '#FFFFFF',
+    color: colors.coralStrong,
   },
-  studentGradeText: {
+  drawerSubtitle: {
+    ...typography.caption,
     fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: colors.subtext,
     fontWeight: '700',
     marginTop: 2,
+    marginBottom: 12,
   },
   closeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    minWidth: 44,
+    minHeight: 44,
+    borderRadius: 22,
+    backgroundColor: colors.cardBgMuted,
     justifyContent: 'center',
     alignItems: 'center',
   },
   closeBtnText: {
-    fontSize: 14,
-    color: '#FFFFFF',
+    fontSize: 15,
+    color: colors.subtext,
     fontWeight: '800',
-  },
-  actionContainer: {
-    padding: 12,
-    paddingBottom: 4,
   },
   newChatBtn: {
-    width: '100%',
-    backgroundColor: 'rgba(255, 107, 107, 0.08)',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 107, 107, 0.35)',
-    borderStyle: 'dashed',
-    borderRadius: 16,
+    backgroundColor: colors.coralStrong,
+    borderRadius: radii.md,
     paddingVertical: 12,
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 46,
   },
   newChatBtnPressed: {
-    backgroundColor: 'rgba(255, 107, 107, 0.16)',
+    opacity: 0.85,
   },
   newChatBtnText: {
-    color: colors.coralStrong,
-    fontWeight: '800',
+    ...typography.label,
+    color: colors.white,
+    fontWeight: '900',
     fontSize: 14,
   },
   listContent: {
@@ -364,69 +319,54 @@ const styles = StyleSheet.create({
   sectionHeader: {
     paddingTop: 16,
     paddingBottom: 6,
-    paddingHorizontal: 6,
+    paddingHorizontal: 8,
   },
   sectionHeaderText: {
-    fontSize: 10,
+    ...typography.caption,
+    fontSize: 11,
     fontWeight: '800',
     color: colors.subtext,
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: 0.5,
   },
   threadRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 10,
-    borderRadius: 14,
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: radii.md,
     marginBottom: 4,
-    backgroundColor: 'transparent',
   },
   threadRowActive: {
-    backgroundColor: 'rgba(255, 107, 107, 0.08)',
+    backgroundColor: '#FFEAEA',
   },
   threadRowPressed: {
-    backgroundColor: 'rgba(0, 0, 0, 0.03)',
-  },
-  threadIconBox: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: '#FFF4E0',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  threadIconEmoji: {
-    fontSize: 18,
+    backgroundColor: colors.cardBgMuted,
   },
   threadRowContent: {
     flex: 1,
     marginRight: 8,
   },
   threadRowTitle: {
-    fontSize: 13,
-    fontWeight: '800',
+    ...typography.body,
+    fontSize: 14,
+    fontWeight: '600',
     color: colors.text,
   },
   threadRowTitleActive: {
+    fontWeight: '800',
     color: colors.coralStrong,
   },
   threadRowTime: {
+    ...typography.caption,
     fontSize: 11,
     color: colors.subtext,
     marginTop: 2,
-    fontWeight: '600',
   },
-  activeDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.coralStrong,
-  },
-  chevron: {
-    fontSize: 16,
-    color: colors.subtext,
-    fontWeight: '700',
+  activeCheck: {
+    fontSize: 10,
+    color: colors.coralStrong,
   },
   loadMoreBtn: {
     paddingVertical: 12,
@@ -435,6 +375,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   loadMoreText: {
+    ...typography.caption,
     fontSize: 13,
     color: colors.coralStrong,
     fontWeight: '800',
@@ -446,6 +387,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   loadingText: {
+    ...typography.caption,
     fontSize: 13,
     color: colors.subtext,
   },
@@ -460,11 +402,13 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   emptyTitle: {
+    ...typography.subheading,
     fontSize: 16,
     color: colors.text,
     fontWeight: '800',
   },
   emptySub: {
+    ...typography.body,
     fontSize: 13,
     color: colors.subtext,
     textAlign: 'center',

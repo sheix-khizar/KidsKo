@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   BackHandler,
   ScrollView,
-  Platform,
 } from 'react-native';
 import ChatScreen from './ChatScreen';
 import ParentalGate from '../components/ParentalGate';
@@ -17,8 +16,8 @@ import ParentsHub from '../components/ParentsHub';
 import { getStudents, createStudent, clearToken, getSavedUserId } from '../services/api';
 import { configureBilling, isPremiumActive } from '../services/billing';
 import { TabBar, TabKey } from '../ui/TabBar';
-import { Screen, Mascot, Button, Card, LinearGradient } from '../ui';
-import { colors, radii, gradients } from '../theme';
+import { Screen, Mascot, Button, Card, Pill } from '../ui';
+import { colors, radii, typography, spacing } from '../theme';
 
 export type Student = { id: string; student_name: string };
 
@@ -60,6 +59,7 @@ export default function MainShellScreen({
       const list = await getStudents();
       setStudents(list);
       if (list.length > 0) {
+        // Auto-select first child if none selected or if active was removed
         setActiveStudent((prev) => {
           if (!prev || !list.some((s) => s.id === prev.id)) {
             return list[0];
@@ -71,10 +71,6 @@ export default function MainShellScreen({
       }
     } catch (err: any) {
       console.warn('Failed to load students in shell:', err.message);
-      if (err.status === 401 || err.message?.includes('expired') || err.message?.includes('Invalid')) {
-        await clearToken();
-        onLogout();
-      }
     } finally {
       setLoadingStudents(false);
     }
@@ -94,7 +90,7 @@ export default function MainShellScreen({
     loadStudentList();
   }, []);
 
-  // Re-check the plan after a purchase
+  // Re-check the plan after a purchase (the shell stays mounted behind the paywall)
   useEffect(() => {
     if (billingVersion === 0) return;
     isPremiumActive().then(setIsPremium).catch(() => {});
@@ -111,13 +107,13 @@ export default function MainShellScreen({
         setTab('chat');
         return true;
       }
-      return false;
+      return false; // let OS exit app on chat tab
     };
     const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => backHandler.remove();
   }, [tab, showSwitcherModal]);
 
-  // Tab change handler
+  // Tab change handler: re-lock parents tab whenever leaving it, refresh billing on call tab
   const handleTabSelect = (nextTab: TabKey) => {
     if (tab === 'parents' && nextTab !== 'parents') {
       setParentsUnlocked(false);
@@ -167,50 +163,40 @@ export default function MainShellScreen({
 
   return (
     <Screen safeBottom={false}>
-      {/* Shell Header: only shown on non-chat tabs when active child is present */}
-      {tab !== 'chat' && tab !== 'call' && (
-        <View style={styles.shellHeader}>
-          <View style={styles.brandRow}>
-            <Text style={styles.brandText}>
-              Kidsko<Text style={{ color: colors.sun }}>.ai</Text> 🦉
-            </Text>
-          </View>
-
-          {activeStudent && (
-            <Pressable
-              style={styles.childChip}
-              onPress={() => setShowSwitcherModal(true)}
-              accessibilityRole="button"
-              accessibilityLabel={`Active child is ${activeStudent.student_name}. Tap to switch.`}
-            >
-              <Text style={styles.childChipIcon}>🧒</Text>
-              <Text style={styles.childChipName} numberOfLines={1}>
-                {activeStudent.student_name}
-              </Text>
-              <Text style={styles.childChipArrow}>▼</Text>
-            </Pressable>
-          )}
+      {/* Shell Header: Child Switcher Chip */}
+      <View style={[styles.shellHeader, { paddingTop: spacing.sm }]}>
+        <View style={styles.brandRow}>
+          <Text style={styles.brandText}>Kidsko.ai 🦉</Text>
         </View>
-      )}
+
+        {activeStudent && (
+          <Pressable
+            style={styles.childChip}
+            onPress={() => setShowSwitcherModal(true)}
+            accessibilityRole="button"
+            accessibilityLabel={`Active child is ${activeStudent.student_name}. Tap to switch.`}
+          >
+            <Text style={styles.childChipIcon}>🧒</Text>
+            <Text style={styles.childChipName} numberOfLines={1}>
+              {activeStudent.student_name}
+            </Text>
+            <Text style={styles.childChipArrow}>▼</Text>
+          </Pressable>
+        )}
+      </View>
 
       {/* Main Tab Body */}
       <View style={styles.bodyContainer}>
-        {/* TAB 1: CHAT */}
+        {/* TAB 1: CHAT (Kept mounted to preserve scroll, draft text, and attachments across tabs) */}
         <View style={[{ flex: 1 }, tab !== 'chat' && { display: 'none' }]}>
           {students.length === 0 ? (
+            // Ungated first-run empty state
             <ScrollView contentContainerStyle={styles.firstRunContent}>
-              <LinearGradient
-                colors={gradients.primary}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.firstRunBanner}
-              >
-                <Text style={{ fontSize: 50, marginBottom: 8 }}>🦉</Text>
-                <Text style={styles.firstRunTitle}>Welcome to Kidsko! 🎉</Text>
-                <Text style={styles.firstRunSub}>
-                  Add your child's name to get started with friendly homework help and chats.
-                </Text>
-              </LinearGradient>
+              <Mascot size="l" style={styles.firstRunMascot} />
+              <Text style={styles.firstRunTitle}>Welcome to Kidsko! 🦉</Text>
+              <Text style={styles.firstRunSub}>
+                Add your child's name to get started with friendly homework help and chats.
+              </Text>
 
               <Card style={styles.firstRunCard}>
                 <Text style={styles.firstRunLabel}>Child's Name</Text>
@@ -225,7 +211,7 @@ export default function MainShellScreen({
                   <Text style={styles.firstRunErrorText}>{firstRunError}</Text>
                 )}
                 <Button
-                  title="Add Child & Start Learning 🚀"
+                  title="Add Child & Start Learning"
                   onPress={handleAddFirstChild}
                   loading={addingFirstRun}
                   variant="primary"
@@ -245,128 +231,54 @@ export default function MainShellScreen({
           ) : null}
         </View>
 
-        {/* TAB 2: CALL (Prototype Dark Theme) */}
+        {/* TAB 2: CALL */}
         {tab === 'call' && (
-          <LinearGradient
-            colors={gradients.callDark}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 0, y: 1 }}
-            style={styles.callContainer}
-          >
-            <ScrollView
-              contentContainerStyle={styles.callScrollContent}
-              showsVerticalScrollIndicator={false}
-            >
-              {/* Mascot Badge */}
-              <LinearGradient
-                colors={gradients.primary}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.callMascotBox}
-              >
-                <Text style={styles.callMascotEmoji}>🦉</Text>
-              </LinearGradient>
-
-              <Text style={styles.callMainTitle}>Talk to Kidsko!</Text>
-              <Text style={styles.callSubtitle}>
-                Choose how you want to talk to me today 👇
-              </Text>
-
-              {/* Plan Allowance Pill */}
-              <View style={styles.callPlanBadge}>
-                <Text style={styles.callPlanText}>
-                  {isPremium
-                    ? '⭐ Premium: 100 Voice & Video mins / week'
-                    : '💬 Free: 10 Voice & Video mins / week'}
+          <ScrollView contentContainerStyle={styles.callTabContent}>
+            <View style={styles.callCardContainer}>
+              <Card style={styles.callCard}>
+                <Mascot size="l" style={styles.callMascot} />
+                <Text style={styles.callTitle}>Talk to Kidsko 🦉</Text>
+                <Text style={styles.callSubtitle}>
+                  {activeStudent
+                    ? `Ready to talk with ${activeStudent.student_name}? Speak naturally or show your homework!`
+                    : 'Select a child to start your call.'}
                 </Text>
-              </View>
 
-              {/* Voice Call Card */}
-              <Pressable
-                style={({ pressed }) => [
-                  styles.callOptionCard,
-                  pressed && styles.callOptionCardPressed,
-                ]}
-                onPress={() => {
-                  if (activeStudent) {
-                    onStartCall(activeStudent);
-                  }
-                }}
-                disabled={!activeStudent}
-              >
-                <LinearGradient
-                  colors={gradients.primary}
-                  style={styles.optionIconBox}
-                >
-                  <Text style={styles.optionIconEmoji}>🎤</Text>
-                </LinearGradient>
-
-                <View style={styles.optionContent}>
-                  <Text style={styles.optionTitle}>Voice Call</Text>
-                  <Text style={styles.optionDesc}>
-                    Talk and listen to Kidsko{'\n'}like a phone call 📞
-                  </Text>
+                <View style={styles.callPillWrapper}>
+                  <Pill
+                    label={
+                      isPremium
+                        ? 'Premium plan: 100 Voice & Video minutes a week'
+                        : 'Free plan: 10 Voice & Video minutes a week'
+                    }
+                    color={isPremium ? colors.mint : colors.cardBgMuted}
+                    borderColor={isPremium ? colors.green : colors.border}
+                  />
                 </View>
 
-                <View style={styles.chevronBox}>
-                  <Text style={styles.chevronText}>›</Text>
-                </View>
-              </Pressable>
-
-              {/* AI Vision Card */}
-              <Pressable
-                style={({ pressed }) => [
-                  styles.visionOptionCard,
-                  pressed && styles.callOptionCardPressed,
-                ]}
-                onPress={() => {
-                  if (activeStudent) {
-                    onStartCall(activeStudent);
-                  }
-                }}
-                disabled={!activeStudent}
-              >
-                <LinearGradient
-                  colors={gradients.teal}
-                  style={styles.optionIconBox}
-                >
-                  <Text style={styles.optionIconEmoji}>👁️</Text>
-                </LinearGradient>
-
-                <View style={styles.optionContent}>
-                  <View style={styles.visionTitleRow}>
-                    <Text style={styles.optionTitle}>AI Vision</Text>
-                    <LinearGradient
-                      colors={gradients.teal}
-                      style={styles.newBadge}
-                    >
-                      <Text style={styles.newBadgeText}>NEW ✨</Text>
-                    </LinearGradient>
-                  </View>
-                  <Text style={styles.optionDesc}>
-                    Point camera at anything{'\n'}Kidsko will explain it! 📷🔍
-                  </Text>
-                </View>
-
-                <View style={styles.chevronBox}>
-                  <Text style={styles.chevronText}>›</Text>
-                </View>
-              </Pressable>
-
-              {/* Tip Card */}
-              <View style={styles.tipCard}>
-                <Text style={styles.tipIcon}>💡</Text>
-                <Text style={styles.tipText}>
-                  Tip: Use <Text style={{ color: '#4ECDC4', fontWeight: '800' }}>AI Vision</Text> to point at your homework and Kidsko will help you!
+                <Text style={styles.callHint}>
+                  💡 You can turn your camera on during the call to show homework!
                 </Text>
-              </View>
-            </ScrollView>
-          </LinearGradient>
+
+                <Button
+                  title="📞 Start Call"
+                  onPress={() => {
+                    if (activeStudent) {
+                      onStartCall(activeStudent);
+                    }
+                  }}
+                  variant="primary"
+                  style={styles.startCallButton}
+                  disabled={!activeStudent}
+                />
+              </Card>
+            </View>
+          </ScrollView>
         )}
 
         {/* TAB 3: PARENTS */}
         {tab === 'parents' && (
-          <View style={{ flex: 1 }}>
+          <>
             {!parentsUnlocked ? (
               <View style={styles.gateWrapper}>
                 <ParentalGate
@@ -376,11 +288,7 @@ export default function MainShellScreen({
                 />
               </View>
             ) : (
-              <ScrollView
-                contentContainerStyle={{ paddingBottom: 60 }}
-                bounces={false}
-                showsVerticalScrollIndicator={false}
-              >
+              <ScrollView contentContainerStyle={{ paddingBottom: 60 }} bounces={false}>
                 <ParentsHub
                   students={students}
                   activeStudent={activeStudent}
@@ -404,7 +312,7 @@ export default function MainShellScreen({
                 />
               </ScrollView>
             )}
-          </View>
+          </>
         )}
       </View>
 
@@ -476,11 +384,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 12 : 8,
-    paddingBottom: 10,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1.5,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.sm,
+    backgroundColor: colors.background,
+    borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
   brandRow: {
@@ -488,7 +395,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   brandText: {
-    fontSize: 20,
+    ...typography.subheading,
     fontWeight: '900',
     color: colors.coralStrong,
     letterSpacing: -0.5,
@@ -496,7 +403,7 @@ const styles = StyleSheet.create({
   childChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.background,
+    backgroundColor: colors.white,
     borderWidth: 1.5,
     borderColor: colors.border,
     borderRadius: radii.full,
@@ -509,8 +416,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   childChipName: {
+    ...typography.label,
     fontSize: 13,
-    fontWeight: '800',
     color: colors.text,
     maxWidth: 90,
   },
@@ -522,279 +429,190 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   firstRunContent: {
-    padding: 24,
+    padding: spacing.lg,
     alignItems: 'center',
-    flexGrow: 1,
     justifyContent: 'center',
+    flexGrow: 1,
   },
-  firstRunBanner: {
-    width: '100%',
-    borderRadius: 24,
-    padding: 24,
-    alignItems: 'center',
-    marginBottom: 20,
+  firstRunMascot: {
+    marginBottom: spacing.md,
   },
   firstRunTitle: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: '#FFFFFF',
+    ...typography.title,
+    color: colors.text,
     textAlign: 'center',
     marginBottom: 6,
   },
   firstRunSub: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.9)',
+    ...typography.body,
+    color: colors.subtext,
     textAlign: 'center',
-    lineHeight: 20,
-    fontWeight: '600',
+    maxWidth: 300,
+    marginBottom: spacing.lg,
   },
   firstRunCard: {
     width: '100%',
-    padding: 20,
-    gap: 12,
+    padding: spacing.lg,
+    gap: spacing.sm,
   },
   firstRunLabel: {
-    fontSize: 13,
-    fontWeight: '800',
+    ...typography.label,
     color: colors.text,
   },
   firstRunInput: {
-    backgroundColor: colors.cardBg,
-    borderWidth: 2,
+    backgroundColor: colors.white,
+    borderWidth: 1.5,
     borderColor: colors.border,
-    borderRadius: 16,
-    paddingHorizontal: 16,
+    borderRadius: radii.md,
+    paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 16,
     color: colors.text,
   },
   firstRunErrorText: {
+    ...typography.caption,
     color: colors.coralStrong,
     fontWeight: '700',
-    fontSize: 13,
   },
-
-  // Call Screen Prototype Styles
-  callContainer: {
-    flex: 1,
-  },
-  callScrollContent: {
+  callTabContent: {
     flexGrow: 1,
     justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  callCardContainer: {
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 32,
   },
-  callMascotBox: {
-    width: 100,
-    height: 100,
-    borderRadius: 36,
+  callCard: {
+    width: '100%',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 18,
-    shadowColor: '#FF6B6B',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.45,
-    shadowRadius: 24,
-    elevation: 8,
+    padding: spacing.xl,
+    gap: spacing.md,
   },
-  callMascotEmoji: {
-    fontSize: 54,
+  callMascot: {
+    marginBottom: spacing.xs,
   },
-  callMainTitle: {
+  callTitle: {
+    ...typography.heading,
     fontSize: 24,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    marginBottom: 6,
-    letterSpacing: -0.5,
+    color: colors.text,
+    textAlign: 'center',
   },
   callSubtitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: 'rgba(255, 255, 255, 0.55)',
+    ...typography.body,
+    color: colors.subtext,
     textAlign: 'center',
-    marginBottom: 20,
-    lineHeight: 18,
+    maxWidth: 290,
   },
-  callPlanBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
-    borderRadius: radii.full,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    marginBottom: 24,
+  callPillWrapper: {
+    marginVertical: spacing.xs,
   },
-  callPlanText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#FFE66D',
+  callHint: {
+    ...typography.caption,
+    color: colors.subtext,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
-  callOptionCard: {
+  startCallButton: {
     width: '100%',
-    backgroundColor: 'rgba(255, 255, 255, 0.07)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    borderRadius: 24,
-    padding: 18,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    marginBottom: 14,
+    marginTop: spacing.sm,
   },
-  visionOptionCard: {
-    width: '100%',
-    backgroundColor: 'rgba(78, 205, 196, 0.08)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(78, 205, 196, 0.3)',
-    borderRadius: 24,
-    padding: 18,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    marginBottom: 20,
-  },
-  callOptionCardPressed: {
-    opacity: 0.85,
-    transform: [{ scale: 0.98 }],
-  },
-  optionIconBox: {
-    width: 58,
-    height: 58,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 4,
-  },
-  optionIconEmoji: {
-    fontSize: 30,
-  },
-  optionContent: {
-    flex: 1,
-  },
-  visionTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 3,
-  },
-  optionTitle: {
-    fontSize: 17,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    marginBottom: 3,
-  },
-  newBadge: {
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  newBadgeText: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: '#FFFFFF',
-  },
-  optionDesc: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.55)',
-    lineHeight: 17,
-  },
-  chevronBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chevronText: {
-    color: 'rgba(255, 255, 255, 0.5)',
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  tipCard: {
-    width: '100%',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 16,
-    padding: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  tipIcon: {
-    fontSize: 20,
-  },
-  tipText: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: '700',
-    color: 'rgba(255, 255, 255, 0.55)',
-    lineHeight: 17,
-  },
-
   gateWrapper: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  parentsContent: {
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  parentsTitle: {
+    ...typography.heading,
+    color: colors.text,
+  },
+  parentsSub: {
+    ...typography.body,
+    color: colors.subtext,
+    marginBottom: spacing.sm,
+  },
+  parentsList: {
+    gap: spacing.md,
+  },
+  actionCard: {
+    padding: spacing.md,
+  },
+  actionCardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  actionCardIcon: {
+    fontSize: 24,
+  },
+  actionCardTitle: {
+    ...typography.label,
+    color: colors.text,
+  },
+  actionCardSub: {
+    ...typography.caption,
+    color: colors.subtext,
+    marginTop: 2,
+  },
+  actionCardArrow: {
+    fontSize: 18,
+    color: colors.subtext,
+    fontWeight: '700',
+  },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+    padding: spacing.lg,
   },
   switcherSheet: {
     width: '100%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 22,
-    gap: 14,
+    backgroundColor: colors.white,
+    borderRadius: radii.xl,
+    padding: spacing.xl,
+    gap: spacing.md,
   },
   switcherTitle: {
-    fontSize: 18,
-    fontWeight: '900',
+    ...typography.heading,
     color: colors.text,
     textAlign: 'center',
   },
   switcherList: {
-    gap: 8,
+    gap: spacing.sm,
   },
   switcherItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
-    borderRadius: 16,
-    borderWidth: 2,
+    padding: spacing.md,
+    borderRadius: radii.md,
+    borderWidth: 1.5,
     borderColor: colors.border,
     backgroundColor: colors.background,
     gap: 12,
   },
   switcherItemActive: {
     borderColor: colors.coralStrong,
-    backgroundColor: 'rgba(255, 107, 107, 0.08)',
+    backgroundColor: '#FFEAEA',
   },
   switcherItemIcon: {
     fontSize: 20,
   },
   switcherItemName: {
-    fontSize: 15,
-    fontWeight: '700',
+    ...typography.label,
     color: colors.text,
     flex: 1,
   },
   switcherItemNameActive: {
     color: colors.coralStrong,
-    fontWeight: '900',
+    fontWeight: '800',
   },
   checkmark: {
     fontSize: 16,
     color: colors.coralStrong,
-    fontWeight: '900',
+    fontWeight: '800',
   },
 });

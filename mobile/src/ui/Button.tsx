@@ -8,8 +8,7 @@ import {
   TextStyle,
   View,
 } from 'react-native';
-import { LinearGradient } from './LinearGradient';
-import { colors, radii, typography, gradients } from '../theme';
+import { colors, radii, shadows, typography } from '../theme';
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
@@ -39,68 +38,45 @@ export function Button({
   const isDanger = variant === 'danger';
   const isGhost = variant === 'ghost';
 
-  const content = loading ? (
-    <ActivityIndicator
-      size="small"
-      color={isPrimary || isDanger ? colors.white : colors.text}
-    />
-  ) : (
-    <View style={styles.contentRow}>
-      {icon ? <Text style={styles.iconText}>{icon}</Text> : null}
-      <Text
-        style={[
-          styles.textBase,
-          isPrimary && styles.primaryText,
-          isSecondary && styles.secondaryText,
-          isDanger && styles.dangerText,
-          isGhost && styles.ghostText,
-          disabled && styles.disabledText,
-          textStyle,
-        ]}
-      >
-        {title}
-      </Text>
-    </View>
-  );
-
-  if (isPrimary && !disabled) {
-    return (
-      <Pressable
-        onPress={onPress}
-        disabled={disabled || loading}
-        style={({ pressed }) => [
-          styles.primaryShadow,
-          pressed && styles.pressed,
-          style,
-        ]}
-      >
-        <LinearGradient
-          colors={gradients.primary}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.gradientBase}
-        >
-          {content}
-        </LinearGradient>
-      </Pressable>
-    );
-  }
-
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled || loading}
       style={({ pressed }) => [
         styles.base,
+        isPrimary && styles.primary,
         isSecondary && styles.secondary,
         isDanger && styles.danger,
         isGhost && styles.ghost,
+        isPrimary && shadows.button,
         disabled && styles.disabled,
         pressed && styles.pressed,
         style,
       ]}
     >
-      {content}
+      {loading ? (
+        <ActivityIndicator
+          size="small"
+          color={isPrimary || isDanger ? colors.white : colors.text}
+        />
+      ) : (
+        <View style={styles.contentRow}>
+          {icon ? <Text style={styles.iconText}>{icon}</Text> : null}
+          <Text
+            style={[
+              styles.textBase,
+              isPrimary && styles.primaryText,
+              isSecondary && styles.secondaryText,
+              isDanger && styles.dangerText,
+              isGhost && styles.ghostText,
+              disabled && styles.disabledText,
+              textStyle,
+            ]}
+          >
+            {title}
+          </Text>
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -115,23 +91,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
   },
-  gradientBase: {
-    minHeight: 54,
-    borderRadius: radii.xl,
-    paddingHorizontal: 24,
-    paddingVertical: 15,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexDirection: 'row',
-  },
-  primaryShadow: {
-    borderRadius: radii.xl,
-    shadowColor: colors.coral,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.45,
-    shadowRadius: 16,
-    elevation: 8,
-  },
   contentRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -141,20 +100,23 @@ const styles = StyleSheet.create({
   iconText: {
     fontSize: 18,
   },
+  primary: {
+    backgroundColor: colors.coralStrong,
+  },
   secondary: {
     backgroundColor: colors.mint,
   },
   danger: {
-    backgroundColor: colors.error,
+    backgroundColor: colors.coralStrong,
   },
   ghost: {
-    backgroundColor: 'rgba(255, 107, 107, 0.08)',
+    backgroundColor: colors.white,
     borderWidth: 2,
-    borderColor: 'rgba(255, 107, 107, 0.25)',
+    borderColor: colors.border,
   },
   pressed: {
     opacity: 0.88,
-    transform: [{ scale: 0.98 }],
+    transform: [{ scale: 0.99 }],
   },
   disabled: {
     backgroundColor: colors.border,
@@ -163,8 +125,6 @@ const styles = StyleSheet.create({
   },
   textBase: {
     ...typography.label,
-    fontWeight: '900',
-    fontSize: 16,
     textAlign: 'center',
   },
   primaryText: {
@@ -177,11 +137,9 @@ const styles = StyleSheet.create({
     color: colors.white,
   },
   ghostText: {
-    color: colors.coral,
-    fontWeight: '800',
+    color: colors.text,
   },
   disabledText: {
     color: colors.subtext,
   },
 });
-
