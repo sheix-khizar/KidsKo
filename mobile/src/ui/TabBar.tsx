@@ -17,7 +17,7 @@ const TABS: { key: TabKey; label: string; icon: string }[] = [
 
 export function TabBar({ activeTab, onSelectTab }: TabBarProps) {
   return (
-    <View style={[styles.container, { paddingBottom: Platform.OS === 'ios' ? 24 : 8 }]}>
+    <View style={[styles.container, { paddingBottom: Platform.OS === 'ios' ? 24 : 10 }]}>
       {TABS.map((tab) => {
         const isActive = activeTab === tab.key;
         return (
@@ -26,15 +26,14 @@ export function TabBar({ activeTab, onSelectTab }: TabBarProps) {
             onPress={() => onSelectTab(tab.key)}
             style={({ pressed }) => [
               styles.tabItem,
+              isActive && styles.activeTabItem,
               pressed && styles.pressed,
             ]}
             accessibilityRole="tab"
             accessibilityState={{ selected: isActive }}
             accessibilityLabel={`${tab.label} tab`}
           >
-            <View style={[styles.iconWrapper, isActive && styles.activeIconWrapper]}>
-              <Text style={styles.iconText}>{tab.icon}</Text>
-            </View>
+            <Text style={styles.iconText}>{tab.icon}</Text>
             <Text
               style={[
                 styles.tabLabel,
@@ -43,6 +42,7 @@ export function TabBar({ activeTab, onSelectTab }: TabBarProps) {
             >
               {tab.label}
             </Text>
+            {isActive && <View style={styles.activeDot} />}
           </Pressable>
         );
       })}
@@ -60,37 +60,48 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-around',
     paddingTop: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    elevation: 8,
   },
   tabItem: {
-    flex: 1,
-    height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-  },
-  iconWrapper: {
-    paddingHorizontal: 16,
-    paddingVertical: 4,
+    paddingHorizontal: 22,
+    paddingVertical: 8,
     borderRadius: 16,
+    gap: 3,
   },
-  activeIconWrapper: {
-    backgroundColor: '#FFEAEA',
+  activeTabItem: {
+    backgroundColor: 'rgba(255, 107, 107, 0.08)',
   },
   iconText: {
-    fontSize: 20,
+    fontSize: 22,
   },
   tabLabel: {
     ...typography.caption,
     fontWeight: '800',
-    fontSize: 12,
+    fontSize: 11,
   },
   activeTabLabel: {
-    color: colors.coralStrong,
+    color: colors.coral,
+    fontWeight: '900',
   },
   inactiveTabLabel: {
     color: colors.subtext,
+  },
+  activeDot: {
+    position: 'absolute',
+    bottom: 2,
+    width: 20,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: colors.coral,
   },
   pressed: {
     opacity: 0.8,
   },
 });
+

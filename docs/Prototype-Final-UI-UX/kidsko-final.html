@@ -1,0 +1,1184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kidsko.ai</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --coral:#FF6B6B; --orange:#FF9F43; --sun:#FFE66D;
+  --sky:#4ECDC4; --mint:#95E1A3; --blue:#74B9FF;
+  --purple:#A78BFA; --pink:#FD79A8; --green:#00B894;
+  --white:#fff; --bg:#FFF8F0; --text:#2D3436; --sub:#636E72;
+  --border:#F0E6D3; --pnavy:#1E3A5F; --pblue:#2980B9;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:'Nunito',sans-serif;background:linear-gradient(135deg,#1a0a2e,#2d1b69,#11998e);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:32px 16px 56px}
+input,select,button,textarea{font-family:'Nunito',sans-serif}
+::-webkit-scrollbar{width:0;height:0}
+
+/* ── PAGE HEADER ── */
+.ph{text-align:center;margin-bottom:24px}
+.ph h1{font-size:22px;font-weight:900;color:#fff;letter-spacing:-.5px}
+.ph h1 span{color:#FFE66D}
+.ph p{color:rgba(255,255,255,.4);font-size:12px;font-weight:700;margin-top:4px}
+.nav-pills{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:22px}
+.pill{padding:5px 14px;border-radius:20px;border:1px solid rgba(255,255,255,.12);background:transparent;color:rgba(255,255,255,.45);font-size:12px;font-weight:800;cursor:pointer;transition:all .15s}
+.pill.active{border-color:rgba(255,107,107,.6);background:rgba(255,107,107,.2);color:#FF6B6B}
+
+/* ── PHONE SHELL ── */
+.phone{width:375px;height:812px;border-radius:50px;overflow:hidden;display:flex;flex-direction:column;position:relative;background:var(--bg);box-shadow:0 0 0 2px rgba(0,0,0,.06),0 0 0 10px #1a1a1a,0 0 0 12px #2a2a2a,0 32px 80px rgba(0,0,0,.5)}
+.notch{position:absolute;top:0;left:50%;transform:translateX(-50%);width:120px;height:32px;background:#111;border-radius:0 0 20px 20px;z-index:300}
+.sbar{height:46px;padding:16px 24px 0;display:flex;justify-content:space-between;align-items:center;font-size:11px;font-weight:800;flex-shrink:0;position:relative;z-index:5}
+
+/* ── SCREENS ── */
+.screen{position:absolute;inset:0;display:flex;flex-direction:column;opacity:0;pointer-events:none;transition:opacity .22s}
+.screen.active{opacity:1;pointer-events:all}
+
+/* ── BOTTOM NAV ── */
+.bnav{height:80px;background:#fff;border-top:2px solid var(--border);display:flex;align-items:center;justify-content:space-around;flex-shrink:0;padding-bottom:10px;box-shadow:0 -4px 20px rgba(0,0,0,.06)}
+.bnav-btn{display:flex;flex-direction:column;align-items:center;gap:4px;background:transparent;border:none;border-radius:16px;padding:8px 20px;cursor:pointer;position:relative}
+.bnav-btn .ico{font-size:24px}
+.bnav-btn .lbl{font-size:11px;font-weight:800;color:var(--sub)}
+.bnav-btn.on .lbl{color:var(--coral)}
+.bnav-btn.on{background:rgba(255,107,107,.08)}
+.bnav-dot{position:absolute;bottom:-10px;width:20px;height:3px;border-radius:2px;background:var(--coral);display:none}
+.bnav-btn.on .bnav-dot{display:block}
+
+/* ── BUTTONS ── */
+.btn-main{width:100%;background:linear-gradient(135deg,var(--coral),var(--orange));border:none;border-radius:24px;padding:18px;font-size:18px;font-weight:900;color:#fff;cursor:pointer;box-shadow:0 8px 28px rgba(255,107,107,.45);margin-bottom:14px}
+.btn-ghost{width:100%;background:rgba(255,107,107,.08);border:2px solid rgba(255,107,107,.25);border-radius:24px;padding:16px;font-size:15px;font-weight:800;color:var(--coral);cursor:pointer}
+.btn-google{width:100%;background:#fff;border:2px solid var(--border);border-radius:18px;padding:14px 18px;display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer;font-size:15px;font-weight:800;color:var(--text);margin-bottom:18px;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+.gico{width:22px;height:22px;flex-shrink:0}
+
+/* ── FORM FIELDS ── */
+.field{margin-bottom:14px}
+.field label{display:block;font-size:13px;font-weight:800;color:var(--sub);margin-bottom:6px}
+.field input,.field select{width:100%;background:#FFF8F0;border:2px solid var(--border);border-radius:16px;padding:14px 16px;font-size:15px;font-weight:600;color:var(--text);outline:none}
+.field input:focus{border-color:var(--coral)}
+
+/* ── OR DIVIDER ── */
+.or-div{display:flex;align-items:center;gap:10px;margin-bottom:18px}
+.or-div::before,.or-div::after{content:'';flex:1;height:1.5px;background:var(--border)}
+.or-div span{font-size:12px;font-weight:700;color:var(--sub)}
+
+/* ── TOGGLE ── */
+.tog{width:46px;height:26px;border-radius:13px;position:relative;cursor:pointer;border:none;background:#E5E7EB;transition:background .22s;flex-shrink:0}
+.tog.on{background:var(--mint)}
+.tog::after{content:'';position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:left .22s;box-shadow:0 1px 4px rgba(0,0,0,.2)}
+.tog.on::after{left:23px}
+
+/* ── ANIMATIONS ── */
+@keyframes owlBounce{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-12px) rotate(3deg)}}
+@keyframes orbPulse{0%,100%{transform:translate(-50%,-50%) scale(1);opacity:.8}50%{transform:translate(-50%,-50%) scale(1.2);opacity:.4}}
+@keyframes ringPulse{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.05)}}
+@keyframes waveBar{0%,100%{transform:scaleY(1);opacity:.9}50%{transform:scaleY(.25);opacity:.4}}
+@keyframes typingDot{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+@keyframes liveDot{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+@keyframes loadBar{from{width:0}to{width:100%}}
+@keyframes scanLine{0%{top:20%;opacity:0}20%{opacity:1}80%{opacity:1}100%{top:80%;opacity:0}}
+@keyframes starFloat{0%{transform:translateY(0) rotate(0deg)}100%{transform:translateY(-8px) rotate(15deg)}}
+@keyframes fadeSlideIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes shimmer{0%{background-position:-200px 0}100%{background-position:200px 0}}
+
+.bounce{animation:owlBounce 3s ease-in-out infinite}
+.pulse-anim{animation:pulse 1.5s ease-in-out infinite}
+</style>
+</head>
+<body>
+
+<div class="ph">
+  <h1>Kidsko<span>.ai</span> — Production Ready</h1>
+  <p>Opens in any browser · No setup needed · Fully interactive</p>
+</div>
+
+<div class="nav-pills">
+  <button class="pill active" onclick="showScreen('splash')">Splash</button>
+  <button class="pill" onclick="showScreen('register')">Register</button>
+  <button class="pill" onclick="showScreen('login')">Login</button>
+  <button class="pill" onclick="showScreen('main')">Main App</button>
+</div>
+
+<div class="phone" id="phone">
+  <div class="notch"></div>
+
+  <!-- ══════════════════ SPLASH ══════════════════ -->
+  <div class="screen active" id="screen-splash" style="background:linear-gradient(160deg,#FFF0F5,#FFF8F0,#F0FFF4)">
+    <div class="sbar"><span>9:41</span><span>⚡ 100%</span></div>
+    <div style="position:absolute;width:200px;height:200px;border-radius:50%;background:rgba(255,107,107,.12);filter:blur(50px);top:-40px;right:-40px;pointer-events:none"></div>
+    <div style="position:absolute;width:160px;height:160px;border-radius:50%;background:rgba(78,205,196,.12);filter:blur(50px);bottom:120px;left:-30px;pointer-events:none"></div>
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 32px 40px;position:relative;z-index:2">
+      <div class="bounce" style="width:120px;height:120px;border-radius:40px;background:linear-gradient(135deg,#FF6B6B,#FF9F43);display:flex;align-items:center;justify-content:center;font-size:64px;margin-bottom:20px;box-shadow:0 12px 40px rgba(255,107,107,.4)">🦉</div>
+      <div style="font-size:42px;font-weight:900;color:var(--text);letter-spacing:-1px;line-height:1">Kidsko<span style="color:var(--coral)">.ai</span></div>
+      <p style="font-size:15px;font-weight:700;color:var(--sub);text-align:center;line-height:1.65;margin:10px 0 40px">Your friendly AI teacher! 🎓<br>Ask me anything, anytime!</p>
+      <div style="position:absolute;font-size:24px;top:100px;left:30px;animation:starFloat 2s ease-in-out infinite alternate;opacity:.7">✨</div>
+      <div style="position:absolute;font-size:24px;top:140px;right:30px;animation:starFloat 2.5s ease-in-out infinite alternate;opacity:.7">⭐</div>
+      <div style="position:absolute;font-size:24px;top:80px;right:50px;animation:starFloat 3s ease-in-out infinite alternate;opacity:.7">🌟</div>
+      <button class="btn-main" onclick="showScreen('register')">🚀 Let's Start Learning!</button>
+      <button class="btn-ghost" onclick="showScreen('login')">I already have an account</button>
+    </div>
+  </div>
+
+  <!-- ══════════════════ REGISTER ══════════════════ -->
+  <div class="screen" id="screen-register" style="background:var(--bg)">
+    <div style="background:linear-gradient(135deg,var(--coral),var(--orange));padding:46px 22px 28px;flex-shrink:0">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+        <div style="width:44px;height:44px;border-radius:15px;background:rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;font-size:24px">🦉</div>
+        <span style="font-size:20px;font-weight:900;color:#fff">Kidsko<span style="color:var(--sun)">.ai</span></span>
+      </div>
+      <div style="font-size:26px;font-weight:900;color:#fff">Create your account! 🎉</div>
+      <p style="font-size:13px;color:rgba(255,255,255,.8);font-weight:700;margin-top:4px">Join thousands of young learners</p>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:24px 22px 20px">
+      <button class="btn-google" onclick="showScreen('main')">
+        <svg class="gico" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.2l6.8-6.8C35.8 2.5 30.3 0 24 0 14.8 0 7 5.4 3.2 13.3l7.9 6.1C13 13.7 18 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.6 5.9c4.4-4.1 7-10.1 7-17.1z"/><path fill="#FBBC05" d="M11.1 28.6A14.6 14.6 0 0 1 9.5 24c0-1.6.3-3.2.8-4.6l-7.9-6.1A23.9 23.9 0 0 0 0 24c0 3.9.9 7.5 2.5 10.7l8.6-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.2 1.5-5 2.3-8.3 2.3-6 0-11.1-4.1-12.9-9.5l-8.6 6.1C7 42.6 14.8 48 24 48z"/></svg>
+        Sign up with Google
+      </button>
+      <div class="or-div"><span>or with email</span></div>
+      <div class="field"><label>Your Name</label><input type="text" placeholder="e.g. Aisha"></div>
+      <div class="field"><label>Email</label><input type="email" placeholder="you@gmail.com"></div>
+      <div class="field"><label>Password</label><input type="password" placeholder="Min 8 characters"></div>
+      <div class="field"><label>Confirm Password</label><input type="password" placeholder="Repeat password"></div>
+      <button class="btn-main" style="margin-top:6px" onclick="showScreen('main')">Create Account 🚀</button>
+      <p style="text-align:center;font-size:14px;font-weight:700;color:var(--sub)">Already have an account? <span style="color:var(--coral);font-weight:900;cursor:pointer" onclick="showScreen('login')">Sign In</span></p>
+      <p style="text-align:center;font-size:11px;font-weight:600;color:#B2BEC3;margin-top:14px;line-height:1.8">🔒 Safe for kids · No ads · Always private</p>
+    </div>
+  </div>
+
+  <!-- ══════════════════ LOGIN ══════════════════ -->
+  <div class="screen" id="screen-login" style="background:var(--bg)">
+    <div style="background:linear-gradient(135deg,var(--coral),var(--orange));padding:46px 22px 28px;flex-shrink:0">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+        <div style="width:44px;height:44px;border-radius:15px;background:rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;font-size:24px">🦉</div>
+        <span style="font-size:20px;font-weight:900;color:#fff">Kidsko<span style="color:var(--sun)">.ai</span></span>
+      </div>
+      <div style="font-size:26px;font-weight:900;color:#fff">Welcome back! 👋</div>
+      <p style="font-size:13px;color:rgba(255,255,255,.8);font-weight:700;margin-top:4px">Let's keep learning today 📚</p>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:24px 22px 20px">
+      <button class="btn-google" onclick="showScreen('main')">
+        <svg class="gico" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.2l6.8-6.8C35.8 2.5 30.3 0 24 0 14.8 0 7 5.4 3.2 13.3l7.9 6.1C13 13.7 18 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.6 5.9c4.4-4.1 7-10.1 7-17.1z"/><path fill="#FBBC05" d="M11.1 28.6A14.6 14.6 0 0 1 9.5 24c0-1.6.3-3.2.8-4.6l-7.9-6.1A23.9 23.9 0 0 0 0 24c0 3.9.9 7.5 2.5 10.7l8.6-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.2 1.5-5 2.3-8.3 2.3-6 0-11.1-4.1-12.9-9.5l-8.6 6.1C7 42.6 14.8 48 24 48z"/></svg>
+        Continue with Google
+      </button>
+      <div class="or-div"><span>or sign in with email</span></div>
+      <div class="field"><label>Email</label><input type="email" placeholder="you@gmail.com"></div>
+      <div class="field"><label>Password</label><input type="password" placeholder="Your password"></div>
+      <div style="text-align:right;margin-bottom:16px;margin-top:-6px"><span style="font-size:13px;font-weight:700;color:var(--coral);cursor:pointer">Forgot password?</span></div>
+      <button class="btn-main" onclick="showScreen('main')">Sign In →</button>
+      <p style="text-align:center;font-size:14px;font-weight:700;color:var(--sub)">New here? <span style="color:var(--coral);font-weight:900;cursor:pointer" onclick="showScreen('register')">Create account</span></p>
+    </div>
+  </div>
+
+  <!-- ══════════════════ MAIN APP ══════════════════ -->
+  <div class="screen" id="screen-main" style="background:var(--bg)">
+    <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative">
+
+      <!-- CHAT TAB -->
+      <div id="tab-chat" style="flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative">
+        <div class="sbar"><span>9:41</span><span>⚡ 100%</span></div>
+        <!-- Chat topbar -->
+        <div style="height:56px;padding:0 16px;display:flex;align-items:center;justify-content:space-between;background:#fff;border-bottom:2px solid var(--border);flex-shrink:0">
+          <button onclick="toggleSidebar()" style="width:40px;height:40px;border-radius:14px;border:none;background:var(--bg);cursor:pointer;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px">
+            <span style="width:22px;height:2px;background:var(--text);border-radius:2px;display:block"></span>
+            <span style="width:14px;height:2px;background:var(--text);border-radius:2px;display:block"></span>
+            <span style="width:22px;height:2px;background:var(--text);border-radius:2px;display:block"></span>
+          </button>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="width:34px;height:34px;border-radius:12px;background:linear-gradient(135deg,#FF6B6B,#FF9F43);display:flex;align-items:center;justify-content:center;font-size:18px">👧</div>
+            <div>
+              <div style="font-size:14px;font-weight:900;color:var(--text);line-height:1">Aisha's <span style="color:var(--coral)">Chat</span></div>
+              <div style="font-size:10px;font-weight:700;color:var(--mint);display:flex;align-items:center;gap:3px"><div style="width:6px;height:6px;border-radius:50%;background:var(--mint);animation:liveDot 1.8s infinite"></div>Kidsko is online</div>
+            </div>
+          </div>
+          <button onclick="newChat()" style="width:40px;height:40px;border-radius:14px;border:none;background:var(--bg);font-size:20px;cursor:pointer">✏️</button>
+        </div>
+
+        <!-- Welcome / Messages area -->
+        <div id="chat-welcome" style="flex:1;overflow-y:auto;padding:20px 16px 10px;display:flex;flex-direction:column;align-items:center">
+          <div style="width:100%;background:linear-gradient(135deg,#FF6B6B,#FF9F43);border-radius:24px;padding:22px 20px;margin-bottom:20px;text-align:center">
+            <div style="font-size:48px;margin-bottom:8px">🦉</div>
+            <div style="font-size:20px;font-weight:900;color:#fff">Hi Aisha! 👋</div>
+            <p style="font-size:13px;color:rgba(255,255,255,.85);font-weight:700;margin-top:4px;line-height:1.5">I'm Kidsko! What do you want to learn today?</p>
+          </div>
+          <div style="font-size:12px;font-weight:800;color:var(--sub);letter-spacing:.5px;text-transform:uppercase;align-self:flex-start;margin-bottom:10px">Try asking me...</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%">
+            <div onclick="startChat('Why is the sky blue? 🌍')" style="background:#fff;border-radius:18px;padding:14px 12px;cursor:pointer;border:2px solid var(--border);box-shadow:0 3px 12px rgba(0,0,0,.05)"><span style="font-size:28px;display:block;margin-bottom:6px">🌍</span><span style="font-size:12px;font-weight:800;color:var(--text);line-height:1.4">Why is the sky blue?</span></div>
+            <div onclick="startChat('Help me with maths! 🔢')" style="background:#fff;border-radius:18px;padding:14px 12px;cursor:pointer;border:2px solid var(--border);box-shadow:0 3px 12px rgba(0,0,0,.05)"><span style="font-size:28px;display:block;margin-bottom:6px">🔢</span><span style="font-size:12px;font-weight:800;color:var(--text);line-height:1.4">Help me with maths!</span></div>
+            <div onclick="startChat('Tell me about dinosaurs 🦕')" style="background:#fff;border-radius:18px;padding:14px 12px;cursor:pointer;border:2px solid var(--border);box-shadow:0 3px 12px rgba(0,0,0,.05)"><span style="font-size:28px;display:block;margin-bottom:6px">🦕</span><span style="font-size:12px;font-weight:800;color:var(--text);line-height:1.4">Tell me about dinosaurs</span></div>
+            <div onclick="startChat('What is photosynthesis? 🌱')" style="background:#fff;border-radius:18px;padding:14px 12px;cursor:pointer;border:2px solid var(--border);box-shadow:0 3px 12px rgba(0,0,0,.05)"><span style="font-size:28px;display:block;margin-bottom:6px">🌱</span><span style="font-size:12px;font-weight:800;color:var(--text);line-height:1.4">What is photosynthesis?</span></div>
+          </div>
+        </div>
+
+        <div id="chat-messages" style="flex:1;overflow-y:auto;padding:16px 14px 10px;display:none;flex-direction:column;gap:14px"></div>
+
+        <!-- Input bar -->
+        <div style="padding:10px 12px 16px;background:#fff;border-top:2px solid var(--border);flex-shrink:0">
+          <div id="input-box" style="background:var(--bg);border-radius:28px;display:flex;align-items:center;gap:6px;padding:8px 8px 8px 16px;border:2px solid var(--border);transition:border .2s">
+            <input id="chat-input" type="text" placeholder="Ask me anything... 😊" style="flex:1;background:transparent;border:none;outline:none;font-size:15px;font-weight:600;color:var(--text);padding:4px 0" oninput="updateSendBtn(this.value)" onkeydown="if(event.key==='Enter')sendMsg()">
+            <div style="display:flex;gap:4px;flex-shrink:0">
+              <input type="file" id="img-file" accept="image/*" style="display:none" onchange="handleImageUpload(event)">
+              <button onclick="document.getElementById('img-file').click()" style="width:38px;height:38px;border-radius:50%;border:none;background:var(--bg);font-size:18px;cursor:pointer">📷</button>
+              <button id="send-btn" onclick="sendMsg()" style="width:38px;height:38px;background:#E0E0E0;border:none;border-radius:50%;color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s">➤</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Image preview -->
+        <div id="img-preview-bar" style="display:none;background:#fff;border-top:2px solid var(--border);padding:8px 14px;align-items:center;gap:10px;flex-shrink:0">
+          <img id="img-preview-thumb" style="width:48px;height:48px;border-radius:12px;object-fit:cover" alt="">
+          <div><p style="font-size:12px;font-weight:800;color:var(--text)">📸 Photo ready!</p><span style="font-size:11px;color:var(--sub);font-weight:600">Type your question and send</span></div>
+          <button onclick="clearImage()" style="margin-left:auto;width:26px;height:26px;background:#FFE0E0;border:none;border-radius:50%;color:#EF4444;font-size:13px;cursor:pointer;font-weight:900">✕</button>
+        </div>
+
+        <!-- SIDEBAR -->
+        <div id="sidebar-overlay" onclick="toggleSidebar()" style="display:none;position:absolute;inset:0;background:rgba(0,0,0,.45);z-index:50;backdrop-filter:blur(3px)"></div>
+        <div id="sidebar" style="position:absolute;top:0;left:-295px;bottom:0;width:295px;background:#fff;z-index:60;transition:left .26s cubic-bezier(.4,0,.2,1);display:flex;flex-direction:column;border-right:2px solid var(--border)">
+          <div style="background:linear-gradient(135deg,#FF6B6B,#FF9F43);padding:50px 16px 20px;flex-shrink:0">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:50px;height:50px;border-radius:18px;background:rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;font-size:26px">👧</div>
+              <div><div style="font-size:16px;font-weight:900;color:#fff">Aisha Khan</div><div style="font-size:12px;color:rgba(255,255,255,.75);font-weight:700">Grade 5 · Active 🌟</div></div>
+            </div>
+          </div>
+          <div style="flex:1;overflow-y:auto;padding:10px">
+            <button onclick="newChat();toggleSidebar()" style="width:100%;background:rgba(255,107,107,.1);border:2px dashed rgba(255,107,107,.35);border-radius:16px;padding:12px;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;font-size:14px;font-weight:800;color:var(--coral);margin-bottom:14px">✏️ New Chat</button>
+            <div style="font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--sub);padding:4px 6px 8px">Recent Chats</div>
+            <div style="display:flex;flex-direction:column;gap:2px">
+              <button onclick="toggleSidebar()" style="display:flex;align-items:center;gap:10px;padding:10px;border-radius:14px;cursor:pointer;border:none;background:rgba(255,107,107,.08);width:100%;text-align:left">
+                <div style="width:38px;height:38px;border-radius:12px;background:#FFE8E8;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🔬</div>
+                <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">What is photosynthesis?</div><div style="font-size:11px;font-weight:600;color:var(--sub);margin-top:1px">Plants use sunlight…</div></div>
+                <span style="font-size:10px;font-weight:700;color:var(--sub);flex-shrink:0">Now</span>
+              </button>
+              <button onclick="toggleSidebar()" style="display:flex;align-items:center;gap:10px;padding:10px;border-radius:14px;cursor:pointer;border:none;background:transparent;width:100%;text-align:left">
+                <div style="width:38px;height:38px;border-radius:12px;background:#FFF4E0;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🔢</div>
+                <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Explain fractions</div><div style="font-size:11px;font-weight:600;color:var(--sub);margin-top:1px">A fraction is a part…</div></div>
+                <span style="font-size:10px;font-weight:700;color:var(--sub);flex-shrink:0">1d</span>
+              </button>
+              <button onclick="toggleSidebar()" style="display:flex;align-items:center;gap:10px;padding:10px;border-radius:14px;cursor:pointer;border:none;background:transparent;width:100%;text-align:left">
+                <div style="width:38px;height:38px;border-radius:12px;background:#E8F8F5;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🌍</div>
+                <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Why is sky blue?</div><div style="font-size:11px;font-weight:600;color:var(--sub);margin-top:1px">Sunlight scatters…</div></div>
+                <span style="font-size:10px;font-weight:700;color:var(--sub);flex-shrink:0">2d</span>
+              </button>
+              <button onclick="toggleSidebar()" style="display:flex;align-items:center;gap:10px;padding:10px;border-radius:14px;cursor:pointer;border:none;background:transparent;width:100%;text-align:left">
+                <div style="width:38px;height:38px;border-radius:12px;background:#F0E8FF;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🦕</div>
+                <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">About dinosaurs</div><div style="font-size:11px;font-weight:600;color:var(--sub);margin-top:1px">65 million years ago…</div></div>
+                <span style="font-size:10px;font-weight:700;color:var(--sub);flex-shrink:0">3d</span>
+              </button>
+            </div>
+          </div>
+          <div style="padding:12px 10px 20px;border-top:2px solid var(--border);flex-shrink:0">
+            <button style="display:flex;align-items:center;gap:10px;padding:10px;border-radius:14px;border:none;background:transparent;cursor:pointer;width:100%;text-align:left">
+              <div style="width:34px;height:34px;border-radius:10px;background:#F0F4FF;display:flex;align-items:center;justify-content:center;font-size:17px">⚙️</div>
+              <span style="font-size:14px;font-weight:700;color:var(--text)">Settings</span>
+            </button>
+            <button style="display:flex;align-items:center;gap:10px;padding:10px;border-radius:14px;border:none;background:transparent;cursor:pointer;width:100%;text-align:left">
+              <div style="width:34px;height:34px;border-radius:10px;background:#FFF0F0;display:flex;align-items:center;justify-content:center;font-size:17px">🚪</div>
+              <span style="font-size:14px;font-weight:700;color:#EF4444">Sign Out</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- CALL TAB -->
+      <div id="tab-call" style="flex:1;display:none;flex-direction:column;overflow:hidden;position:relative">
+
+        <!-- CALL HOME -->
+        <div id="call-home" style="flex:1;display:flex;flex-direction:column;overflow:hidden;background:linear-gradient(160deg,#1a1a2e,#16213e,#0f3460);position:relative">
+          <div class="sbar" style="color:rgba(255,255,255,.6)"><span>9:41</span><span>⚡ 100%</span></div>
+          <div style="position:absolute;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,rgba(255,107,107,.12) 0%,transparent 70%);top:35%;left:50%;transform:translate(-50%,-50%);pointer-events:none"></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 28px 20px;position:relative;z-index:2">
+            <div class="bounce" style="width:100px;height:100px;border-radius:36px;background:linear-gradient(135deg,#FF6B6B,#FF9F43);display:flex;align-items:center;justify-content:center;font-size:54px;margin-bottom:18px;box-shadow:0 12px 40px rgba(255,107,107,.45)">🦉</div>
+            <div style="font-size:24px;font-weight:900;color:#fff;margin-bottom:6px">Talk to Kidsko!</div>
+            <p style="font-size:13px;font-weight:700;color:rgba(255,255,255,.5);text-align:center;margin-bottom:36px;line-height:1.6">Choose how you want to talk to me today 👇</p>
+            <div onclick="showCallScreen('voice-idle')" style="width:100%;background:rgba(255,255,255,.07);border:1.5px solid rgba(255,255,255,.1);border-radius:24px;padding:20px 18px;margin-bottom:14px;cursor:pointer;display:flex;align-items:center;gap:16px;backdrop-filter:blur(8px)">
+              <div style="width:58px;height:58px;border-radius:20px;background:linear-gradient(135deg,#FF6B6B,#FF9F43);display:flex;align-items:center;justify-content:center;font-size:30px;flex-shrink:0;box-shadow:0 6px 20px rgba(255,107,107,.4)">🎤</div>
+              <div style="flex:1"><div style="font-size:17px;font-weight:900;color:#fff;margin-bottom:3px">Voice Call</div><p style="font-size:12px;font-weight:600;color:rgba(255,255,255,.5);line-height:1.5">Talk and listen to Kidsko<br>like a phone call 📞</p></div>
+              <div style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.4);font-size:18px">›</div>
+            </div>
+            <div onclick="showCallScreen('vision-loading')" style="width:100%;background:rgba(78,205,196,.08);border:1.5px solid rgba(78,205,196,.25);border-radius:24px;padding:20px 18px;cursor:pointer;display:flex;align-items:center;gap:16px;backdrop-filter:blur(8px)">
+              <div style="width:58px;height:58px;border-radius:20px;background:linear-gradient(135deg,#4ECDC4,#74B9FF);display:flex;align-items:center;justify-content:center;font-size:30px;flex-shrink:0;box-shadow:0 6px 20px rgba(78,205,196,.4)">👁️</div>
+              <div style="flex:1">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
+                  <div style="font-size:17px;font-weight:900;color:#fff">AI Vision</div>
+                  <div style="background:linear-gradient(135deg,#4ECDC4,#74B9FF);border-radius:8px;padding:2px 8px;font-size:10px;font-weight:900;color:#fff">NEW ✨</div>
+                </div>
+                <p style="font-size:12px;font-weight:600;color:rgba(255,255,255,.5);line-height:1.5">Point camera at anything<br>Kidsko will explain it! 📷🔍</p>
+              </div>
+              <div style="width:36px;height:36px;border-radius:50%;background:rgba(78,205,196,.1);display:flex;align-items:center;justify-content:center;color:rgba(78,205,196,.6);font-size:18px">›</div>
+            </div>
+            <div style="margin-top:24px;background:rgba(255,255,255,.05);border-radius:16px;padding:12px 16px;width:100%;display:flex;gap:10px;align-items:center">
+              <span style="font-size:20px">💡</span>
+              <p style="font-size:12px;font-weight:700;color:rgba(255,255,255,.45);line-height:1.5">Tip: Use <b style="color:rgba(78,205,196,.8)">AI Vision</b> to point at your homework and Kidsko will help you!</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- VOICE CALL IDLE -->
+        <div id="call-voice-idle" style="flex:1;display:none;flex-direction:column;overflow:hidden;background:linear-gradient(160deg,#1a1a2e,#16213e,#0f3460);position:relative">
+          <div class="sbar" style="color:rgba(255,255,255,.6)"><span>9:41</span><span>⚡ 100%</span></div>
+          <div style="position:absolute;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,rgba(255,107,107,.18) 0%,transparent 70%);top:50%;left:50%;transform:translate(-50%,-50%);animation:orbPulse 3s ease-in-out infinite;pointer-events:none"></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 20px 0;flex-shrink:0;position:relative;z-index:5">
+            <button onclick="showCallScreen('home')" style="width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.08);border:none;font-size:18px;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center">‹</button>
+            <div style="display:flex;align-items:center;gap:6px;background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);border-radius:20px;padding:6px 14px">
+              <div style="width:7px;height:7px;border-radius:50%;background:var(--mint);animation:liveDot 1.5s infinite"></div>
+              <span style="font-size:12px;font-weight:700;color:var(--mint)">Voice Call</span>
+            </div>
+            <div style="width:38px;height:38px"></div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;z-index:5;padding:10px 0 0">
+            <div style="position:relative;width:200px;height:200px;display:flex;align-items:center;justify-content:center;margin-bottom:16px">
+              <div style="width:110px;height:110px;border-radius:50%;background:linear-gradient(135deg,#FF6B6B,#FF9F43);display:flex;align-items:center;justify-content:center;font-size:58px;box-shadow:0 12px 48px rgba(255,107,107,.55);border:4px solid rgba(255,255,255,.15);position:relative;z-index:2">🦉</div>
+            </div>
+            <div style="font-size:26px;font-weight:900;color:#fff">Kidsko<span style="color:var(--coral)">.ai</span></div>
+            <p style="font-size:13px;font-weight:700;color:rgba(255,255,255,.55);margin-top:4px">AI Study Buddy · Voice Mode</p>
+          </div>
+          <div style="padding:14px 20px 20px;flex-shrink:0;position:relative;z-index:5">
+            <button onclick="showCallScreen('voice-active')" style="width:100%;background:linear-gradient(135deg,#FF6B6B,#FF9F43);border:none;border-radius:28px;padding:20px 0;font-size:18px;font-weight:900;color:#fff;cursor:pointer;box-shadow:0 10px 32px rgba(255,107,107,.55);display:flex;align-items:center;justify-content:center;gap:10px">📞 Start Voice Call</button>
+          </div>
+        </div>
+
+        <!-- VOICE CALL ACTIVE -->
+        <div id="call-voice-active" style="flex:1;display:none;flex-direction:column;overflow:hidden;background:linear-gradient(160deg,#1a1a2e,#16213e,#0f3460);position:relative">
+          <div class="sbar" style="color:rgba(255,255,255,.6)"><span>9:41</span><span>⚡ 100%</span></div>
+          <div style="position:absolute;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,rgba(255,107,107,.18) 0%,transparent 70%);top:50%;left:50%;transform:translate(-50%,-50%);animation:orbPulse 3s ease-in-out infinite;pointer-events:none"></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 20px 0;flex-shrink:0;position:relative;z-index:5">
+            <button onclick="endVoiceCall()" style="width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.08);border:none;font-size:18px;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center">‹</button>
+            <div style="display:flex;align-items:center;gap:6px;background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);border-radius:20px;padding:6px 14px">
+              <div style="width:7px;height:7px;border-radius:50%;background:var(--mint);animation:liveDot 1.5s infinite"></div>
+              <span style="font-size:12px;font-weight:700;color:var(--mint)">Listening...</span>
+            </div>
+            <div style="width:38px;height:38px"></div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;z-index:5;padding:10px 0 0">
+            <div style="position:relative;width:200px;height:200px;display:flex;align-items:center;justify-content:center;margin-bottom:16px">
+              <div style="position:absolute;width:200px;height:200px;border-radius:50%;border:2px solid rgba(255,107,107,.25);animation:ringPulse 2.5s 0s ease-in-out infinite"></div>
+              <div style="position:absolute;width:162px;height:162px;border-radius:50%;border:2px solid rgba(255,107,107,.35);animation:ringPulse 2.5s .35s ease-in-out infinite"></div>
+              <div style="position:absolute;width:126px;height:126px;border-radius:50%;border:2px solid rgba(255,107,107,.5);animation:ringPulse 2.5s .7s ease-in-out infinite"></div>
+              <div style="width:110px;height:110px;border-radius:50%;background:linear-gradient(135deg,#FF6B6B,#FF9F43);display:flex;align-items:center;justify-content:center;font-size:58px;box-shadow:0 12px 48px rgba(255,107,107,.55);border:4px solid rgba(255,255,255,.15);position:relative;z-index:2">🦉</div>
+              <div style="position:absolute;bottom:-16px;left:50%;transform:translateX(-50%);display:flex;align-items:flex-end;gap:3px;height:32px;z-index:3">
+                <div style="width:4px;border-radius:4px;background:var(--coral);height:8px;animation:waveBar 1s 0s ease-in-out infinite"></div>
+                <div style="width:4px;border-radius:4px;background:var(--coral);height:14px;animation:waveBar 1s .1s ease-in-out infinite"></div>
+                <div style="width:4px;border-radius:4px;background:var(--coral);height:22px;animation:waveBar 1s .2s ease-in-out infinite"></div>
+                <div style="width:4px;border-radius:4px;background:var(--coral);height:28px;animation:waveBar 1s .3s ease-in-out infinite"></div>
+                <div style="width:4px;border-radius:4px;background:var(--coral);height:20px;animation:waveBar 1s .4s ease-in-out infinite"></div>
+                <div style="width:4px;border-radius:4px;background:var(--coral);height:28px;animation:waveBar 1s .5s ease-in-out infinite"></div>
+                <div style="width:4px;border-radius:4px;background:var(--coral);height:18px;animation:waveBar 1s .4s ease-in-out infinite"></div>
+                <div style="width:4px;border-radius:4px;background:var(--coral);height:12px;animation:waveBar 1s .2s ease-in-out infinite"></div>
+                <div style="width:4px;border-radius:4px;background:var(--coral);height:6px;animation:waveBar 1s .1s ease-in-out infinite"></div>
+              </div>
+            </div>
+            <div style="font-size:26px;font-weight:900;color:#fff">Kidsko<span style="color:var(--coral)">.ai</span></div>
+            <p style="font-size:13px;font-weight:700;color:rgba(255,255,255,.55);margin-top:4px">AI Study Buddy · Voice Mode</p>
+            <div id="voice-timer" style="font-size:18px;font-weight:800;color:rgba(255,255,255,.4);margin-top:8px;letter-spacing:2px">00:00</div>
+            <div style="margin:14px 20px 0;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:18px;padding:13px 15px;width:100%;max-width:320px">
+              <div style="font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,.3);margin-bottom:5px">Kidsko says</div>
+              <p id="voice-transcript" style="font-size:13px;font-weight:600;color:rgba(255,255,255,.75);line-height:1.55">"Photosynthesis is how plants make their own <span style="color:var(--coral)">food</span> using sunlight, water and air..."</p>
+            </div>
+            <div style="display:flex;gap:7px;margin-top:10px;overflow-x:auto;width:100%;padding:0 20px">
+              <div style="flex-shrink:0;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:7px 14px;font-size:12px;font-weight:700;color:rgba(255,255,255,.85);cursor:pointer;white-space:nowrap">Repeat 🔁</div>
+              <div style="flex-shrink:0;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:7px 14px;font-size:12px;font-weight:700;color:rgba(255,255,255,.85);cursor:pointer;white-space:nowrap">Simpler 🧒</div>
+              <div style="flex-shrink:0;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:7px 14px;font-size:12px;font-weight:700;color:rgba(255,255,255,.85);cursor:pointer;white-space:nowrap">Example 💡</div>
+              <div style="flex-shrink:0;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:7px 14px;font-size:12px;font-weight:700;color:rgba(255,255,255,.85);cursor:pointer;white-space:nowrap">Next ▶️</div>
+            </div>
+          </div>
+          <div style="padding:14px 20px 20px;flex-shrink:0;position:relative;z-index:5">
+            <div style="display:flex;align-items:center;justify-content:center;gap:14px">
+              <div style="display:flex;flex-direction:column;align-items:center;gap:7px">
+                <button id="mute-btn" onclick="toggleMute()" style="width:52px;height:52px;border-radius:50%;border:none;background:rgba(255,255,255,.1);font-size:21px;cursor:pointer;display:flex;align-items:center;justify-content:center">🎙️</button>
+                <span style="font-size:10px;font-weight:700;color:rgba(255,255,255,.5)">Mute</span>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:7px">
+                <button style="width:52px;height:52px;border-radius:50%;border:none;background:rgba(255,255,255,.1);font-size:21px;cursor:pointer;display:flex;align-items:center;justify-content:center">⏸</button>
+                <span style="font-size:10px;font-weight:700;color:rgba(255,255,255,.5)">Pause</span>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:7px">
+                <button onclick="endVoiceCall()" style="width:70px;height:70px;border-radius:50%;border:none;background:#EF4444;font-size:30px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 28px rgba(239,68,68,.6)">📵</button>
+                <span style="font-size:10px;font-weight:700;color:#EF4444">End</span>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:7px">
+                <button style="width:52px;height:52px;border-radius:50%;border:none;background:rgba(78,205,196,.3);font-size:21px;cursor:pointer;display:flex;align-items:center;justify-content:center">🔊</button>
+                <span style="font-size:10px;font-weight:700;color:rgba(255,255,255,.5)">Speaker</span>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:7px">
+                <button style="width:52px;height:52px;border-radius:50%;border:none;background:rgba(255,255,255,.1);font-size:21px;cursor:pointer;display:flex;align-items:center;justify-content:center">⌨️</button>
+                <span style="font-size:10px;font-weight:700;color:rgba(255,255,255,.5)">Type</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- VISION LOADING -->
+        <div id="call-vision-loading" style="flex:1;display:none;flex-direction:column;align-items:center;justify-content:center;background:#0a0a14;position:relative;overflow:hidden">
+          <div style="position:absolute;width:280px;height:280px;border-radius:50%;border:1.5px solid rgba(78,205,196,.08);animation:ringPulse 2s 0s ease-in-out infinite;pointer-events:none"></div>
+          <div style="position:absolute;width:220px;height:220px;border-radius:50%;border:1.5px solid rgba(78,205,196,.12);animation:ringPulse 2s .4s ease-in-out infinite;pointer-events:none"></div>
+          <div style="position:absolute;width:160px;height:160px;border-radius:50%;border:1.5px solid rgba(78,205,196,.18);animation:ringPulse 2s .8s ease-in-out infinite;pointer-events:none"></div>
+          <div class="sbar" style="position:absolute;top:0;left:0;right:0;color:rgba(255,255,255,.4)"><span>9:41</span><span>⚡ 100%</span></div>
+          <button onclick="showCallScreen('home')" style="position:absolute;top:50px;left:20px;width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.07);border:none;color:rgba(255,255,255,.6);font-size:18px;cursor:pointer;z-index:10">‹</button>
+          <div style="position:relative;z-index:2;display:flex;flex-direction:column;align-items:center">
+            <div class="pulse-anim" style="width:120px;height:120px;border-radius:40px;background:linear-gradient(135deg,#4ECDC4,#74B9FF);display:flex;align-items:center;justify-content:center;font-size:60px;margin-bottom:32px;box-shadow:0 16px 48px rgba(78,205,196,.45)">👁️</div>
+            <div style="font-size:22px;font-weight:900;color:#fff;margin-bottom:8px">AI Vision</div>
+            <p style="font-size:13px;font-weight:700;color:rgba(255,255,255,.45);margin-bottom:36px;text-align:center">Getting everything ready for you...</p>
+            <div style="display:flex;flex-direction:column;gap:14px;width:260px" id="loading-steps">
+              <div class="load-step" id="step0" style="display:flex;align-items:center;gap:12px;opacity:.25">
+                <div style="width:38px;height:38px;border-radius:14px;background:rgba(255,255,255,.05);border:1.5px solid rgba(255,255,255,.06);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">📷</div>
+                <div><div style="font-size:13px;font-weight:700;color:rgba(255,255,255,.3)">Accessing camera...</div></div>
+              </div>
+              <div class="load-step" id="step1" style="display:flex;align-items:center;gap:12px;opacity:.25">
+                <div style="width:38px;height:38px;border-radius:14px;background:rgba(255,255,255,.05);border:1.5px solid rgba(255,255,255,.06);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🔗</div>
+                <div><div style="font-size:13px;font-weight:700;color:rgba(255,255,255,.3)">Connecting to Kidsko AI...</div></div>
+              </div>
+              <div class="load-step" id="step2" style="display:flex;align-items:center;gap:12px;opacity:.25">
+                <div style="width:38px;height:38px;border-radius:14px;background:rgba(255,255,255,.05);border:1.5px solid rgba(255,255,255,.06);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🧠</div>
+                <div><div style="font-size:13px;font-weight:700;color:rgba(255,255,255,.3)">Loading AI Vision...</div></div>
+              </div>
+              <div class="load-step" id="step3" style="display:flex;align-items:center;gap:12px;opacity:.25">
+                <div style="width:38px;height:38px;border-radius:14px;background:rgba(255,255,255,.05);border:1.5px solid rgba(255,255,255,.06);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">✅</div>
+                <div><div style="font-size:13px;font-weight:700;color:rgba(255,255,255,.3)">Ready! Starting...</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- VISION ACTIVE -->
+        <div id="call-vision-active" style="flex:1;display:none;flex-direction:column;overflow:hidden;background:#000;position:relative">
+          <!-- Camera BG -->
+          <div style="position:absolute;inset:0;background:linear-gradient(160deg,#0a0a14,#0f1a2e);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;z-index:0">
+            <div style="font-size:64px;animation:owlBounce 3s ease-in-out infinite">📷</div>
+            <div id="cam-hint" style="font-size:13px;font-weight:700;color:rgba(255,255,255,.35);text-align:center;padding:0 40px;line-height:1.6">Camera view would appear here<br>Upload a photo to show Kidsko!</div>
+          </div>
+          <!-- Uploaded image bg -->
+          <img id="vision-img-bg" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.85;z-index:1;display:none" alt="">
+          <!-- Scan line overlay -->
+          <div id="scan-overlay" style="position:absolute;inset:0;z-index:10;pointer-events:none;display:none">
+            <div style="position:absolute;left:24px;right:24px;height:2px;background:linear-gradient(90deg,transparent,#4ECDC4,transparent);animation:scanLine .8s ease-in-out;top:50%"></div>
+            <div style="position:absolute;width:30px;height:30px;top:60px;left:24px;border-top:3px solid #4ECDC4;border-left:3px solid #4ECDC4"></div>
+            <div style="position:absolute;width:30px;height:30px;top:60px;right:24px;border-top:3px solid #4ECDC4;border-right:3px solid #4ECDC4"></div>
+            <div style="position:absolute;width:30px;height:30px;bottom:100px;left:24px;border-bottom:3px solid #4ECDC4;border-left:3px solid #4ECDC4"></div>
+            <div style="position:absolute;width:30px;height:30px;bottom:100px;right:24px;border-bottom:3px solid #4ECDC4;border-right:3px solid #4ECDC4"></div>
+            <div style="position:absolute;top:52%;left:50%;transform:translate(-50%,-50%);margin-top:20px;background:rgba(78,205,196,.15);border-radius:12px;padding:6px 16px;border:1px solid rgba(78,205,196,.4)"><span style="font-size:12px;font-weight:800;color:#4ECDC4">Scanning... 🔍</span></div>
+          </div>
+          <!-- Flash -->
+          <div id="flash" style="position:absolute;inset:0;background:rgba(255,255,255,.85);z-index:50;pointer-events:none;display:none"></div>
+          <!-- Sbar -->
+          <div class="sbar" style="position:absolute;top:0;left:0;right:0;z-index:20;color:rgba(255,255,255,.7)"><span>9:41</span><span>⚡ 100%</span></div>
+          <!-- Top controls -->
+          <div style="position:absolute;top:44px;left:0;right:0;z-index:20;padding:8px 16px;display:flex;align-items:center;justify-content:space-between">
+            <button onclick="showCallScreen('home')" style="width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,.5);border:none;color:#fff;font-size:18px;cursor:pointer;backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center">‹</button>
+            <div style="display:flex;align-items:center;gap:8px;background:rgba(0,0,0,.55);border-radius:20px;padding:6px 14px;backdrop-filter:blur(8px)">
+              <div style="width:8px;height:8px;border-radius:50%;background:#EF4444;animation:liveDot 1.2s infinite"></div>
+              <span style="font-size:12px;font-weight:800;color:#fff">AI VISION</span>
+              <span id="vision-timer" style="font-size:12px;font-weight:700;color:rgba(255,255,255,.55)">00:00</span>
+            </div>
+            <button id="vision-mute-btn" onclick="toggleVisionMute()" style="width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,.5);border:none;color:#fff;font-size:18px;cursor:pointer;backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center">🎤</button>
+          </div>
+          <!-- Kidsko PiP avatar -->
+          <div style="position:absolute;top:100px;right:14px;z-index:30;display:flex;flex-direction:column;align-items:center;gap:4px">
+            <div style="width:72px;height:72px;border-radius:22px;background:linear-gradient(135deg,#4ECDC4,#74B9FF);display:flex;align-items:center;justify-content:center;font-size:36px;border:2px solid rgba(255,255,255,.3);box-shadow:0 8px 24px rgba(78,205,196,.4);position:relative">
+              🦉
+              <div id="ai-thinking-dots" style="display:none;position:absolute;bottom:-4px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.7);border-radius:10px;padding:3px 6px;flex-direction:row;gap:3px">
+                <div style="width:5px;height:5px;border-radius:50%;background:#4ECDC4;animation:typingDot 1s 0s ease-in-out infinite;display:inline-block"></div>
+                <div style="width:5px;height:5px;border-radius:50%;background:#4ECDC4;animation:typingDot 1s .2s ease-in-out infinite;display:inline-block"></div>
+                <div style="width:5px;height:5px;border-radius:50%;background:#4ECDC4;animation:typingDot 1s .4s ease-in-out infinite;display:inline-block"></div>
+              </div>
+            </div>
+            <div style="background:rgba(0,0,0,.6);border-radius:8px;padding:2px 8px;backdrop-filter:blur(6px)"><span style="font-size:10px;font-weight:800;color:#4ECDC4">Kidsko</span></div>
+          </div>
+          <!-- AI speech bubble -->
+          <div style="position:absolute;bottom:160px;left:14px;right:14px;z-index:20">
+            <div style="background:rgba(10,10,20,.82);border-radius:20px;padding:14px 16px;backdrop-filter:blur(16px);border:1px solid rgba(78,205,196,.2);box-shadow:0 8px 32px rgba(0,0,0,.4)">
+              <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px">
+                <div style="width:22px;height:22px;border-radius:8px;background:linear-gradient(135deg,#4ECDC4,#74B9FF);display:flex;align-items:center;justify-content:center;font-size:12px">🦉</div>
+                <span style="font-size:11px;font-weight:800;color:#4ECDC4;letter-spacing:.3px">KIDSKO SAYS</span>
+                <span id="ai-status-label" style="font-size:10px;font-weight:700;color:rgba(78,205,196,.6);margin-left:auto"></span>
+              </div>
+              <p id="ai-vision-text" style="font-size:14px;font-weight:700;color:rgba(255,255,255,.9);line-height:1.6;margin:0">"Point your camera at anything and I'll tell you about it! 🔍"</p>
+            </div>
+            <div style="display:flex;gap:7px;margin-top:8px;overflow-x:auto">
+              <div onclick="captureAndAnalyze()" style="flex-shrink:0;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);border-radius:20px;padding:7px 13px;font-size:12px;font-weight:700;color:rgba(255,255,255,.85);cursor:pointer;white-space:nowrap;backdrop-filter:blur(6px)">Tell me more! 🗣️</div>
+              <div onclick="captureAndAnalyze()" style="flex-shrink:0;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);border-radius:20px;padding:7px 13px;font-size:12px;font-weight:700;color:rgba(255,255,255,.85);cursor:pointer;white-space:nowrap;backdrop-filter:blur(6px)">How does it work? ⚙️</div>
+              <div onclick="captureAndAnalyze()" style="flex-shrink:0;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);border-radius:20px;padding:7px 13px;font-size:12px;font-weight:700;color:rgba(255,255,255,.85);cursor:pointer;white-space:nowrap;backdrop-filter:blur(6px)">Is it alive? 🌱</div>
+            </div>
+          </div>
+          <!-- Bottom controls -->
+          <div style="position:absolute;bottom:0;left:0;right:0;z-index:20;padding:12px 28px 28px;background:linear-gradient(0deg,rgba(0,0,0,.85) 0%,transparent 100%)">
+            <div style="display:flex;align-items:center;justify-content:center;gap:20px">
+              <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+                <input type="file" id="vision-file" accept="image/*" style="display:none" onchange="handleVisionUpload(event)">
+                <button onclick="document.getElementById('vision-file').click()" style="width:52px;height:52px;border-radius:50%;border:2px solid rgba(255,255,255,.2);background:rgba(255,255,255,.1);font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(8px)">🖼️</button>
+                <span style="font-size:10px;font-weight:700;color:rgba(255,255,255,.5)">Upload</span>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+                <button onclick="captureAndAnalyze()" style="width:76px;height:76px;border-radius:50%;border:4px solid rgba(255,255,255,.9);background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .13s">
+                  <div style="width:62px;height:62px;border-radius:50%;background:rgba(255,255,255,.9)"></div>
+                </button>
+                <span style="font-size:11px;font-weight:800;color:rgba(255,255,255,.7)">Ask Kidsko 👁️</span>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+                <button onclick="showCallScreen('home')" style="width:52px;height:52px;border-radius:50%;border:none;background:#EF4444;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(239,68,68,.55)">📵</button>
+                <span style="font-size:10px;font-weight:700;color:rgba(255,255,255,.5)">End</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- PARENTS TAB (PIN + Dashboard) -->
+      <div id="tab-parents" style="flex:1;display:none;flex-direction:column;overflow:hidden;position:relative">
+        <!-- PIN Screen -->
+        <div id="parents-pin" style="flex:1;display:flex;flex-direction:column;overflow:hidden;background:linear-gradient(160deg,#1a1a2e,#1E3A5F);position:relative">
+          <div class="sbar" style="color:rgba(255,255,255,.6)"><span>9:41</span><span>⚡ 100%</span></div>
+          <div style="position:absolute;width:250px;height:250px;border-radius:50%;background:rgba(41,128,185,.2);filter:blur(60px);top:-40px;right:-40px;pointer-events:none"></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 32px;position:relative;z-index:2">
+            <div style="width:90px;height:90px;border-radius:28px;background:rgba(255,255,255,.1);border:2px solid rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:48px;margin-bottom:20px;box-shadow:0 12px 40px rgba(0,0,0,.3)">🔐</div>
+            <div style="font-size:26px;font-weight:900;color:#fff;margin-bottom:6px">Parents Area</div>
+            <p style="font-size:14px;font-weight:700;color:rgba(255,255,255,.55);text-align:center;margin-bottom:8px">This area is for parents only</p>
+            <p style="font-size:12px;font-weight:600;color:rgba(255,255,255,.3);margin-bottom:36px">Enter your 4-digit PIN · Hint: <b style="color:rgba(255,255,255,.5)">1234</b></p>
+            <div style="display:flex;justify-content:center;gap:14px;margin-bottom:32px" id="pin-dots">
+              <div style="width:16px;height:16px;border-radius:50%;background:rgba(255,255,255,.15);transition:background .2s" id="dot0"></div>
+              <div style="width:16px;height:16px;border-radius:50%;background:rgba(255,255,255,.15);transition:background .2s" id="dot1"></div>
+              <div style="width:16px;height:16px;border-radius:50%;background:rgba(255,255,255,.15);transition:background .2s" id="dot2"></div>
+              <div style="width:16px;height:16px;border-radius:50%;background:rgba(255,255,255,.15);transition:background .2s" id="dot3"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:100%;max-width:280px">
+              <button onclick="pinPress('1')" style="height:64px;border-radius:20px;border:none;background:rgba(255,255,255,.08);font-size:24px;font-weight:800;color:#fff;cursor:pointer;backdrop-filter:blur(4px)">1</button>
+              <button onclick="pinPress('2')" style="height:64px;border-radius:20px;border:none;background:rgba(255,255,255,.08);font-size:24px;font-weight:800;color:#fff;cursor:pointer">2</button>
+              <button onclick="pinPress('3')" style="height:64px;border-radius:20px;border:none;background:rgba(255,255,255,.08);font-size:24px;font-weight:800;color:#fff;cursor:pointer">3</button>
+              <button onclick="pinPress('4')" style="height:64px;border-radius:20px;border:none;background:rgba(255,255,255,.08);font-size:24px;font-weight:800;color:#fff;cursor:pointer">4</button>
+              <button onclick="pinPress('5')" style="height:64px;border-radius:20px;border:none;background:rgba(255,255,255,.08);font-size:24px;font-weight:800;color:#fff;cursor:pointer">5</button>
+              <button onclick="pinPress('6')" style="height:64px;border-radius:20px;border:none;background:rgba(255,255,255,.08);font-size:24px;font-weight:800;color:#fff;cursor:pointer">6</button>
+              <button onclick="pinPress('7')" style="height:64px;border-radius:20px;border:none;background:rgba(255,255,255,.08);font-size:24px;font-weight:800;color:#fff;cursor:pointer">7</button>
+              <button onclick="pinPress('8')" style="height:64px;border-radius:20px;border:none;background:rgba(255,255,255,.08);font-size:24px;font-weight:800;color:#fff;cursor:pointer">8</button>
+              <button onclick="pinPress('9')" style="height:64px;border-radius:20px;border:none;background:rgba(255,255,255,.08);font-size:24px;font-weight:800;color:#fff;cursor:pointer">9</button>
+              <div></div>
+              <button onclick="pinPress('0')" style="height:64px;border-radius:20px;border:none;background:rgba(255,255,255,.08);font-size:24px;font-weight:800;color:#fff;cursor:pointer">0</button>
+              <button onclick="pinBack()" style="height:64px;border-radius:20px;border:none;background:rgba(255,255,255,.06);font-size:22px;font-weight:800;color:rgba(255,255,255,.6);cursor:pointer">⌫</button>
+            </div>
+            <p id="pin-error" style="font-size:13px;font-weight:700;color:#EF4444;margin-top:16px;display:none">Wrong PIN. Try again!</p>
+          </div>
+        </div>
+
+        <!-- Parents Dashboard -->
+        <div id="parents-dashboard" style="display:none;flex:1;flex-direction:column;overflow:hidden;background:#F0F4F8">
+          <!-- Dashboard header -->
+          <div style="background:linear-gradient(135deg,#1E3A5F,#2980B9);padding:50px 18px 0;flex-shrink:0">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+              <div>
+                <div style="font-size:18px;font-weight:900;color:#fff">👨‍👩‍👧‍👦 Parent Dashboard</div>
+                <div style="font-size:12px;font-weight:700;color:rgba(255,255,255,.6);margin-top:2px">Manage your children's learning</div>
+              </div>
+              <button onclick="closeDashboard()" style="width:36px;height:36px;border-radius:50%;border:none;background:rgba(255,255,255,.15);color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
+            </div>
+            <!-- Children pills -->
+            <div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;margin-bottom:4px" id="children-pills">
+              <div onclick="selectChild(0)" class="child-pill active" data-idx="0" style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer">
+                <div style="width:52px;height:52px;border-radius:18px;background:linear-gradient(135deg,#FF6B6B,#FF9F43);display:flex;align-items:center;justify-content:center;font-size:26px;border:3px solid rgba(255,255,255,.9)">👧</div>
+                <div style="font-size:11px;font-weight:800;color:#fff;white-space:nowrap">Aisha</div>
+              </div>
+              <div onclick="selectChild(1)" class="child-pill" data-idx="1" style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer">
+                <div style="width:52px;height:52px;border-radius:18px;background:linear-gradient(135deg,#4ECDC4,#74B9FF);display:flex;align-items:center;justify-content:center;font-size:26px;border:3px solid rgba(255,255,255,.2)">👦</div>
+                <div style="font-size:11px;font-weight:800;color:rgba(255,255,255,.55);white-space:nowrap">Omar</div>
+              </div>
+              <div onclick="addChild()" style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer">
+                <div style="width:52px;height:52px;border-radius:18px;background:rgba(255,255,255,.1);border:2px dashed rgba(255,255,255,.35);display:flex;align-items:center;justify-content:center;font-size:24px">➕</div>
+                <div style="font-size:11px;font-weight:800;color:rgba(255,255,255,.5);white-space:nowrap">Add</div>
+              </div>
+            </div>
+            <!-- Sub-nav tabs -->
+            <div style="display:flex;gap:4px;border-top:1px solid rgba(255,255,255,.1);padding-top:4px">
+              <button onclick="switchDashTab('overview')" id="dtab-overview" style="flex:1;padding:10px 4px;border-radius:12px 12px 0 0;border:none;background:#F0F4F8;color:#1E3A5F;font-size:11px;font-weight:800;cursor:pointer">Overview</button>
+              <button onclick="switchDashTab('history')" id="dtab-history" style="flex:1;padding:10px 4px;border-radius:12px 12px 0 0;border:none;background:transparent;color:rgba(255,255,255,.6);font-size:11px;font-weight:800;cursor:pointer">History</button>
+              <button onclick="switchDashTab('limits')" id="dtab-limits" style="flex:1;padding:10px 4px;border-radius:12px 12px 0 0;border:none;background:transparent;color:rgba(255,255,255,.6);font-size:11px;font-weight:800;cursor:pointer">Limits</button>
+              <button onclick="switchDashTab('settings')" id="dtab-settings" style="flex:1;padding:10px 4px;border-radius:12px 12px 0 0;border:none;background:transparent;color:rgba(255,255,255,.6);font-size:11px;font-weight:800;cursor:pointer">Settings</button>
+            </div>
+          </div>
+
+          <!-- Dashboard content -->
+          <div style="flex:1;overflow-y:auto">
+
+            <!-- Overview -->
+            <div id="dcontent-overview" style="padding:16px 14px;display:block">
+              <div style="background:#fff;border-radius:20px;padding:16px;margin-bottom:14px;display:flex;align-items:center;gap:13px;box-shadow:0 3px 12px rgba(0,0,0,.06)">
+                <div style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#FF6B6B,#FF9F43);display:flex;align-items:center;justify-content:center;font-size:28px">👧</div>
+                <div style="flex:1"><div style="font-size:16px;font-weight:900;color:var(--text)">Aisha Khan</div><div style="font-size:12px;font-weight:700;color:var(--sub);margin-top:2px">Age 10 · Grade 5</div></div>
+                <div style="background:#E8F8F0;border-radius:10px;padding:5px 12px"><span style="font-size:12px;font-weight:800;color:var(--mint)">🟢 Active</span></div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+                <div style="background:#fff;border-radius:18px;padding:16px 14px;box-shadow:0 3px 12px rgba(0,0,0,.06);text-align:center"><div style="font-size:28px;margin-bottom:6px">💬</div><div style="font-size:28px;font-weight:900;color:var(--coral);line-height:1">23</div><div style="font-size:11px;font-weight:700;color:var(--sub);margin-top:3px">Questions Today</div></div>
+                <div style="background:#fff;border-radius:18px;padding:16px 14px;box-shadow:0 3px 12px rgba(0,0,0,.06);text-align:center"><div style="font-size:28px;margin-bottom:6px">🔥</div><div style="font-size:28px;font-weight:900;color:var(--orange);line-height:1">7</div><div style="font-size:11px;font-weight:700;color:var(--sub);margin-top:3px">Day Streak</div></div>
+                <div style="background:#fff;border-radius:18px;padding:16px 14px;box-shadow:0 3px 12px rgba(0,0,0,.06);text-align:center"><div style="font-size:28px;margin-bottom:6px">⏱️</div><div style="font-size:28px;font-weight:900;color:var(--sky);line-height:1">34m</div><div style="font-size:11px;font-weight:700;color:var(--sub);margin-top:3px">Time Today</div></div>
+                <div style="background:#fff;border-radius:18px;padding:16px 14px;box-shadow:0 3px 12px rgba(0,0,0,.06);text-align:center"><div style="font-size:28px;margin-bottom:6px">⭐</div><div style="font-size:28px;font-weight:900;color:var(--purple);line-height:1">12</div><div style="font-size:11px;font-weight:700;color:var(--sub);margin-top:3px">Topics Explored</div></div>
+              </div>
+              <div style="background:#fff;border-radius:20px;padding:16px;margin-bottom:14px;box-shadow:0 3px 12px rgba(0,0,0,.06)">
+                <div style="font-size:14px;font-weight:900;color:var(--text);margin-bottom:14px">📚 Topics This Week</div>
+                <div style="margin-bottom:12px">
+                  <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px"><div style="width:32px;height:32px;border-radius:10px;background:#FFF0F0;display:flex;align-items:center;justify-content:center;font-size:16px">🔬</div><span style="font-size:13px;font-weight:800;color:var(--text);flex:1">Science</span><span style="font-size:12px;font-weight:700;color:var(--sub)">10 Qs</span></div>
+                  <div style="background:#F0F4F8;border-radius:8px;height:8px;overflow:hidden"><div style="height:100%;width:70%;background:linear-gradient(90deg,var(--coral),var(--orange));border-radius:8px"></div></div>
+                </div>
+                <div style="margin-bottom:12px">
+                  <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px"><div style="width:32px;height:32px;border-radius:10px;background:#FFF5E0;display:flex;align-items:center;justify-content:center;font-size:16px">🔢</div><span style="font-size:13px;font-weight:800;color:var(--text);flex:1">Maths</span><span style="font-size:12px;font-weight:700;color:var(--sub)">8 Qs</span></div>
+                  <div style="background:#F0F4F8;border-radius:8px;height:8px;overflow:hidden"><div style="height:100%;width:55%;background:linear-gradient(90deg,var(--coral),var(--orange));border-radius:8px"></div></div>
+                </div>
+                <div>
+                  <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px"><div style="width:32px;height:32px;border-radius:10px;background:#E8F8F0;display:flex;align-items:center;justify-content:center;font-size:16px">📖</div><span style="font-size:13px;font-weight:800;color:var(--text);flex:1">English</span><span style="font-size:12px;font-weight:700;color:var(--sub)">5 Qs</span></div>
+                  <div style="background:#F0F4F8;border-radius:8px;height:8px;overflow:hidden"><div style="height:100%;width:34%;background:linear-gradient(90deg,var(--coral),var(--orange));border-radius:8px"></div></div>
+                </div>
+              </div>
+              <div style="background:#fff;border-radius:20px;padding:16px;box-shadow:0 3px 12px rgba(0,0,0,.06)">
+                <div style="font-size:14px;font-weight:900;color:var(--text);margin-bottom:14px">📊 Questions This Week</div>
+                <div style="display:flex;align-items:flex-end;gap:8px;height:80px">
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px"><div style="width:100%;height:45px;background:#EEF2FF;border-radius:6px 6px 0 0"></div><div style="font-size:9px;font-weight:800;color:var(--sub)">Mon</div></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px"><div style="width:100%;height:30px;background:#EEF2FF;border-radius:6px 6px 0 0"></div><div style="font-size:9px;font-weight:800;color:var(--sub)">Tue</div></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px"><div style="width:100%;height:60px;background:#EEF2FF;border-radius:6px 6px 0 0"></div><div style="font-size:9px;font-weight:800;color:var(--sub)">Wed</div></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px"><div style="width:100%;height:41px;background:#EEF2FF;border-radius:6px 6px 0 0"></div><div style="font-size:9px;font-weight:800;color:var(--sub)">Thu</div></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px"><div style="width:100%;height:68px;background:linear-gradient(180deg,#FF6B6B,#FF9F43);border-radius:6px 6px 0 0"></div><div style="font-size:9px;font-weight:800;color:var(--sub)">Fri</div></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px"><div style="width:100%;height:22px;background:#EEF2FF;border-radius:6px 6px 0 0"></div><div style="font-size:9px;font-weight:800;color:var(--sub)">Sat</div></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px"><div style="width:100%;height:52px;background:#EEF2FF;border-radius:6px 6px 0 0"></div><div style="font-size:9px;font-weight:800;color:var(--sub)">Sun</div></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- History -->
+            <div id="dcontent-history" style="padding:16px 14px;display:none">
+              <div style="font-size:14px;font-weight:900;color:var(--text);margin-bottom:12px">Aisha's Conversations</div>
+              <div style="display:flex;flex-direction:column;gap:9px">
+                <div style="background:#fff;border-radius:16px;padding:13px 14px;display:flex;align-items:center;gap:11px;box-shadow:0 2px 8px rgba(0,0,0,.05)"><div style="width:40px;height:40px;border-radius:12px;background:#FFF0F0;display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0">🔬</div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">What is photosynthesis?</div><div style="font-size:11px;font-weight:600;color:var(--sub);margin-top:1px">10:30 AM · 6 messages</div></div><div style="width:32px;height:32px;border-radius:10px;background:#EBF5FB;display:flex;align-items:center;justify-content:center;font-size:14px;color:#2980B9">›</div></div>
+                <div style="background:#fff;border-radius:16px;padding:13px 14px;display:flex;align-items:center;gap:11px;box-shadow:0 2px 8px rgba(0,0,0,.05)"><div style="width:40px;height:40px;border-radius:12px;background:#FFF5E0;display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0">🔢</div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Explain fractions to me</div><div style="font-size:11px;font-weight:600;color:var(--sub);margin-top:1px">Yesterday · 12 messages</div></div><div style="width:32px;height:32px;border-radius:10px;background:#EBF5FB;display:flex;align-items:center;justify-content:center;font-size:14px;color:#2980B9">›</div></div>
+                <div style="background:#fff;border-radius:16px;padding:13px 14px;display:flex;align-items:center;gap:11px;box-shadow:0 2px 8px rgba(0,0,0,.05)"><div style="width:40px;height:40px;border-radius:12px;background:#E8F8F0;display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0">🌍</div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Why is the sky blue?</div><div style="font-size:11px;font-weight:600;color:var(--sub);margin-top:1px">Mon · 8 messages</div></div><div style="width:32px;height:32px;border-radius:10px;background:#EBF5FB;display:flex;align-items:center;justify-content:center;font-size:14px;color:#2980B9">›</div></div>
+                <div style="background:#fff;border-radius:16px;padding:13px 14px;display:flex;align-items:center;gap:11px;box-shadow:0 2px 8px rgba(0,0,0,.05)"><div style="width:40px;height:40px;border-radius:12px;background:#F3EEFF;display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0">🦕</div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">About dinosaurs</div><div style="font-size:11px;font-weight:600;color:var(--sub);margin-top:1px">Sun · 10 messages</div></div><div style="width:32px;height:32px;border-radius:10px;background:#EBF5FB;display:flex;align-items:center;justify-content:center;font-size:14px;color:#2980B9">›</div></div>
+              </div>
+            </div>
+
+            <!-- Limits -->
+            <div id="dcontent-limits" style="padding:16px 14px;display:none">
+              <div style="background:#fff;border-radius:20px;padding:20px 16px;margin-bottom:14px;box-shadow:0 3px 12px rgba(0,0,0,.06)">
+                <div style="font-size:15px;font-weight:900;color:var(--text);margin-bottom:4px">⏱️ Daily Question Limit</div>
+                <p style="font-size:12px;font-weight:600;color:var(--sub);margin-bottom:16px">Control how many questions Aisha can ask per day</p>
+                <div style="text-align:center;margin-bottom:20px">
+                  <div style="font-size:48px;font-weight:900;color:var(--coral)">30</div>
+                  <div style="font-size:13px;font-weight:700;color:var(--sub)">questions per day</div>
+                  <div style="background:#F0F4F8;border-radius:10px;height:10px;margin:12px 0 6px;overflow:hidden"><div style="height:100%;width:76%;background:linear-gradient(90deg,var(--coral),var(--orange));border-radius:10px"></div></div>
+                  <div style="font-size:11px;font-weight:700;color:var(--sub)">23 used · 7 remaining</div>
+                </div>
+                <div style="display:flex;gap:8px">
+                  <button style="flex:1;padding:10px 4px;border-radius:12px;border:2px solid var(--border);background:#F8F9FA;font-size:13px;font-weight:800;color:var(--sub);cursor:pointer">10</button>
+                  <button style="flex:1;padding:10px 4px;border-radius:12px;border:2px solid var(--border);background:#F8F9FA;font-size:13px;font-weight:800;color:var(--sub);cursor:pointer">20</button>
+                  <button style="flex:1;padding:10px 4px;border-radius:12px;border:2px solid var(--coral);background:rgba(255,107,107,.1);font-size:13px;font-weight:800;color:var(--coral);cursor:pointer">30</button>
+                  <button style="flex:1;padding:10px 4px;border-radius:12px;border:2px solid var(--border);background:#F8F9FA;font-size:13px;font-weight:800;color:var(--sub);cursor:pointer">50</button>
+                  <button style="flex:1;padding:10px 4px;border-radius:12px;border:2px solid var(--border);background:#F8F9FA;font-size:13px;font-weight:800;color:var(--sub);cursor:pointer">∞</button>
+                </div>
+              </div>
+              <div style="background:#fff;border-radius:20px;padding:20px 16px;box-shadow:0 3px 12px rgba(0,0,0,.06)">
+                <div style="font-size:15px;font-weight:900;color:var(--text);margin-bottom:16px">⏰ Study Schedule</div>
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px"><div style="flex:1;font-size:13px;font-weight:700;color:var(--text)">School Hours (8am–3pm)</div><button class="tog on" onclick="this.classList.toggle('on')"></button></div>
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px"><div style="flex:1;font-size:13px;font-weight:700;color:var(--text)">Evening Study (5pm–7pm)</div><button class="tog on" onclick="this.classList.toggle('on')"></button></div>
+                <div style="display:flex;align-items:center;gap:12px"><div style="flex:1;font-size:13px;font-weight:700;color:var(--text)">Weekend Learning</div><button class="tog" onclick="this.classList.toggle('on')"></button></div>
+              </div>
+            </div>
+
+            <!-- Settings -->
+            <div id="dcontent-settings" style="padding:16px 14px;display:none">
+              <div style="background:#fff;border-radius:20px;padding:16px;margin-bottom:12px;box-shadow:0 3px 12px rgba(0,0,0,.06)">
+                <div style="font-size:14px;font-weight:900;color:var(--text);margin-bottom:14px">👨‍👩‍👧‍👦 Manage Children</div>
+                <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #F5F5F5">
+                  <div style="width:40px;height:40px;border-radius:14px;background:linear-gradient(135deg,#FF6B6B,#FF9F43);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">👧</div>
+                  <div style="flex:1"><div style="font-size:13px;font-weight:800;color:var(--text)">Aisha Khan</div><div style="font-size:11px;font-weight:600;color:var(--sub);margin-top:1px">Grade 5</div></div>
+                  <button style="padding:6px 14px;border-radius:10px;border:1.5px solid var(--border);background:#F8F9FA;font-size:12px;font-weight:800;color:var(--sub);cursor:pointer">Edit</button>
+                </div>
+                <div style="display:flex;align-items:center;gap:12px;padding:10px 0">
+                  <div style="width:40px;height:40px;border-radius:14px;background:linear-gradient(135deg,#4ECDC4,#74B9FF);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">👦</div>
+                  <div style="flex:1"><div style="font-size:13px;font-weight:800;color:var(--text)">Omar Khan</div><div style="font-size:11px;font-weight:600;color:var(--sub);margin-top:1px">Grade 2</div></div>
+                  <button style="padding:6px 14px;border-radius:10px;border:1.5px solid var(--border);background:#F8F9FA;font-size:12px;font-weight:800;color:var(--sub);cursor:pointer">Edit</button>
+                </div>
+                <button onclick="addChild()" style="width:100%;margin-top:14px;background:rgba(255,107,107,.1);border:2px dashed rgba(255,107,107,.4);border-radius:14px;padding:12px;font-size:14px;font-weight:800;color:var(--coral);cursor:pointer">➕ Add Another Child</button>
+              </div>
+              <div style="font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#9CA3AF;padding:12px 4px 8px">Safety</div>
+              <div style="background:#fff;border-radius:18px;overflow:hidden;margin-bottom:10px;box-shadow:0 2px 8px rgba(0,0,0,.05)">
+                <div style="display:flex;align-items:center;gap:12px;padding:14px;border-bottom:1px solid #F5F5F5;cursor:pointer"><div style="width:36px;height:36px;border-radius:11px;background:#E8F8F0;display:flex;align-items:center;justify-content:center;font-size:18px">🔒</div><div style="flex:1"><div style="font-size:14px;font-weight:700;color:var(--text)">Change Parent PIN</div><div style="font-size:11px;font-weight:600;color:var(--sub);margin-top:1px">Current: ••••</div></div><span style="font-size:16px;color:#D1D5DB">›</span></div>
+                <div style="display:flex;align-items:center;gap:12px;padding:14px;cursor:pointer"><div style="width:36px;height:36px;border-radius:11px;background:#FFF0F0;display:flex;align-items:center;justify-content:center;font-size:18px">🚫</div><div style="flex:1"><div style="font-size:14px;font-weight:700;color:var(--text)">Content Filter</div><div style="font-size:11px;font-weight:600;color:var(--sub);margin-top:1px">Strict mode on</div></div><span style="font-size:16px;color:#D1D5DB">›</span></div>
+              </div>
+              <div style="font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#9CA3AF;padding:12px 4px 8px">Notifications</div>
+              <div style="background:#fff;border-radius:18px;overflow:hidden;margin-bottom:10px;box-shadow:0 2px 8px rgba(0,0,0,.05)">
+                <div style="display:flex;align-items:center;gap:12px;padding:14px;border-bottom:1px solid #F5F5F5"><div style="width:36px;height:36px;border-radius:11px;background:#FFF5E0;display:flex;align-items:center;justify-content:center;font-size:18px">🔔</div><div style="flex:1"><div style="font-size:14px;font-weight:700;color:var(--text)">Daily Report</div><div style="font-size:11px;font-weight:600;color:var(--sub);margin-top:1px">Every evening at 7pm</div></div><button class="tog on" onclick="this.classList.toggle('on')"></button></div>
+                <div style="display:flex;align-items:center;gap:12px;padding:14px"><div style="width:36px;height:36px;border-radius:11px;background:#FFF0F0;display:flex;align-items:center;justify-content:center;font-size:18px">⚠️</div><div style="flex:1"><div style="font-size:14px;font-weight:700;color:var(--text)">Limit Alerts</div><div style="font-size:11px;font-weight:600;color:var(--sub);margin-top:1px">When 80% used</div></div><button class="tog on" onclick="this.classList.toggle('on')"></button></div>
+              </div>
+              <div style="background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.05)">
+                <div onclick="closeDashboard()" style="display:flex;align-items:center;gap:12px;padding:14px;cursor:pointer"><div style="width:36px;height:36px;border-radius:11px;background:#FFF0F0;display:flex;align-items:center;justify-content:center;font-size:18px">🚪</div><div style="flex:1"><div style="font-size:14px;font-weight:700;color:#EF4444">Sign Out Parent</div></div></div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Add Child Modal -->
+        <div id="add-child-modal" style="display:none;position:absolute;inset:0;background:rgba(0,0,0,.6);z-index:300;align-items:flex-end;backdrop-filter:blur(6px)">
+          <div style="width:100%;background:#fff;border-radius:28px 28px 0 0;padding:24px 24px 36px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+              <div style="font-size:20px;font-weight:900;color:var(--text)">➕ Add Child</div>
+              <button onclick="closeAddChild()" style="width:34px;height:34px;border-radius:50%;border:none;background:#F0F4F8;font-size:16px;cursor:pointer">✕</button>
+            </div>
+            <div class="field"><label>Child's Name</label><input type="text" id="new-child-name" placeholder="e.g. Sara"></div>
+            <div class="field"><label>Age</label><input type="number" id="new-child-age" placeholder="e.g. 8"></div>
+            <div class="field"><label>Grade</label>
+              <select id="new-child-grade">
+                <option>Kindergarten</option><option>Grade 1</option><option>Grade 2</option>
+                <option>Grade 3</option><option>Grade 4</option><option>Grade 5</option>
+                <option>Grade 6</option><option>Grade 7</option><option>Grade 8</option>
+              </select>
+            </div>
+            <button onclick="confirmAddChild()" style="width:100%;background:linear-gradient(135deg,#1E3A5F,#2980B9);border:none;border-radius:18px;padding:16px;font-size:16px;font-weight:900;color:#fff;cursor:pointer;box-shadow:0 6px 20px rgba(30,58,95,.35)">Add Child 🎉</button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Bottom nav -->
+      <div class="bnav">
+        <button class="bnav-btn on" id="bnav-chat" onclick="switchTab('chat')">
+          <span class="ico">💬</span><span class="lbl">Chat</span><div class="bnav-dot"></div>
+        </button>
+        <button class="bnav-btn" id="bnav-call" onclick="switchTab('call')">
+          <span class="ico">📞</span><span class="lbl">Call</span><div class="bnav-dot"></div>
+        </button>
+        <button class="bnav-btn" id="bnav-parents" onclick="switchTab('parents')">
+          <span class="ico">🔒</span><span class="lbl">Parents</span><div class="bnav-dot"></div>
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<p style="color:rgba(255,255,255,.2);font-size:11px;font-weight:600;margin-top:18px;text-align:center">Double-click file → opens in Chrome/Edge/Firefox · PIN: 1234 · All screens interactive</p>
+
+<script>
+// ── State ──
+let currentScreen = 'splash';
+let currentTab = 'chat';
+let currentCallScreen = 'home';
+let sidebarOpen = false;
+let pin = '';
+let voiceTimer = null;
+let visionTimer = null;
+let voiceSeconds = 0;
+let visionSeconds = 0;
+let visionMuted = false;
+let voiceMuted = false;
+let loadingTimers = [];
+let capturedImageUrl = null;
+
+const AI_RESPONSES = [
+  '"Oh wow! 🌟 That looks really interesting! I can see something cool here. Let me tell you all about it!"',
+  '"I can see something that looks like a plant! 🌱 Plants are amazing — they make their own food using sunlight. This one looks healthy and green!"',
+  '"That looks like a maths problem! 🔢 I can see some numbers. Let me help you solve it step by step — it\'s easier than you think!"',
+  '"Wow, I see a really cool object! ✨ This looks like it has some very interesting features. Want me to explain what it does?"',
+  '"I can see some writing! 📝 Let me read it for you and explain what it means in a super simple way!"',
+  '"That looks like a science experiment! 🔬 This is so cool — science is all around us. Let me explain what\'s happening here!"',
+  '"I see something colourful! 🎨 There\'s a lot going on here. Point a little closer and I\'ll give you more details!"',
+];
+
+// ── Screen Navigation ──
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + id).classList.add('active');
+  currentScreen = id;
+  document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.pill').forEach(p => {
+    if (p.textContent.toLowerCase().includes(id === 'main' ? 'main' : id)) p.classList.add('active');
+  });
+  if (id === 'main') {
+    document.querySelectorAll('.pill')[3].classList.add('active');
+  }
+}
+
+// ── Tab switching ──
+function switchTab(tab) {
+  currentTab = tab;
+  ['chat','call','parents'].forEach(t => {
+    document.getElementById('tab-' + t).style.display = 'none';
+    document.getElementById('bnav-' + t).classList.remove('on');
+  });
+  document.getElementById('tab-' + tab).style.display = 'flex';
+  document.getElementById('bnav-' + tab).classList.add('on');
+
+  if (tab === 'call') {
+    showCallScreen('home');
+  }
+  if (tab === 'parents') {
+    resetPin();
+    document.getElementById('parents-pin').style.display = 'flex';
+    document.getElementById('parents-dashboard').style.display = 'none';
+  }
+}
+
+// ── Sidebar ──
+function toggleSidebar() {
+  sidebarOpen = !sidebarOpen;
+  const sb = document.getElementById('sidebar');
+  const ov = document.getElementById('sidebar-overlay');
+  sb.style.left = sidebarOpen ? '0' : '-295px';
+  ov.style.display = sidebarOpen ? 'block' : 'none';
+}
+
+// ── Chat ──
+let pendingImage = null;
+
+function updateSendBtn(val) {
+  const btn = document.getElementById('send-btn');
+  btn.style.background = (val.trim() || pendingImage) ? 'linear-gradient(135deg,#FF6B6B,#FF9F43)' : '#E0E0E0';
+}
+
+function newChat() {
+  document.getElementById('chat-welcome').style.display = 'flex';
+  document.getElementById('chat-messages').style.display = 'none';
+  document.getElementById('chat-input').value = '';
+  pendingImage = null;
+  clearImage();
+  updateSendBtn('');
+}
+
+function startChat(text) {
+  document.getElementById('chat-welcome').style.display = 'none';
+  const msgs = document.getElementById('chat-messages');
+  msgs.style.display = 'flex';
+  msgs.innerHTML = '';
+  addMsg('me', text, null);
+  setTimeout(() => addTyping(), 300);
+  setTimeout(() => {
+    removeTyping();
+    addMsg('ai', 'Great question! 🌟\n\nLet me explain that in a simple way just for you!\n\nPlants are like tiny chefs 👨‍🍳 — they use sunlight ☀️, water 💧, and air 💨 to cook their own food. That\'s called photosynthesis! 🌱\n\nPretty cool right?', null);
+  }, 2200);
+}
+
+function sendMsg() {
+  const input = document.getElementById('chat-input');
+  const val = input.value.trim();
+  if (!val && !pendingImage) return;
+  document.getElementById('chat-welcome').style.display = 'none';
+  const msgs = document.getElementById('chat-messages');
+  msgs.style.display = 'flex';
+  addMsg('me', val, pendingImage);
+  input.value = '';
+  pendingImage = null;
+  clearImage();
+  updateSendBtn('');
+  setTimeout(() => addTyping(), 300);
+  const responses = [
+    'Great question! 🌟\n\nLet me explain that in a simple way!\n\nThink of it like a fun adventure — the answer is really interesting and I think you\'ll love learning about it! 🎉',
+    'Ooh, that\'s a really smart question! 🧠\n\nHere\'s the simple version:\n\nNature is full of amazing things, and this is one of the coolest! Let me break it down step by step just for you. 🚀',
+    'Wow, good thinking! ✨\n\nSo here\'s the thing — scientists have been asking this same question for hundreds of years!\n\nThe answer is super interesting. Are you ready? 🌟'
+  ];
+  setTimeout(() => {
+    removeTyping();
+    addMsg('ai', responses[Math.floor(Math.random()*responses.length)], null);
+  }, 2000);
+}
+
+function addMsg(role, text, img) {
+  const msgs = document.getElementById('chat-messages');
+  const div = document.createElement('div');
+  div.style.cssText = `display:flex;flex-direction:${role==='me'?'row-reverse':'row'};gap:8px;align-items:flex-end;max-width:88%;align-self:${role==='me'?'flex-end':'flex-start'};animation:fadeSlideIn .3s ease`;
+  const av = document.createElement('div');
+  av.style.cssText = `width:32px;height:32px;border-radius:50%;flex-shrink:0;background:${role==='ai'?'linear-gradient(135deg,#FF6B6B,#FF9F43)':'linear-gradient(135deg,#4ECDC4,#74B9FF)'};display:flex;align-items:center;justify-content:center;font-size:${role==='ai'?16:14}px;font-weight:900;color:#fff`;
+  av.textContent = role==='ai'?'🦉':'👧';
+  const bbl = document.createElement('div');
+  bbl.style.cssText = `padding:13px 16px;border-radius:22px;font-size:14px;font-weight:600;line-height:1.65;background:${role==='ai'?'#fff':'linear-gradient(135deg,#4ECDC4,#74B9FF)'};color:${role==='ai'?'#2D3436':'#fff'};border-bottom-left-radius:${role==='ai'?'6px':'22px'};border-bottom-right-radius:${role==='me'?'6px':'22px'};box-shadow:0 3px 12px rgba(0,0,0,.08)`;
+  if (img) {
+    const im = document.createElement('img');
+    im.src = img; im.style.cssText = 'width:100%;border-radius:12px;margin-bottom:8px;display:block';
+    bbl.appendChild(im);
+  }
+  if (text) {
+    text.split('\n').forEach((l,i) => { if(i>0) bbl.appendChild(document.createElement('br')); bbl.appendChild(document.createTextNode(l)); });
+  }
+  div.appendChild(av); div.appendChild(bbl);
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function addTyping() {
+  const msgs = document.getElementById('chat-messages');
+  const div = document.createElement('div');
+  div.id = 'typing-indicator';
+  div.style.cssText = 'display:flex;gap:8px;align-items:flex-end;align-self:flex-start';
+  div.innerHTML = `<div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#FF6B6B,#FF9F43);display:flex;align-items:center;justify-content:center;font-size:16px">🦉</div><div style="background:#fff;border-radius:22px;border-bottom-left-radius:6px;padding:14px 18px;display:flex;gap:5px;box-shadow:0 3px 12px rgba(0,0,0,.08)"><div style="width:7px;height:7px;border-radius:50%;background:#FF6B6B;animation:typingDot 1.2s 0s ease-in-out infinite"></div><div style="width:7px;height:7px;border-radius:50%;background:#FF6B6B;animation:typingDot 1.2s .2s ease-in-out infinite"></div><div style="width:7px;height:7px;border-radius:50%;background:#FF6B6B;animation:typingDot 1.2s .4s ease-in-out infinite"></div></div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function removeTyping() {
+  const t = document.getElementById('typing-indicator');
+  if (t) t.remove();
+}
+
+function handleImageUpload(e) {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = ev => {
+    pendingImage = ev.target.result;
+    document.getElementById('img-preview-thumb').src = ev.target.result;
+    document.getElementById('img-preview-bar').style.display = 'flex';
+    updateSendBtn('x');
+  };
+  r.readAsDataURL(f);
+}
+
+function clearImage() {
+  pendingImage = null;
+  document.getElementById('img-preview-bar').style.display = 'none';
+  document.getElementById('img-file').value = '';
+  updateSendBtn(document.getElementById('chat-input').value);
+}
+
+// ── Call screens ──
+function showCallScreen(name) {
+  const screens = ['home','voice-idle','voice-active','vision-loading','vision-active'];
+  screens.forEach(s => {
+    const el = document.getElementById('call-' + s);
+    if (el) el.style.display = 'none';
+  });
+  const target = document.getElementById('call-' + name);
+  if (target) target.style.display = 'flex';
+  currentCallScreen = name;
+
+  if (name === 'voice-active') startVoiceTimer();
+  else stopVoiceTimer();
+
+  if (name === 'vision-loading') startVisionLoading();
+  if (name === 'vision-active') startVisionTimer();
+  else if (name !== 'vision-loading') stopVisionTimer();
+}
+
+function startVoiceTimer() {
+  voiceSeconds = 0;
+  clearInterval(voiceTimer);
+  voiceTimer = setInterval(() => {
+    voiceSeconds++;
+    const m = String(Math.floor(voiceSeconds/60)).padStart(2,'0');
+    const s = String(voiceSeconds%60).padStart(2,'0');
+    const el = document.getElementById('voice-timer');
+    if (el) el.textContent = m+':'+s;
+  }, 1000);
+}
+function stopVoiceTimer() { clearInterval(voiceTimer); voiceSeconds = 0; }
+function endVoiceCall() { stopVoiceTimer(); showCallScreen('home'); }
+function toggleMute() {
+  voiceMuted = !voiceMuted;
+  const btn = document.getElementById('mute-btn');
+  if (btn) { btn.textContent = voiceMuted ? '🔇' : '🎙️'; btn.style.background = voiceMuted ? 'rgba(239,68,68,.3)' : 'rgba(255,255,255,.1)'; }
+}
+
+// Vision loading sequence
+function startVisionLoading() {
+  loadingTimers.forEach(clearTimeout);
+  loadingTimers = [];
+  [0,1,2,3].forEach(i => {
+    const el = document.getElementById('step' + i);
+    if (el) { el.style.opacity = '.25'; el.querySelector('div').style.border = '1.5px solid rgba(255,255,255,.06)'; }
+  });
+  [0,1,2,3].forEach(i => {
+    const t = setTimeout(() => {
+      const el = document.getElementById('step' + i);
+      if (el) {
+        el.style.opacity = '1';
+        const icon = el.querySelector('div');
+        icon.style.background = 'rgba(78,205,196,.2)';
+        icon.style.border = '1.5px solid rgba(78,205,196,.4)';
+        icon.style.color = '#fff';
+        el.querySelector('div div').style.color = '#fff';
+        const bar = document.createElement('div');
+        bar.style.cssText = 'height:3px;border-radius:2px;background:linear-gradient(90deg,#4ECDC4,#74B9FF);margin-top:5px;animation:loadBar .9s ease-out forwards';
+        el.querySelector('div + div').appendChild(bar);
+        if (i === 3) {
+          const t2 = setTimeout(() => showCallScreen('vision-active'), 600);
+          loadingTimers.push(t2);
+        }
+      }
+    }, i * 900);
+    loadingTimers.push(t);
+  });
+}
+
+function startVisionTimer() {
+  visionSeconds = 0;
+  clearInterval(visionTimer);
+  visionTimer = setInterval(() => {
+    visionSeconds++;
+    const m = String(Math.floor(visionSeconds/60)).padStart(2,'0');
+    const s = String(visionSeconds%60).padStart(2,'0');
+    const el = document.getElementById('vision-timer');
+    if (el) el.textContent = m+':'+s;
+  }, 1000);
+  // auto-cycle AI messages
+  setTimeout(() => aiVisionCycle(), 4000);
+}
+function stopVisionTimer() { clearInterval(visionTimer); visionSeconds = 0; }
+
+function aiVisionCycle() {
+  if (currentCallScreen !== 'vision-active') return;
+  setAiStatus('Scanning... 🔍');
+  showScanOverlay(true);
+  setTimeout(() => {
+    showScanOverlay(false);
+    setAiStatus('Thinking... 🧠');
+    showThinkingDots(true);
+    setTimeout(() => {
+      showThinkingDots(false);
+      setAiStatus('');
+      const el = document.getElementById('ai-vision-text');
+      if (el) el.textContent = AI_RESPONSES[Math.floor(Math.random()*AI_RESPONSES.length)];
+      setTimeout(() => aiVisionCycle(), 7000);
+    }, 1400);
+  }, 900);
+}
+
+function captureAndAnalyze() {
+  // Flash
+  const flash = document.getElementById('flash');
+  if (flash) { flash.style.display = 'block'; setTimeout(() => flash.style.display = 'none', 180); }
+  setAiStatus('Scanning... 🔍');
+  showScanOverlay(true);
+  setTimeout(() => {
+    showScanOverlay(false);
+    setAiStatus('Thinking... 🧠');
+    showThinkingDots(true);
+    setTimeout(() => {
+      showThinkingDots(false);
+      setAiStatus('');
+      const el = document.getElementById('ai-vision-text');
+      if (el) el.textContent = AI_RESPONSES[Math.floor(Math.random()*AI_RESPONSES.length)];
+    }, 1500);
+  }, 800);
+}
+
+function handleVisionUpload(e) {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = ev => {
+    const bg = document.getElementById('vision-img-bg');
+    if (bg) { bg.src = ev.target.result; bg.style.display = 'block'; }
+    const hint = document.getElementById('cam-hint');
+    if (hint) hint.style.display = 'none';
+    captureAndAnalyze();
+  };
+  r.readAsDataURL(f);
+}
+
+function setAiStatus(text) {
+  const el = document.getElementById('ai-status-label');
+  if (el) el.textContent = text;
+}
+function showScanOverlay(show) {
+  const el = document.getElementById('scan-overlay');
+  if (el) el.style.display = show ? 'block' : 'none';
+}
+function showThinkingDots(show) {
+  const el = document.getElementById('ai-thinking-dots');
+  if (el) el.style.display = show ? 'flex' : 'none';
+}
+function toggleVisionMute() {
+  visionMuted = !visionMuted;
+  const btn = document.getElementById('vision-mute-btn');
+  if (btn) { btn.textContent = visionMuted ? '🔇' : '🎤'; btn.style.background = visionMuted ? 'rgba(239,68,68,.7)' : 'rgba(0,0,0,.5)'; }
+}
+
+// ── PIN ──
+function resetPin() {
+  pin = '';
+  [0,1,2,3].forEach(i => {
+    const d = document.getElementById('dot'+i);
+    if (d) { d.style.background = 'rgba(255,255,255,.15)'; }
+  });
+  const err = document.getElementById('pin-error');
+  if (err) err.style.display = 'none';
+}
+
+function pinPress(d) {
+  if (pin.length >= 4) return;
+  pin += d;
+  const dot = document.getElementById('dot' + (pin.length - 1));
+  if (dot) dot.style.background = '#FF6B6B';
+  if (pin.length === 4) {
+    if (pin === '1234') {
+      setTimeout(() => {
+        document.getElementById('parents-pin').style.display = 'none';
+        const dash = document.getElementById('parents-dashboard');
+        dash.style.display = 'flex';
+        dash.style.flexDirection = 'column';
+      }, 300);
+    } else {
+      const err = document.getElementById('pin-error');
+      if (err) err.style.display = 'block';
+      [0,1,2,3].forEach(i => { const d = document.getElementById('dot'+i); if(d) d.style.background = '#EF4444'; });
+      setTimeout(() => resetPin(), 700);
+    }
+  }
+}
+
+function pinBack() {
+  if (pin.length === 0) return;
+  const dot = document.getElementById('dot' + (pin.length - 1));
+  if (dot) dot.style.background = 'rgba(255,255,255,.15)';
+  pin = pin.slice(0, -1);
+}
+
+function closeDashboard() {
+  document.getElementById('parents-dashboard').style.display = 'none';
+  document.getElementById('parents-pin').style.display = 'flex';
+  resetPin();
+}
+
+// ── Dashboard ──
+function switchDashTab(tab) {
+  ['overview','history','limits','settings'].forEach(t => {
+    document.getElementById('dcontent-'+t).style.display = 'none';
+    const btn = document.getElementById('dtab-'+t);
+    btn.style.background = 'transparent';
+    btn.style.color = 'rgba(255,255,255,.6)';
+  });
+  document.getElementById('dcontent-'+tab).style.display = 'block';
+  const active = document.getElementById('dtab-'+tab);
+  active.style.background = '#F0F4F8';
+  active.style.color = '#1E3A5F';
+}
+
+function selectChild(idx) {
+  document.querySelectorAll('.child-pill').forEach((p,i) => {
+    const av = p.querySelector('div');
+    const lbl = p.querySelector('div + div');
+    av.style.border = i===idx ? '3px solid rgba(255,255,255,.9)' : '3px solid rgba(255,255,255,.2)';
+    if (lbl) lbl.style.color = i===idx ? '#fff' : 'rgba(255,255,255,.55)';
+  });
+}
+
+function addChild() {
+  const modal = document.getElementById('add-child-modal');
+  modal.style.display = 'flex';
+}
+function closeAddChild() {
+  document.getElementById('add-child-modal').style.display = 'none';
+}
+function confirmAddChild() {
+  const name = document.getElementById('new-child-name').value.trim();
+  if (!name) return;
+  const pills = document.getElementById('children-pills');
+  const addBtn = pills.lastElementChild;
+  const colors = ['linear-gradient(135deg,#A78BFA,#FD79A8)','linear-gradient(135deg,#95E1A3,#4ECDC4)'];
+  const emojis = ['🧒','👶'];
+  const idx = pills.children.length - 1;
+  const newPill = document.createElement('div');
+  newPill.className = 'child-pill';
+  newPill.setAttribute('data-idx', idx);
+  newPill.onclick = () => selectChild(idx);
+  newPill.style.cssText = 'flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer';
+  newPill.innerHTML = `<div style="width:52px;height:52px;border-radius:18px;background:${colors[idx%colors.length]};display:flex;align-items:center;justify-content:center;font-size:26px;border:3px solid rgba(255,255,255,.2)">${emojis[idx%emojis.length]}</div><div style="font-size:11px;font-weight:800;color:rgba(255,255,255,.55);white-space:nowrap">${name.split(' ')[0]}</div>`;
+  pills.insertBefore(newPill, addBtn);
+  closeAddChild();
+  document.getElementById('new-child-name').value = '';
+  document.getElementById('new-child-age').value = '';
+  selectChild(idx);
+}
+</script>
+</body>
+</html>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet, BackHandler } from 'react-native';
+import { LinearGradient } from './src/ui';
 import { Mascot } from './src/ui';
 import RegisterScreen from './src/screens/RegisterScreen';
 import LoginScreen from './src/screens/LoginScreen';
@@ -68,14 +69,23 @@ export default function App() {
   const renderContent = () => {
     if (screen === 'checking' || !fontsLoaded) {
       return (
-        <View style={styles.brandedSplash}>
+        <LinearGradient colors={['#FFF0F5', '#FFF8F0', '#F0FFF4']} style={styles.brandedSplash}>
           <View style={styles.splashContent}>
             <Mascot size="l" />
-            <Text style={styles.splashTitle}>Kidsko.ai</Text>
-            <Text style={styles.splashSubtitle}>Your Friendly AI Study Buddy 🦉</Text>
-            <ActivityIndicator size="small" color="#D94A4A" style={styles.splashSpinner} />
+            <Text style={styles.splashTitle}>
+              Kidsko<Text style={{ color: '#FF6B6B' }}>.ai</Text>
+            </Text>
+            <Text style={styles.splashSubtitle}>
+              Your friendly AI teacher! 🎓{'\n'}Ask me anything, anytime!
+            </Text>
+            <View style={styles.splashStarsRow}>
+              <Text style={styles.starText}>✨</Text>
+              <Text style={styles.starText}>⭐</Text>
+              <Text style={styles.starText}>🌟</Text>
+            </View>
+            <ActivityIndicator size="small" color="#FF6B6B" style={styles.splashSpinner} />
           </View>
-        </View>
+        </LinearGradient>
       );
     }
 
@@ -166,18 +176,29 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   splashTitle: {
-    fontSize: 32,
+    fontSize: 40,
     fontWeight: '900',
-    color: '#D94A4A',
-    marginTop: 8,
-    letterSpacing: -0.5,
+    color: '#2D3436',
+    marginTop: 12,
+    letterSpacing: -1,
   },
   splashSubtitle: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#636E72',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginTop: 6,
+  },
+  splashStarsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 4,
+  },
+  starText: {
+    fontSize: 22,
   },
   splashSpinner: {
-    marginTop: 16,
+    marginTop: 20,
   },
 });

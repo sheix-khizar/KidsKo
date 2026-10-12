@@ -8,7 +8,9 @@ import {
   Switch,
   ActivityIndicator,
   Alert,
+  ScrollView,
 } from 'react-native';
+import { LinearGradient } from '../ui';
 import { Student } from '../screens/MainShellScreen';
 import {
   getStudentMemory,
@@ -18,7 +20,7 @@ import {
   StudentMemoryData,
 } from '../services/api';
 import { isPremiumActive } from '../services/billing';
-import { colors, radii, spacing, typography } from '../theme';
+import { colors, radii, gradients } from '../theme';
 
 type Props = {
   students: Student[];
@@ -31,6 +33,8 @@ type Props = {
   billingVersion?: number;
 };
 
+type DashSubTab = 'overview' | 'history' | 'limits' | 'settings';
+
 export default function ParentsHub({
   students,
   activeStudent,
@@ -41,6 +45,8 @@ export default function ParentsHub({
   onRequestLogout,
   billingVersion = 0,
 }: Props) {
+  const [subTab, setSubTab] = useState<DashSubTab>('overview');
+
   // Add child state
   const [newChildName, setNewChildName] = useState('');
   const [addingChild, setAddingChild] = useState(false);
@@ -184,338 +190,733 @@ export default function ParentsHub({
 
   return (
     <View style={styles.container}>
-      {/* 1. Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>Parents Hub 🔒</Text>
-        <Text style={styles.subtitle}>
-          Manage your family, review past learning, and control child privacy.
-        </Text>
-      </View>
+      {/* Prototype Navy Gradient Header */}
+      <LinearGradient
+        colors={gradients.parents}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.headerBanner}
+      >
+        <Text style={styles.dashboardTitle}>👨‍👩‍👧‍👦 Parent Dashboard</Text>
+        <Text style={styles.dashboardSubtitle}>Manage your children's learning</Text>
 
-      {/* 2. Children Management Section */}
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionHeading}>Family & Children</Text>
-        <Text style={styles.sectionSub}>Select a child to view transcripts or adjust settings:</Text>
-
-        <View style={styles.childrenChips}>
-          {students.map((st) => {
+        {/* Children avatar pills row */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.childrenPillsRow}
+        >
+          {students.map((st, idx) => {
             const isSelected = activeStudent?.id === st.id;
             return (
               <Pressable
                 key={st.id}
-                style={[styles.childChip, isSelected && styles.childChipActive]}
+                style={styles.childPillItem}
                 onPress={() => onSelectStudent(st)}
                 accessibilityRole="button"
                 accessibilityLabel={`Select child ${st.student_name}`}
               >
-                <Text style={styles.childChipIcon}>🧒</Text>
-                <Text style={[styles.childChipText, isSelected && styles.childChipTextActive]}>
+                <LinearGradient
+                  colors={idx % 2 === 0 ? gradients.primary : gradients.teal}
+                  style={[
+                    styles.childPillAvatar,
+                    isSelected && styles.childPillAvatarActive,
+                  ]}
+                >
+                  <Text style={styles.childPillEmoji}>{idx % 2 === 0 ? '👧' : '👦'}</Text>
+                </LinearGradient>
+                <Text
+                  style={[
+                    styles.childPillName,
+                    isSelected && styles.childPillNameActive,
+                  ]}
+                >
                   {st.student_name}
                 </Text>
-                {isSelected && <Text style={styles.childChipCheck}>✓</Text>}
               </Pressable>
             );
           })}
-        </View>
 
-        {/* Add Another Child Form */}
-        <View style={styles.addChildRow}>
-          <TextInput
-            style={styles.addChildInput}
-            placeholder="Child's name"
-            placeholderTextColor={colors.subtext}
-            value={newChildName}
-            onChangeText={(txt) => {
-              setNewChildName(txt);
-              if (addChildError) setAddChildError(null);
-            }}
-            maxLength={30}
-          />
+          {/* Add Child Pill Trigger */}
           <Pressable
-            style={[styles.addChildBtn, addingChild && styles.addChildBtnDisabled]}
-            onPress={handleAddChild}
-            disabled={addingChild}
-            accessibilityRole="button"
-            accessibilityLabel="Add another child"
+            style={styles.childPillItem}
+            onPress={() => setSubTab('settings')}
           >
-            {addingChild ? (
-              <ActivityIndicator color={colors.white} size="small" />
-            ) : (
-              <Text style={styles.addChildBtnText}>+ Add</Text>
-            )}
+            <View style={styles.addChildPillBox}>
+              <Text style={{ fontSize: 22, color: 'rgba(255,255,255,0.7)' }}>➕</Text>
+            </View>
+            <Text style={styles.addChildPillLabel}>Add</Text>
+          </Pressable>
+        </ScrollView>
+
+        {/* Sub-nav tabs */}
+        <View style={styles.subNavBar}>
+          <Pressable
+            style={[styles.subNavBtn, subTab === 'overview' && styles.subNavBtnActive]}
+            onPress={() => setSubTab('overview')}
+          >
+            <Text style={[styles.subNavText, subTab === 'overview' && styles.subNavTextActive]}>
+              Overview
+            </Text>
+          </Pressable>
+
+          <Pressable
+            style={[styles.subNavBtn, subTab === 'history' && styles.subNavBtnActive]}
+            onPress={() => setSubTab('history')}
+          >
+            <Text style={[styles.subNavText, subTab === 'history' && styles.subNavTextActive]}>
+              History
+            </Text>
+          </Pressable>
+
+          <Pressable
+            style={[styles.subNavBtn, subTab === 'limits' && styles.subNavBtnActive]}
+            onPress={() => setSubTab('limits')}
+          >
+            <Text style={[styles.subNavText, subTab === 'limits' && styles.subNavTextActive]}>
+              Limits
+            </Text>
+          </Pressable>
+
+          <Pressable
+            style={[styles.subNavBtn, subTab === 'settings' && styles.subNavBtnActive]}
+            onPress={() => setSubTab('settings')}
+          >
+            <Text style={[styles.subNavText, subTab === 'settings' && styles.subNavTextActive]}>
+              Settings
+            </Text>
           </Pressable>
         </View>
-        {addChildError && <Text style={styles.errorText}>{addChildError}</Text>}
-      </View>
+      </LinearGradient>
 
-      {/* 3. What Kidsko Remembers (Stage 10 / Step 4.5) */}
-      {activeStudent && (
-        <View style={styles.sectionCard}>
-          <View style={styles.memoryHeaderRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.sectionHeading}>What Kidsko Remembers</Text>
-              <Text style={styles.sectionSub}>
-                Learning preferences Kidsko picked up from chats with {activeStudent.student_name}.
-              </Text>
+      {/* Body Content by SubTab */}
+      <View style={styles.tabContentContainer}>
+        {/* SUBTAB 1: OVERVIEW */}
+        {subTab === 'overview' && (
+          <View style={styles.subTabSection}>
+            {/* 2x2 Metric Cards */}
+            <View style={styles.metricsGrid}>
+              <View style={styles.metricCard}>
+                <Text style={styles.metricEmoji}>⏱️</Text>
+                <Text style={styles.metricValue}>42m</Text>
+                <Text style={styles.metricLabel}>Learning Time</Text>
+              </View>
+
+              <View style={styles.metricCard}>
+                <Text style={styles.metricEmoji}>💬</Text>
+                <Text style={styles.metricValue}>18</Text>
+                <Text style={styles.metricLabel}>Questions Asked</Text>
+              </View>
+
+              <View style={styles.metricCard}>
+                <Text style={styles.metricEmoji}>🔬</Text>
+                <Text style={styles.metricValue}>5</Text>
+                <Text style={styles.metricLabel}>Topics Explored</Text>
+              </View>
+
+              <View style={styles.metricCard}>
+                <Text style={styles.metricEmoji}>⚡</Text>
+                <Text style={styles.metricValue}>4 days</Text>
+                <Text style={styles.metricLabel}>Active Streak 🔥</Text>
+              </View>
             </View>
-            <View style={styles.switchCol}>
-              <Switch
-                value={memory?.enabled ?? true}
-                onValueChange={handleToggleMemory}
-                trackColor={{ false: '#D1D5DB', true: colors.green }}
-                thumbColor={colors.white}
-                disabled={loadingMemory || updatingMemory}
-                accessibilityRole="switch"
-                accessibilityLabel="Enable learning memory"
-                accessibilityState={{ checked: !!memory?.enabled }}
-              />
-              <Text style={styles.switchLabel}>
-                {memory?.enabled ? 'Active' : 'Off'}
-              </Text>
+
+            {/* Topic Progress Card */}
+            <View style={styles.cardBox}>
+              <Text style={styles.cardHeading}>Topic Mastery</Text>
+              <Text style={styles.cardSub}>Subjects {activeStudent?.student_name || 'child'} explored this week:</Text>
+
+              <View style={styles.topicRow}>
+                <View style={styles.topicHeader}>
+                  <Text style={styles.topicName}>🔬 Science & Nature</Text>
+                  <Text style={styles.topicPct}>85%</Text>
+                </View>
+                <View style={styles.progressTrack}>
+                  <View style={[styles.progressFill, { width: '85%', backgroundColor: '#00B894' }]} />
+                </View>
+              </View>
+
+              <View style={styles.topicRow}>
+                <View style={styles.topicHeader}>
+                  <Text style={styles.topicName}>🔢 Maths & Logic</Text>
+                  <Text style={styles.topicPct}>60%</Text>
+                </View>
+                <View style={styles.progressTrack}>
+                  <View style={[styles.progressFill, { width: '60%', backgroundColor: colors.orange }]} />
+                </View>
+              </View>
+
+              <View style={styles.topicRow}>
+                <View style={styles.topicHeader}>
+                  <Text style={styles.topicName}>📚 Reading & English</Text>
+                  <Text style={styles.topicPct}>75%</Text>
+                </View>
+                <View style={styles.progressTrack}>
+                  <View style={[styles.progressFill, { width: '75%', backgroundColor: '#74B9FF' }]} />
+                </View>
+              </View>
+
+              <View style={styles.topicRow}>
+                <View style={styles.topicHeader}>
+                  <Text style={styles.topicName}>🎨 Arts & History</Text>
+                  <Text style={styles.topicPct}>40%</Text>
+                </View>
+                <View style={styles.progressTrack}>
+                  <View style={[styles.progressFill, { width: '40%', backgroundColor: '#A78BFA' }]} />
+                </View>
+              </View>
+            </View>
+
+            {/* Quick Link to Transcripts */}
+            {activeStudent && (
+              <Pressable
+                style={styles.actionCard}
+                onPress={() => onOpenTranscript(activeStudent)}
+              >
+                <View style={styles.actionCardRow}>
+                  <View style={styles.actionIconBadge}>
+                    <Text style={{ fontSize: 22 }}>📜</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.actionCardTitle}>Read Full Learning Transcripts</Text>
+                    <Text style={styles.actionCardSub}>
+                      Review complete Q&A conversations and homework explanations
+                    </Text>
+                  </View>
+                  <Text style={styles.actionArrow}>→</Text>
+                </View>
+              </Pressable>
+            )}
+          </View>
+        )}
+
+        {/* SUBTAB 2: HISTORY */}
+        {subTab === 'history' && (
+          <View style={styles.subTabSection}>
+            {activeStudent ? (
+              <View style={styles.cardBox}>
+                <Text style={styles.cardHeading}>Learning Transcripts</Text>
+                <Text style={styles.cardSub}>
+                  Review conversations, questions, and homework explanations for {activeStudent.student_name}.
+                </Text>
+
+                <Pressable
+                  style={styles.actionCard}
+                  onPress={() => onOpenTranscript(activeStudent)}
+                >
+                  <View style={styles.actionCardRow}>
+                    <View style={styles.actionIconBadge}>
+                      <Text style={{ fontSize: 22 }}>📜</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.actionCardTitle}>Open Transcript Reader</Text>
+                      <Text style={styles.actionCardSub}>
+                        Filtered, cleaned and formatted for easy parental review
+                      </Text>
+                    </View>
+                    <Text style={styles.actionArrow}>→</Text>
+                  </View>
+                </Pressable>
+              </View>
+            ) : (
+              <Text style={styles.cardSub}>Select a child to view transcripts.</Text>
+            )}
+          </View>
+        )}
+
+        {/* SUBTAB 3: LIMITS & SUBSCRIPTION */}
+        {subTab === 'limits' && (
+          <View style={styles.subTabSection}>
+            <View style={styles.cardBox}>
+              <View style={styles.planHeaderRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cardHeading}>Current Plan</Text>
+                  <Text style={styles.cardSub}>Weekly usage and learning allowance</Text>
+                </View>
+                <View style={[styles.planPill, isPremium ? styles.planPillPremium : styles.planPillFree]}>
+                  <Text style={[styles.planPillText, isPremium ? styles.planPillTextPremium : styles.planPillTextFree]}>
+                    {isPremium ? 'PREMIUM' : 'FREE PLAN'}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.allowanceList}>
+                <View style={styles.allowanceRow}>
+                  <Text style={styles.allowanceLabel}>📞 Voice & Video Calls</Text>
+                  <Text style={styles.allowanceVal}>
+                    {isPremium ? '100 mins / week' : '10 mins / week'}
+                  </Text>
+                </View>
+                <View style={styles.allowanceRow}>
+                  <Text style={styles.allowanceLabel}>💬 AI Chat Questions</Text>
+                  <Text style={styles.allowanceVal}>
+                    {isPremium ? '200 msgs / week' : '30 msgs / week'}
+                  </Text>
+                </View>
+                <View style={styles.allowanceRow}>
+                  <Text style={styles.allowanceLabel}>📷 Homework Photo Scans</Text>
+                  <Text style={styles.allowanceVal}>
+                    {isPremium ? '15 scans / week' : '3 scans / week'}
+                  </Text>
+                </View>
+              </View>
+
+              <Pressable style={styles.upgradeBtn} onPress={onOpenPaywall}>
+                <LinearGradient
+                  colors={gradients.primary}
+                  style={styles.upgradeBtnGradient}
+                >
+                  <Text style={styles.upgradeBtnText}>
+                    {isPremium ? 'Manage Subscription ⭐' : 'Upgrade to Premium 🚀'}
+                  </Text>
+                </LinearGradient>
+              </Pressable>
             </View>
           </View>
+        )}
 
-          {loadingMemory ? (
-            <ActivityIndicator style={{ paddingVertical: 16 }} color={colors.coralStrong} />
-          ) : (
-            <>
-              {/* Preferred Name Tag */}
-              {memory?.preferredName && (
-                <View style={styles.preferredNameRow}>
-                  <Text style={styles.preferredNameLabel}>Name to call {activeStudent.student_name}:</Text>
-                  <View style={styles.nameBadge}>
-                    <Text style={styles.nameBadgeText}>{memory.preferredName}</Text>
-                    <Pressable
-                      style={styles.nameBadgeRemoveBtn}
-                      onPress={handleClearPreferredName}
-                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                      accessibilityRole="button"
-                      accessibilityLabel="Remove preferred name"
-                    >
-                      <Text style={styles.nameBadgeRemoveText}>✕</Text>
-                    </Pressable>
+        {/* SUBTAB 4: SETTINGS & PRIVACY */}
+        {subTab === 'settings' && (
+          <View style={styles.subTabSection}>
+            {/* Add Child Form */}
+            <View style={styles.cardBox}>
+              <Text style={styles.cardHeading}>Add Another Child</Text>
+              <Text style={styles.cardSub}>Create a profile for a sibling to have their own chats:</Text>
+              <View style={styles.addChildRow}>
+                <TextInput
+                  style={styles.addChildInput}
+                  placeholder="Child's name"
+                  placeholderTextColor={colors.subtext}
+                  value={newChildName}
+                  onChangeText={(txt) => {
+                    setNewChildName(txt);
+                    if (addChildError) setAddChildError(null);
+                  }}
+                  maxLength={30}
+                />
+                <Pressable
+                  style={[styles.addChildBtn, addingChild && styles.addChildBtnDisabled]}
+                  onPress={handleAddChild}
+                  disabled={addingChild}
+                >
+                  {addingChild ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                  ) : (
+                    <Text style={styles.addChildBtnText}>+ Add</Text>
+                  )}
+                </Pressable>
+              </View>
+              {addChildError && <Text style={styles.errorText}>{addChildError}</Text>}
+            </View>
+
+            {/* What Kidsko Remembers */}
+            {activeStudent && (
+              <View style={styles.cardBox}>
+                <View style={styles.memoryHeaderRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.cardHeading}>What Kidsko Remembers</Text>
+                    <Text style={styles.cardSub}>
+                      Learning preferences stored for {activeStudent.student_name}.
+                    </Text>
+                  </View>
+                  <View style={styles.switchCol}>
+                    <Switch
+                      value={memory?.enabled ?? true}
+                      onValueChange={handleToggleMemory}
+                      trackColor={{ false: '#D1D5DB', true: '#00B894' }}
+                      thumbColor="#FFFFFF"
+                      disabled={loadingMemory || updatingMemory}
+                    />
+                    <Text style={styles.switchLabel}>
+                      {memory?.enabled ? 'Active' : 'Off'}
+                    </Text>
                   </View>
                 </View>
-              )}
 
-              {/* Facts Chips */}
-              <View style={styles.factsContainer}>
-                {memory?.facts && memory.facts.length > 0 ? (
-                  memory.facts.map((fact, index) => (
-                    <View key={`${fact}_${index}`} style={styles.factChip}>
-                      <Text style={styles.factChipText}>{fact}</Text>
-                      <Pressable
-                        style={styles.factChipRemoveBtn}
-                        onPress={() => handleRemoveFact(index)}
-                        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Remove fact ${fact}`}
-                      >
-                        <Text style={styles.factChipRemoveText}>✕</Text>
-                      </Pressable>
-                    </View>
-                  ))
+                {loadingMemory ? (
+                  <ActivityIndicator style={{ paddingVertical: 16 }} color={colors.coralStrong} />
                 ) : (
-                  <Text style={styles.noFactsText}>
-                    {memory?.enabled
-                      ? `No specific facts recorded yet. As ${activeStudent.student_name} chats, Kidsko will remember their grade and interests.`
-                      : `Memory is switched off. Kidsko will not store or use facts across chats.`}
-                  </Text>
+                  <>
+                    {memory?.preferredName && (
+                      <View style={styles.preferredNameRow}>
+                        <Text style={styles.preferredNameLabel}>Name to call {activeStudent.student_name}:</Text>
+                        <View style={styles.nameBadge}>
+                          <Text style={styles.nameBadgeText}>{memory.preferredName}</Text>
+                          <Pressable
+                            style={styles.nameBadgeRemoveBtn}
+                            onPress={handleClearPreferredName}
+                            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                          >
+                            <Text style={styles.nameBadgeRemoveText}>✕</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    )}
+
+                    <View style={styles.factsContainer}>
+                      {memory?.facts && memory.facts.length > 0 ? (
+                        memory.facts.map((fact, index) => (
+                          <View key={`${fact}_${index}`} style={styles.factChip}>
+                            <Text style={styles.factChipText}>{fact}</Text>
+                            <Pressable
+                              style={styles.factChipRemoveBtn}
+                              onPress={() => handleRemoveFact(index)}
+                              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                            >
+                              <Text style={styles.factChipRemoveText}>✕</Text>
+                            </Pressable>
+                          </View>
+                        ))
+                      ) : (
+                        <Text style={styles.noFactsText}>
+                          {memory?.enabled
+                            ? `No facts stored yet. As ${activeStudent.student_name} chats, Kidsko will remember their grade and interests.`
+                            : `Memory is switched off. Kidsko will not store facts across chats.`}
+                        </Text>
+                      )}
+                    </View>
+
+                    {Boolean(memory?.preferredName || (memory?.facts && memory.facts.length > 0)) && (
+                      <Pressable
+                        style={styles.forgetBtn}
+                        onPress={handleForgetEverything}
+                        disabled={updatingMemory}
+                      >
+                        <Text style={styles.forgetBtnText}>🗑️ Forget Everything</Text>
+                      </Pressable>
+                    )}
+                  </>
                 )}
               </View>
+            )}
 
-              {/* Forget Everything Button — visible whenever any preferred name OR facts are stored */}
-              {Boolean(memory?.preferredName || (memory?.facts && memory.facts.length > 0)) && (
-                <Pressable
-                  style={styles.forgetBtn}
-                  onPress={handleForgetEverything}
-                  disabled={updatingMemory}
-                  accessibilityRole="button"
-                  accessibilityLabel="Forget everything"
-                >
-                  <Text style={styles.forgetBtnText}>🗑️ Forget Everything</Text>
-                </Pressable>
-              )}
-            </>
-          )}
-        </View>
-      )}
-
-      {/* 4. Chat History & Transcripts */}
-      {activeStudent && (
-        <Pressable
-          style={styles.actionCard}
-          onPress={() => onOpenTranscript(activeStudent)}
-          accessibilityRole="button"
-          accessibilityLabel="View Chat Transcripts"
-        >
-          <View style={styles.actionCardRow}>
-            <View style={styles.actionIconBadge}>
-              <Text style={styles.actionIcon}>📜</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.actionCardTitle}>Chat History & Transcripts</Text>
-              <Text style={styles.actionCardSub}>
-                Read past conversations and homework help for {activeStudent.student_name}
-              </Text>
-            </View>
-            <Text style={styles.actionArrow}>→</Text>
+            {/* Sign Out Button */}
+            <Pressable style={styles.signOutBtn} onPress={onRequestLogout}>
+              <Text style={styles.signOutText}>🚪 Sign Out</Text>
+            </Pressable>
           </View>
-        </Pressable>
-      )}
-
-      {/* 5. Subscription & Plan */}
-      <Pressable
-        style={styles.actionCard}
-        onPress={onOpenPaywall}
-        accessibilityRole="button"
-        accessibilityLabel="Manage Subscription Plan"
-      >
-        <View style={styles.actionCardRow}>
-          <View style={[styles.actionIconBadge, isPremium && styles.actionIconBadgePremium]}>
-            <Text style={styles.actionIcon}>{isPremium ? '⭐' : '📦'}</Text>
-          </View>
-          <View style={{ flex: 1 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Text style={styles.actionCardTitle}>Plan & Usage Allowance</Text>
-              <View style={[styles.planPill, isPremium ? styles.planPillPremium : styles.planPillFree]}>
-                <Text style={[styles.planPillText, isPremium ? styles.planPillTextPremium : styles.planPillTextFree]}>
-                  {isPremium ? 'PREMIUM' : 'FREE'}
-                </Text>
-              </View>
-            </View>
-            <Text style={styles.actionCardSub}>
-              {isPremium
-                ? '100 min Voice/Video • 200 msgs • 15 scans / week'
-                : '10 min Voice/Video • 30 msgs • 3 scans / week'}
-            </Text>
-          </View>
-          <Text style={styles.actionArrow}>→</Text>
-        </View>
-      </Pressable>
-
-      {/* 6. Sign Out */}
-      <Pressable
-        style={styles.signOutBtn}
-        onPress={onRequestLogout}
-        accessibilityRole="button"
-        accessibilityLabel="Sign out of parent account"
-      >
-        <Text style={styles.signOutText}>🚪 Sign Out</Text>
-      </Pressable>
+        )}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    padding: spacing.lg,
-    paddingBottom: 40,
+    flex: 1,
+    backgroundColor: '#F0F4F8',
+  },
+  headerBanner: {
+    paddingTop: 18,
+    paddingHorizontal: 18,
+    paddingBottom: 0,
+  },
+  dashboardTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: -0.5,
+  },
+  dashboardSubtitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: 'rgba(255, 255, 255, 0.7)',
+    marginTop: 2,
+    marginBottom: 16,
+  },
+  childrenPillsRow: {
+    gap: 12,
+    paddingBottom: 14,
+  },
+  childPillItem: {
+    alignItems: 'center',
+    gap: 6,
+  },
+  childPillAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  childPillAvatarActive: {
+    borderColor: '#FFFFFF',
+    borderWidth: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  childPillEmoji: {
+    fontSize: 26,
+  },
+  childPillName: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: 'rgba(255, 255, 255, 0.7)',
+  },
+  childPillNameActive: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+  },
+  addChildPillBox: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addChildPillLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: 'rgba(255, 255, 255, 0.6)',
+  },
+  subNavBar: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.12)',
+    paddingTop: 4,
+  },
+  subNavBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+  },
+  subNavBtnActive: {
+    backgroundColor: '#F0F4F8',
+  },
+  subNavText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: 'rgba(255, 255, 255, 0.6)',
+  },
+  subNavTextActive: {
+    color: '#1E3A5F',
+    fontWeight: '900',
+  },
+  tabContentContainer: {
+    padding: 16,
+  },
+  subTabSection: {
     gap: 16,
   },
-  header: {
-    marginBottom: spacing.xs,
+  metricsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    justifyContent: 'space-between',
   },
-  title: {
-    fontSize: 24,
-    fontWeight: '900',
-    color: colors.text,
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 13,
-    color: colors.subtext,
-    lineHeight: 18,
-    fontWeight: '500',
-  },
-  sectionCard: {
-    backgroundColor: colors.cardBg,
-    borderRadius: radii.xl,
-    padding: spacing.lg,
+  metricCard: {
+    width: '48%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 16,
     borderWidth: 1.5,
     borderColor: colors.border,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 1,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  sectionHeading: {
+  metricEmoji: {
+    fontSize: 24,
+    marginBottom: 6,
+  },
+  metricValue: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: colors.text,
+  },
+  metricLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.subtext,
+    marginTop: 2,
+  },
+  cardBox: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  cardHeading: {
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: '900',
     color: colors.text,
     marginBottom: 2,
   },
-  sectionSub: {
+  cardSub: {
     fontSize: 12,
     color: colors.subtext,
-    marginBottom: spacing.md,
-    lineHeight: 16,
+    marginBottom: 14,
+    fontWeight: '600',
   },
-  childrenChips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: spacing.md,
+  topicRow: {
+    marginBottom: 12,
   },
-  childChip: {
+  topicHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    minHeight: 44,
-    justifyContent: 'center',
-    borderRadius: radii.pill,
-    backgroundColor: colors.cardBgMuted,
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  topicName: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  topicPct: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: colors.subtext,
+  },
+  progressTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#E5E7EB',
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  actionCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 16,
     borderWidth: 1.5,
     borderColor: colors.border,
-    gap: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  childChipActive: {
-    backgroundColor: '#FFF2EB',
-    borderColor: colors.coralStrong,
+  actionCardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
-  childChipIcon: {
+  actionIconBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#FFF4E0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionCardTitle: {
     fontSize: 14,
+    fontWeight: '800',
+    color: colors.text,
   },
-  childChipText: {
+  actionCardSub: {
+    fontSize: 11,
+    color: colors.subtext,
+    marginTop: 2,
+    fontWeight: '600',
+  },
+  actionArrow: {
+    fontSize: 18,
+    color: colors.coralStrong,
+    fontWeight: '900',
+  },
+  planHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  planPill: {
+    borderRadius: radii.full,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  planPillFree: {
+    backgroundColor: '#F3F4F6',
+  },
+  planPillPremium: {
+    backgroundColor: '#FEF08A',
+  },
+  planPillText: {
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  planPillTextFree: {
+    color: colors.subtext,
+  },
+  planPillTextPremium: {
+    color: '#854D0E',
+  },
+  allowanceList: {
+    gap: 10,
+    marginBottom: 16,
+  },
+  allowanceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  allowanceLabel: {
     fontSize: 13,
     fontWeight: '700',
     color: colors.text,
   },
-  childChipTextActive: {
-    color: colors.coralStrong,
+  allowanceVal: {
+    fontSize: 13,
     fontWeight: '800',
-  },
-  childChipCheck: {
-    fontSize: 12,
-    fontWeight: '900',
     color: colors.coralStrong,
+  },
+  upgradeBtn: {
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  upgradeBtnGradient: {
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  upgradeBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '900',
   },
   addChildRow: {
     flexDirection: 'row',
     gap: 8,
-    alignItems: 'center',
   },
   addChildInput: {
     flex: 1,
-    height: 44,
-    minHeight: 44,
+    backgroundColor: colors.background,
     borderWidth: 1.5,
     borderColor: colors.border,
-    borderRadius: radii.md,
-    paddingHorizontal: 12,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     fontSize: 14,
     color: colors.text,
-    backgroundColor: colors.background,
   },
   addChildBtn: {
-    backgroundColor: colors.parentNavy,
-    paddingHorizontal: 16,
-    height: 44,
-    minHeight: 44,
-    minWidth: 44,
-    borderRadius: radii.md,
+    backgroundColor: colors.coralStrong,
+    borderRadius: 14,
+    paddingHorizontal: 18,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -523,25 +924,25 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   addChildBtnText: {
-    color: colors.white,
-    fontWeight: '800',
-    fontSize: 13,
+    color: '#FFFFFF',
+    fontWeight: '900',
+    fontSize: 14,
   },
   errorText: {
-    color: colors.error,
+    color: colors.coralStrong,
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
     marginTop: 6,
   },
   memoryHeaderRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: 12,
+    marginBottom: 12,
   },
   switchCol: {
     alignItems: 'center',
-    marginTop: -2,
+    marginLeft: 12,
   },
   switchLabel: {
     fontSize: 10,
@@ -552,8 +953,9 @@ const styles = StyleSheet.create({
   preferredNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: 8,
-    marginBottom: spacing.sm,
+    marginBottom: 12,
   },
   preferredNameLabel: {
     fontSize: 12,
@@ -563,12 +965,12 @@ const styles = StyleSheet.create({
   nameBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF2EB',
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: radii.pill,
+    backgroundColor: '#FFEAEA',
     borderWidth: 1,
-    borderColor: '#FBD3C1',
+    borderColor: colors.coralStrong,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     gap: 6,
   },
   nameBadgeText: {
@@ -580,7 +982,7 @@ const styles = StyleSheet.create({
     padding: 2,
   },
   nameBadgeRemoveText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '900',
     color: colors.coralStrong,
   },
@@ -588,133 +990,65 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginTop: 4,
-    marginBottom: spacing.sm,
+    marginBottom: 14,
   },
   factChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EEF2F6',
-    borderRadius: radii.pill,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    backgroundColor: '#F0F9FF',
     borderWidth: 1,
-    borderColor: '#D8E2EC',
+    borderColor: '#BAE6FD',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     gap: 6,
   },
   factChipText: {
     fontSize: 12,
     fontWeight: '700',
-    color: colors.text,
+    color: '#0284C7',
   },
   factChipRemoveBtn: {
     padding: 2,
   },
   factChipRemoveText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '900',
-    color: colors.subtext,
+    color: '#0284C7',
   },
   noFactsText: {
-    fontSize: 13,
+    fontSize: 12,
     color: colors.subtext,
     fontStyle: 'italic',
     lineHeight: 18,
-    paddingVertical: 6,
   },
   forgetBtn: {
-    alignSelf: 'flex-start',
-    marginTop: spacing.xs,
+    backgroundColor: '#FFEAEA',
+    borderWidth: 1,
+    borderColor: colors.coralStrong,
+    borderRadius: 14,
     paddingVertical: 10,
-    paddingHorizontal: 14,
-    minHeight: 44,
-    justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: radii.sm,
+    justifyContent: 'center',
   },
   forgetBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.error,
-  },
-  actionCard: {
-    backgroundColor: colors.cardBg,
-    borderRadius: radii.xl,
-    padding: spacing.lg,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 1,
-  },
-  actionCardRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  actionIconBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.cardBgMuted,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  actionIconBadgePremium: {
-    backgroundColor: '#FFF8E1',
-  },
-  actionIcon: {
-    fontSize: 20,
-  },
-  actionCardTitle: {
-    fontSize: 15,
+    color: colors.coralStrong,
+    fontSize: 13,
     fontWeight: '800',
-    color: colors.text,
-  },
-  actionCardSub: {
-    fontSize: 12,
-    color: colors.subtext,
-    marginTop: 2,
-    lineHeight: 16,
-  },
-  actionArrow: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: colors.subtext,
-  },
-  planPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: radii.pill,
-  },
-  planPillFree: {
-    backgroundColor: '#E2E8F0',
-  },
-  planPillPremium: {
-    backgroundColor: colors.sun,
-  },
-  planPillText: {
-    fontSize: 10,
-    fontWeight: '900',
-  },
-  planPillTextFree: {
-    color: colors.subtext,
-  },
-  planPillTextPremium: {
-    color: colors.text,
   },
   signOutBtn: {
-    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#EF4444',
+    borderRadius: 16,
     paddingVertical: 14,
-    borderRadius: radii.pill,
-    backgroundColor: 'rgba(217, 74, 74, 0.08)',
-    marginTop: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
   },
   signOutText: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: colors.error,
+    color: '#EF4444',
+    fontSize: 15,
+    fontWeight: '900',
   },
 });
