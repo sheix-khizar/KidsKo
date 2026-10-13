@@ -34,6 +34,10 @@ export function isExtractableStatement(message: string): boolean {
   return isPersonalMessage(message);
 }
 
+// In-memory throttle map to cap background memory extraction to at most once per thread per 60 seconds
+export const threadExtractionTimestamps = new Map<string, number>();
+export const EXTRACTION_THROTTLE_MS = 60 * 1000;
+
 // Core chat processing pipeline — exported so production routes and integration tests use the exact same single source of truth
 export async function processChatTurnCore(
   supabase: SupabaseClient,
@@ -447,6 +451,13 @@ router.post('/', requireAuth, userRateLimit, async (req: Request, res: Response)
           } catch {}
         }
         if (shouldRun) {
+          const lastRun = threadExtractionTimestamps.get(activeThreadId) || 0;
+          const now = Date.now();
+          if (now - lastRun < EXTRACTION_THROTTLE_MS) {
+            return; // Throttle: avoid hammering Gemini if extraction ran recently in this thread
+          }
+          threadExtractionTimestamps.set(activeThreadId, now);
+
           await extractFactsAfterTurn(
             req.supabase!,
             studentId,
