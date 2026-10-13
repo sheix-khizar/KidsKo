@@ -45,9 +45,11 @@ async function runStudentMemoryTests() {
   assert(filterPreferredName('Jagal123') === null, 'Rejects name containing digits');
   assert(filterPreferredName('Jagal<script>') === null, 'Rejects name containing HTML/special symbols');
   assert(filterPreferredName('') === null, 'Rejects empty string');
+  assert(filterPreferredName('عائشہ') === 'عائشہ', 'Allows Urdu script name "عائشہ"');
 
   // Fact filters
   assert(filterFact('Likes: dinosaurs') === 'Likes: dinosaurs', 'Valid "Likes: dinosaurs"');
+  assert(filterFact('Likes: سائنس') === 'Likes: سائنس', 'Valid Urdu script fact "Likes: سائنس"');
   assert(filterFact('Likes: reading comic books & art') === 'Likes: reading comic books & art', 'Valid with allowed chars ,\'&-');
   assert(filterFact('Finds hard: fractions') === 'Finds hard: fractions', 'Valid "Finds hard: fractions"');
   assert(filterFact('Favourite subject: science') === 'Favourite subject: science', 'Valid "Favourite subject: science"');

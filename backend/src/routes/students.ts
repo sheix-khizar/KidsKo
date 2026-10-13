@@ -85,7 +85,13 @@ router.put('/:id/memory', requireAuth, async (req: Request, res: Response) => {
     if (req.body.preferredName === null || req.body.preferredName === '') {
       preferredName = null;
     } else {
-      preferredName = filterPreferredName(req.body.preferredName);
+      const filtered = filterPreferredName(req.body.preferredName);
+      if (!filtered) {
+        return res.status(400).json({
+          error: 'Invalid preferred name. Must be 1-20 letters only.',
+        });
+      }
+      preferredName = filtered;
     }
   }
 

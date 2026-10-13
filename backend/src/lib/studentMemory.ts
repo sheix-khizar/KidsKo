@@ -21,20 +21,19 @@ export function filterFact(fact: string): string | null {
   // Defense-in-depth: reject email, urls, or long digit strings
   if (/@|https?:\/\/|\d{5,}/i.test(trimmed)) return null;
 
-  // Server-side filter regex per v7.1 spec:
-  // ^(Likes|Finds hard|Favourite subject|Grade|Prefers): [A-Za-z0-9 ,'&-]{1,60}$
-  const factRegex = /^(Likes|Finds hard|Favourite subject|Grade|Prefers): [A-Za-z0-9 ,'&-]{1,60}$/;
+  // Server-side filter regex per v7.1 spec (with Urdu/Arabic script support):
+  const factRegex = /^(Likes|Finds hard|Favourite subject|Grade|Prefers): [A-Za-z0-9 ,'&\u0600-\u06FF-]{1,60}$/;
   if (!factRegex.test(trimmed)) return null;
   return trimmed;
 }
 
 /**
- * Filter and validate preferred name (letters only, at most 20 characters).
+ * Filter and validate preferred name (letters only, Latin and Urdu script, at most 20 characters).
  */
 export function filterPreferredName(name: string | null | undefined): string | null {
   if (!name || typeof name !== 'string') return null;
   const trimmed = name.trim();
-  if (/^[A-Za-z]{1,20}$/.test(trimmed)) {
+  if (/^[A-Za-z\u0600-\u06FF]{1,20}$/.test(trimmed)) {
     return trimmed;
   }
   return null;
