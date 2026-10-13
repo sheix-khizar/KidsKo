@@ -155,7 +155,17 @@ These rows represent new features introduced in Plan v7.1. They are expected to 
   2. Budget-Android 5-minute live-video stability test.
   3. Account deletion endpoint & in-app flow.
   4. Minimal Settings inside Parents Hub.
-  5. 10-prompt jailbreak safety tests and store submission assets.
+---
 
+## 9. V8 Phase 1 (Close v7) — Step 1.2 Audit Fixes Baseline
 
+Verified on branch `fix/v7-close-out` (commits `ecd5342`, `8a1c130`, `147eefd`, `db0227e`, `2104c87`).
 
+| # | Item | Where | Status | Notes & Verification |
+|---|---|---|:---:|---|
+| **1.2a** | Reject invalid preferred name with 400 instead of silent wipe | `backend/src/routes/students.ts`, `lib/studentMemory.ts` | ✅ **PASS** | Returns HTTP 400 error message if name fails validation. |
+| **1.2b** | Parents Hub displays error with Retry banner if memory fails to load | `mobile/src/components/ParentsHub.tsx` | ✅ **PASS** | Displays explicit retry banner instead of showing active empty memory. |
+| **1.2c** | Throttle memory extraction (60s/thread) & pre-filter transient phrases | `backend/src/routes/chat.ts`, `lib/studentMemory.ts` | ✅ **PASS** | `isExtractableStatement` filters transient "I'm stuck" phrases; 60s throttle map active. |
+| **1.2d** | Confirm `usage_events` check constraint name | `backend/src/scripts/testUsageEventConstraint.ts` | ✅ **PASS** | Confirmed PostgreSQL constraint name is `usage_events_event_type_check`. |
+| **1.2e** | Allow Urdu / Arabic script in student name and facts | `backend/src/lib/studentMemory.ts` | ✅ **PASS** | Regex includes Unicode range `[\u0600-\u06FF]`; verified with "عائشہ" and "سائنس". |
+| **1.2f** | Direct unit tests without re-implemented logic | `backend/src/scripts/` | ✅ **PASS** | `testCachePrivacy.ts` (41/41) and `testStudentMemory.ts` (37/37) calling exported helpers. |
