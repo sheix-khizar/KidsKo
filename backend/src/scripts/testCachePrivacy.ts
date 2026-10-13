@@ -73,7 +73,8 @@ async function runCachePrivacyTests() {
 
   // TEST 4: Step 9.6 / 4.6 Memory Interplay & Cache Bypass
   console.log('\n--- TEST GROUP 4: MEMORY INTERPLAY & CROSS-CHILD CACHE BYPASS ---');
-  const { buildMemoryBlock } = require('../lib/studentMemory');
+  const { buildMemoryBlock, hasCustomStudentMemory } = require('../lib/studentMemory');
+  const { isExtractableStatement } = require('../routes/chat');
 
   const memoryA = {
     studentId: 'student-a-id',
@@ -125,15 +126,30 @@ async function runCachePrivacyTests() {
     facts: [],
     enabled: true,
   };
-  const hasCustomMemoryEmpty = Boolean(
-    memoryEmpty.enabled && (
-      Boolean(memoryEmpty.preferredName?.trim()) ||
-      (Array.isArray(memoryEmpty.facts) && memoryEmpty.facts.length > 0)
-    )
-  );
-  assert(hasCustomMemoryEmpty === false, 'Child with no custom memory has hasCustomMemory === false');
+  const hasCustomMemoryEmpty = hasCustomStudentMemory(memoryEmpty);
+  assert(hasCustomMemoryEmpty === false, 'Child with no custom memory has hasCustomStudentMemory === false');
   const shouldReadCacheForEmpty = !isPersonalMessage('Why is the sky blue?') && !hasCustomMemoryEmpty;
   assert(shouldReadCacheForEmpty === true, 'Child without stored custom memory allows cache read for generic questions');
+
+  // TEST 5: Step 1.2c / 1.2f Memory Extraction Pre-filter (isExtractableStatement)
+  console.log('\n--- TEST GROUP 5: MEMORY EXTRACTION PRE-FILTER & THROTTLE GATES ---');
+  assert(isExtractableStatement('I am 8 years old') === true, 'Extractable: "I am 8 years old"');
+  assert(isExtractableStatement('my name is Jagal') === true, 'Extractable: "my name is Jagal"');
+  assert(isExtractableStatement('my favorite subject is math') === true, 'Extractable: "my favorite subject is math"');
+  assert(isExtractableStatement('remember that I like dinosaurs') === true, 'Extractable: "remember that I like dinosaurs"');
+
+  // Transient progress/task statements must NOT trigger extraction
+  assert(isExtractableStatement("I'm stuck on this problem") === false, 'Filtered out transient: "I\'m stuck on this problem"');
+  assert(isExtractableStatement('I am confused about fractions') === false, 'Filtered out transient: "I am confused about fractions"');
+  assert(isExtractableStatement("I'm done with homework") === false, 'Filtered out transient: "I\'m done with homework"');
+  assert(isExtractableStatement('I am finished') === false, 'Filtered out transient: "I am finished"');
+  assert(isExtractableStatement("I'm not sure") === false, 'Filtered out transient: "I\'m not sure"');
+  assert(isExtractableStatement("I'm tired") === false, 'Filtered out transient: "I\'m tired"');
+  assert(isExtractableStatement("I'm reading page 5") === false, 'Filtered out transient: "I\'m reading page 5"');
+
+  // Non-personal academic questions must NOT trigger extraction
+  assert(isExtractableStatement('What is 12 x 12?') === false, 'Filtered out academic: "What is 12 x 12?"');
+  assert(isExtractableStatement('Why is the sky blue?') === false, 'Filtered out academic: "Why is the sky blue?"');
 
   console.log('\n==========================================================');
   console.log(`📊 SUMMARY: ${passed}/${total} assertions passed.`);

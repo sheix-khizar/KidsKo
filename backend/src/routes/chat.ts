@@ -10,7 +10,7 @@ import { getThreadImage, setThreadImage, getThreadStoragePath, awaitPendingUploa
 import { downloadHomeworkImageFromStorage, deleteThreadImagesFromStorage } from '../lib/homeworkStorage';
 import { cleanMessageForClient } from '../lib/chatHistory';
 import { supabaseAdmin } from '../lib/supabase';
-import { getMemory, buildMemoryBlock, extractFactsAfterTurn } from '../lib/studentMemory';
+import { getMemory, buildMemoryBlock, extractFactsAfterTurn, hasCustomStudentMemory } from '../lib/studentMemory';
 
 const router = Router();
 
@@ -398,13 +398,7 @@ router.post('/', requireAuth, userRateLimit, async (req: Request, res: Response)
     const studentName = student?.student_name;
 
     const memory = await getMemory(req.supabase!, studentId);
-    // Custom memory exists if enabled AND has a stored preferredName or stored facts
-    const hasCustomMemory = Boolean(
-      memory?.enabled && (
-        (memory.preferredName && memory.preferredName.trim().length > 0) ||
-        (Array.isArray(memory.facts) && memory.facts.length > 0)
-      )
-    );
+    const hasCustomMemory = memory ? hasCustomStudentMemory(memory) : false;
     const memoryBlock = hasCustomMemory ? buildMemoryBlock(memory, studentName) : '';
     const hasActiveMemory = Boolean(memoryBlock && memoryBlock.trim().length > 0);
 

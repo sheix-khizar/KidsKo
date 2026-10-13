@@ -11,6 +11,19 @@ export interface StudentMemory {
 }
 
 /**
+ * Check if student has actual custom memories stored (preferred name or facts)
+ * that justify bypassing generic query caching.
+ */
+export function hasCustomStudentMemory(memory: StudentMemory): boolean {
+  return Boolean(
+    memory.enabled && (
+      Boolean(memory.preferredName?.trim()) ||
+      (Array.isArray(memory.facts) && memory.facts.length > 0)
+    )
+  );
+}
+
+/**
  * Filter and validate a single fact string against strict server-side rules.
  * Allowed prefixes: Likes, Finds hard, Favourite subject, Grade, Prefers.
  * Rejects @, http, 5+ consecutive digits, or anything not matching the exact regex.
