@@ -1,3 +1,5 @@
+> Status: archived, do not follow
+
 # Kidsko.ai — Master Plan (v3.0)
 **Updated for: RevenueCat billing (Pakistan/Stripe fix) + security audit findings + token optimization gaps**
 Supersedes Master Plan v2.0. Only the sections below changed — architecture shape, screen specs, and startup strategy carry over unchanged from v2.

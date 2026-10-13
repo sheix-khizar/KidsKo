@@ -1,3 +1,5 @@
+> Status: archived, do not follow
+
 # Kidsko.ai — Team Execution Plan
 **Ticket-level breakdown of the KPI roadmap, built so a team can pick it up and start working today.**
 

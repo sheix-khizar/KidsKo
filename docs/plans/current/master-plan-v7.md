@@ -1,3 +1,5 @@
+> Status: superseded by v8 (closed)
+
 # Kidsko.ai — Master Plan (v7.0, UI/UX Redesign)
 **A visual and navigation redesign of the working v6 app, using the v7 prototype as the design reference. Functionality, backend and business rules do not change.**
 
@@ -9,7 +11,7 @@ Supersedes nothing in v6. Every product rule in `kidsko-master-plan-v6.md` (tier
 
 ## 1. Summary
 
-The app works (v6 Phases A to F are done in the repo) but looks like an engineering build: hardcoded hex colors in eight separate `StyleSheet`s, a Home screen made of small buttons, and no shared design language. The v7 prototype (`docs/kidsko-v7.html.txt`, actually JSX) shows the intended look: warm cream background, coral/orange/mint palette, owl mascot, large rounded cards, and a three-tab bottom bar (Chat, Call, Parents).
+The app works (v6 Phases A to F are done in the repo) but looks like an engineering build: hardcoded hex colors in eight separate `StyleSheet`s, a Home screen made of small buttons, and no shared design language. The v7 prototype (`docs/design/v7-prototype.jsx`) shows the intended look: warm cream background, coral/orange/mint palette, owl mascot, large rounded cards, and a three-tab bottom bar (Chat, Call, Parents).
 
 The plan builds that in this order: **safety net → design system → low-risk screens first → navigation shell → Chat → Call → Paywall/Transcript/Parents → polish and QA → ship.** Screens that contain fragile logic (Call) come late, and only their visual layer is touched.
 
@@ -81,7 +83,7 @@ The plan builds that in this order: **safety net → design system → low-risk 
 - **DoD:** `git tag` lists `pre-v7`; branch exists.
 
 ### Step 0.2 — Record the regression baseline (on a real device)
-Walk the current app and write down pass/fail in `docs/v7-regression-checklist.md` (create it). This list is re-run after every phase.
+Walk the current app and write down pass/fail in `docs/checklists/v7-regression-checklist.md` (create it). This list is re-run after every phase.
 
 1. Register, log in, log out (via gate).
 2. Add a child. Open Chat, send a text message, get a reply.
@@ -103,9 +105,9 @@ Search `backend/src/routes` and `mobile/src/services` and answer in writing at t
 - **DoD:** three answers recorded. Consequences: (1) no → build v7.1 Phase 2 before Phase 4, and the drawer in Step 4.5. (2) minutes not exposed → Call card shows the plan limit text without a live count. (3) no → "Edit child" is omitted.
 
 ### Step 0.4 — Docs housekeeping
-- Rename `docs/kidsko-v7.html.txt` → `docs/kidsko-v7-prototype.jsx`.
-- Delete the duplicate extension-less `docs/kidsko-master-plan-v5`.
-- Create `docs/archive/` and move v2, v3, v4, v5, `Discussion.md`, `suggestions.md`, both team-execution plans and the original ChatGPT-layout files into it. Keep v6, v7 and the SRS at top level.
+- Rename `docs/design/v7-prototype.jsx`.
+- Delete the duplicate extension-less `docs/archive/plans/master-plan-v5.md`.
+- Create `docs/archive/plans/` and move v2, v3, v4, v5, `Discussion.md`, `suggestions.md`, both team-execution plans and the original ChatGPT-layout files into it. Keep v6, v7 and the SRS at top level.
 - **DoD:** `docs/` top level has only v6, v7, the SRS/roadmap, the prototype and the checklist.
 
 **Phase 0 Exit KPI:** ✅ The baseline checklist exists, every row has a recorded result, and `pre-v7` is tagged.
@@ -259,7 +261,7 @@ Build exactly as specified in `kidsko-master-plan-v7.1-memory-and-history.md`, P
 
 ## Phase 5 — Call Restyle (highest-risk file: visual layer only)
 
-**Entry gate:** Phase 4 complete **and** the 5-minute live-video device test from v6 done **before Step 5.1 starts**: a call of 5+ minutes on a budget Android phone, with video toggled on and off twice. Record the result in `docs/v7-regression-checklist.md`. Either it passes, or you consciously accept the risk in writing. This is the baseline Phase 5 is judged against (see the Exit KPI); Phase 7 only re-verifies it at the end. **Time:** 1.5 to 2 days.
+**Entry gate:** Phase 4 complete **and** the 5-minute live-video device test from v6 done **before Step 5.1 starts**: a call of 5+ minutes on a budget Android phone, with video toggled on and off twice. Record the result in `docs/checklists/v7-regression-checklist.md`. Either it passes, or you consciously accept the risk in writing. This is the baseline Phase 5 is judged against (see the Exit KPI); Phase 7 only re-verifies it at the end. **Time:** 1.5 to 2 days.
 
 > `LiveVoiceScreen.tsx` is where the week of regressions happened. Every step here is judged by its diff. If the diff touches anything other than `styles` and JSX style/text props, revert it.
 

@@ -1,3 +1,5 @@
+> Status: product plan, still valid
+
 # Kidsko.ai — Complete Technical Blueprint
 **Software Requirements Specification, Architecture, Tech Stack & KPI Development Roadmap**
 

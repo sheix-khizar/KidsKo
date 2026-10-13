@@ -52,7 +52,7 @@ None of these needs a redesign. Together they are about a day of fixes plus a de
 - **Paywall:** the simulated purchase only runs when `__DEV__` is true; a release build shows an error if a package fails to load.
 - **Type-checks:** `tsc --noEmit` passes with no errors on both `mobile` and `backend` (I ran it).
 - **No secrets** are committed (only `.env.example` files).
-- **Docs:** legacy plans moved to `docs/archive/`, the prototype renamed, and the style-guide route removed.
+- **Docs:** legacy plans moved to `docs/archive/plans/`, the prototype renamed, and the style-guide route removed.
 
 ---
 

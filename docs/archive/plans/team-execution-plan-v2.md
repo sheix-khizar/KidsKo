@@ -1,3 +1,5 @@
+> Status: archived, do not follow
+
 # Kidsko.ai — Team Execution Plan (v2.0)
 **Updated: RevenueCat billing swap + security/optimization tickets found during code audit**
 Supersedes Team Execution Plan v1.0. Ticket numbering unchanged where possible; new tickets inserted with letter suffixes (e.g., 0.5a) so existing boards aren't renumbered.

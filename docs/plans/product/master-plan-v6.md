@@ -1,3 +1,5 @@
+> Status: product plan, still valid
+
 # Kidsko.ai — Master Plan (v6.0)
 **The final tier structure, and how to implement it safely on top of the current stable voice baseline.**
 

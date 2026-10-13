@@ -1,3 +1,5 @@
+> Status: archived, do not follow
+
 # Kidsko.ai — Master Plan (v4.1)
 **Updated for: revised free/premium tiers, free parent transcript view, Redis response caching, real-time voice deferred to its own phase, family-pooled usage, recurring weekly voice allowance, and new Phase 4C (live voice + homework snapshot)**
 Supersedes v4.0. Architecture, SRS, and legal sections from v3 carry over unchanged unless noted below. This document reflects the actual state of the `dev` branch as of this writing (Phases 0–4 built, Phase 5 partial), plus real Askie pricing-page data (screenshot reviewed directly) used to sanity-check limits and margins.

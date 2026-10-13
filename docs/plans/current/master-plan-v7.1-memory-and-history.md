@@ -1,7 +1,9 @@
+> Status: superseded by v8 (closed)
+
 # Kidsko.ai — Plan v7.1: Chat History & Child Memory (Chat only)
 **ChatGPT-style chat history (grouped by date, tap to continue), memory that carries across chats, and two bug fixes found while testing on the Android emulator.**
 
-Companion to `kidsko-master-plan-v7.md` (UI/UX). Everything in `kidsko-master-plan-v6.md` still applies.
+Companion to `master-plan-v7.md` (UI/UX). Everything in `master-plan-v6.md` still applies.
 
 ---
 
@@ -251,7 +253,7 @@ Scripted: say your name and an interest, and a memory row appears. New chat: "do
 
 **Time:** 0.5 day.
 
-1. Add these rows to the v7 baseline checklist (`docs/v7-regression-checklist.md`): history list and grouping; continue an old chat after force-close; photo-expired note; delete behind the gate; name recall in a new chat; memory off; forget everything.
+1. Add these rows to the v7 baseline checklist (`docs/checklists/v7-regression-checklist.md`): history list and grouping; continue an old chat after force-close; photo-expired note; delete behind the gate; name recall in a new chat; memory off; forget everything.
 2. Re-run all existing backend test scripts and `verifyPhaseFEndToEnd.ts`. Weekly usage counts must be unchanged by viewing history.
 3. Inspect the cache after a test session: no personal text and no child names in cached entries.
 4. Confirm the billed Gemini key is used in any environment with real families (v6 launch blocker, now covers extraction too).

@@ -1,3 +1,5 @@
+> Status: current
+
 # Kidsko.ai — Master Plan v8: Clean and Polish
 
 **One plan, four jobs, in this order:**
@@ -36,7 +38,7 @@ Tag `pre-v8` on the clean `dev` head **after Phase 3**, before any visual work.
 
 ## 1. Why the app does not look like the prototype
 
-Found by comparing the code with the screenshots in `docs/v8/`.
+Found by comparing the code with the screenshots in `docs/baselines/v7/` and `docs/design/reference-screens/`.
 
 | # | Cause | Evidence | Visible effect |
 |---|---|---|---|
@@ -104,7 +106,7 @@ Each is a separate commit.
 
 ### Step 1.3 — Real-device evidence for v7 (needs the phones, about half a day)
 - On a budget Android phone: a **5-minute call with video toggled twice**, recorded; note any stutter.
-- Build an EAS release build; run `docs/v7-regression-checklist.md` on **one Android and one iPhone**, with screenshots or notes, not only "PASS".
+- Build an EAS release build; run `docs/checklists/v7-regression-checklist.md` on **one Android and one iPhone**, with screenshots or notes, not only "PASS".
 - Test a notched phone and a gesture-navigation phone for safe-area problems (feeds Step 5.5).
 - **DoD:** the checklist rows carry dates, devices and evidence. If the call stutters, **stop**: v8 does not start until the baseline is stable.
 

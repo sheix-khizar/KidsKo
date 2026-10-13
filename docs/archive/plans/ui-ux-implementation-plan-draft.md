@@ -1,3 +1,5 @@
+> Status: archived, do not follow
+
 Ground rules (apply to every step)
 Work on a new branch, ui/v8-polish, and tag dev as pre-v8 first, the same way you did with pre-v7.
 Visual-only changes. Don’t edit hooks, refs, effects, socket handlers or the camera frame loop. Don’t touch voiceSocket.ts, voiceSocketServer.ts or geminiLive.ts.
@@ -7,9 +9,9 @@ Animate only transform and opacity with useNativeDriver: true. Never animate wid
 Phase 0: Baseline (½ day)
 Step	Action	Done when
 0.1	Create ui/v8-polish, tag pre-v8	Tag exists on the remote
-0.2	Open kidsko-final.html at 390px width and screenshot each screen: splash, register, login, chat, call, parents hub, paywall	Prototype screenshots saved in docs/v8/proto/
-0.3	Run the app and screenshot the same screens	App screenshots saved in docs/v8/app/
-0.4	Write a difference log with screen, element, what’s wrong and priority (P1 visible at first glance, P2 noticeable, P3 minor)	docs/v8/diff-log.md exists, with at least the gradient, splash and animation items
+0.2	Open kidsko-final.html at 390px width and screenshot each screen: splash, register, login, chat, call, parents hub, paywall	Prototype screenshots saved in docs/design/reference-screens/
+0.3	Run the app and screenshot the same screens	App screenshots saved in docs/baselines/v7/
+0.4	Write a difference log with screen, element, what’s wrong and priority (P1 visible at first glance, P2 noticeable, P3 minor)	docs/baselines/v8/diff-log.md exists, with at least the gradient, splash and animation items
 Phase 1: Real gradients (½–1 day)
 Step	Action	Done when
 1.1	Confirm expo-linear-gradient is in mobile/package.json (it is, ~57.0.2). Run npx expo install --check	No version warnings
@@ -63,7 +65,7 @@ Step	Action	Done when
 6.4	Performance check on the budget Android phone: cold start, tab switching, scrolling a long chat, a 5-minute call with video toggled twice	No visible dropped frames; call behaves as in your v7 baseline
 6.5	Run npx tsc --noEmit on mobile, then your v7 regression checklist (auth, chat, homework photo, paywall, transcript, voice call, live video)	All rows still PASS
 6.6	Record a short screen video of the app next to the prototype	Attach it to the PR as evidence
-6.7	Merge ui/v8-polish into dev and update docs/v7-regression-checklist.md	Merged with a clean diff
+6.7	Merge ui/v8-polish into dev and update docs/checklists/v7-regression-checklist.md	Merged with a clean diff
 Timeline and risk summary
 Phase	Effort	Main risk	Mitigation
 0 Baseline	½ day	None	Screenshots give you an objective target

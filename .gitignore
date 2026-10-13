@@ -36,3 +36,8 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Docs artifacts and scratch files
+*.patch
+docs/**/temp*.png
+docs/**/*.xml

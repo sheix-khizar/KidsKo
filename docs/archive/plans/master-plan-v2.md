@@ -1,3 +1,5 @@
+> Status: archived, do not follow
+
 # Kidsko.ai — Master Plan (v2.0)
 **Updated for Gemini 3.1 Flash-Lite** — supersedes prior tech stack/SRS/roadmap/startup docs, which referenced the now-deprecated Gemini 2.5 Flash-Lite (shuts down Oct 16, 2026).
 

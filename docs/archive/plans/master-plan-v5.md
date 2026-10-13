@@ -1,3 +1,5 @@
+> Status: archived, do not follow
+
 # Kidsko.ai — Master Plan (v5.0)
 **Updated for: consolidating duplicate homework-image paths into one live-video flow, diagnosing the "UI hangs / no buttons work but backend timer keeps running" bug, and a new unified free/paid tier (10 min/week free trial, covering both voice and video, then paid).**
 

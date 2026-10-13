@@ -1,6 +1,8 @@
+> Status: superseded by v8 (closed)
+
 # Kidsko.ai — Combined Implementation Guide (v7 + v7.1)
 
-**One list, in build order.** This merges `kidsko-master-plan-v7.md` (UI/UX redesign) and `kidsko-master-plan-v7.1-memory-and-history.md` (chat history, memory, bug fixes) so you never have to read both at once.
+**One list, in build order.** This merges `master-plan-v7.md` (UI/UX redesign) and `master-plan-v7.1-memory-and-history.md` (chat history, memory, bug fixes) so you never have to read both at once.
 
 - Work **top to bottom**. Do not start a stage until the previous stage's **Check** passes.
 - Each stage names its source steps, like **[v7 1.2]** or **[v7.1 2.3]**. Open the source only when you need the exact SQL, wording or code template. Everything else you need to act is here.
@@ -81,7 +83,7 @@ Tag the starting commit `pre-v7`, then create `ui/v7`.
 - **Check:** `git tag` lists `pre-v7`; branch exists.
 
 ### 2.2 Regression baseline on a real device — [v7 0.2]
-Create `docs/v7-regression-checklist.md` and record pass/fail for today's build:
+Create `docs/checklists/v7-regression-checklist.md` and record pass/fail for today's build:
 1. Register, log in, log out (via gate).
 2. Add a child, open Chat, send a text message, get a reply.
 3. In Chat, attach a photo from gallery and from camera, get an explanation.
@@ -98,7 +100,7 @@ Add the v7.1 rows now too (they will fail today, and that is expected): history 
 Answer at the top of the checklist: (1) thread-list endpoint? **Already answered: no** (built in Stage 6). (2) Does anything expose remaining Voice & Video minutes and plan status to the app? If not, the Call card shows plan text without a live count. (3) Is there an endpoint to edit a child? If not, "Edit child" is omitted.
 
 ### 2.4 Docs housekeeping — [v7 0.4]
-Rename `docs/kidsko-v7.html.txt` to `docs/kidsko-v7-prototype.jsx`. Delete the extension-less duplicate `kidsko-master-plan-v5`. Create `docs/archive/` and move v2, v3, v4, v5, `Discussion.md`, `suggestions.md`, both team-execution plans and the ChatGPT-layout files into it. Keep v6, v7, v7.1, this guide, the SRS, the prototype and the checklist at top level.
+Rename `docs/design/v7-prototype.jsx`. Delete the extension-less duplicate `docs/archive/plans/master-plan-v5.md`. Create `docs/archive/plans/` and move v2, v3, v4, v5, `Discussion.md`, `suggestions.md`, both team-execution plans and the ChatGPT-layout files into it. Keep v6, v7, v7.1, this guide, the SRS, the prototype and the checklist at top level.
 
 **Stage 2 done when:** checklist committed, `pre-v7` tagged.
 
@@ -240,7 +242,7 @@ Build in this order (each small step can be its own commit; the ChatScreen part 
 **Branch:** `ui/v7`. **Source:** [v7 Phase 5]. `LiveVoiceScreen.tsx` rules from Section 0 apply to **every** step. v7.1 changes nothing here.
 
 ### 8.0 ENTRY GATE — do this before editing any code
-On a **budget Android phone**: one call of **5+ minutes** with video toggled on and off twice. Record the result in `docs/v7-regression-checklist.md`. Either it passes, or you accept the risk in writing. This is the baseline the stage is judged against.
+On a **budget Android phone**: one call of **5+ minutes** with video toggled on and off twice. Record the result in `docs/checklists/v7-regression-checklist.md`. Either it passes, or you accept the risk in writing. This is the baseline the stage is judged against.
 
 ### 8.1 Call layout — [v7 5.1]
 Dark-soft or cream background (pick one), large mascot, timer pill, big circular `coralStrong` End button, clear video on/off pill, plain-word status ("Listening…", "Kidsko is talking…") from **existing** state values, text only.
