@@ -50,6 +50,7 @@ export default function ParentsHub({
   const [memory, setMemory] = useState<StudentMemoryData | null>(null);
   const [loadingMemory, setLoadingMemory] = useState(false);
   const [updatingMemory, setUpdatingMemory] = useState(false);
+  const [memoryError, setMemoryError] = useState<string | null>(null);
 
   // Plan state
   const [isPremium, setIsPremium] = useState(false);
@@ -63,17 +64,14 @@ export default function ParentsHub({
 
   const fetchMemory = async (studentId: string) => {
     setLoadingMemory(true);
+    setMemoryError(null);
     try {
       const data = await getStudentMemory(studentId);
       setMemory(data);
     } catch (err: any) {
       console.warn('Failed to load memory:', err.message);
-      setMemory({
-        studentId,
-        preferredName: null,
-        facts: [],
-        enabled: true,
-      });
+      setMemory(null);
+      setMemoryError(err.message || 'Could not load learning preferences');
     } finally {
       setLoadingMemory(false);
     }
@@ -258,25 +256,39 @@ export default function ParentsHub({
                 Learning preferences Kidsko picked up from chats with {activeStudent.student_name}.
               </Text>
             </View>
-            <View style={styles.switchCol}>
-              <Switch
-                value={memory?.enabled ?? true}
-                onValueChange={handleToggleMemory}
-                trackColor={{ false: '#D1D5DB', true: colors.green }}
-                thumbColor={colors.white}
-                disabled={loadingMemory || updatingMemory}
-                accessibilityRole="switch"
-                accessibilityLabel="Enable learning memory"
-                accessibilityState={{ checked: !!memory?.enabled }}
-              />
-              <Text style={styles.switchLabel}>
-                {memory?.enabled ? 'Active' : 'Off'}
-              </Text>
-            </View>
+            {!memoryError && (
+              <View style={styles.switchCol}>
+                <Switch
+                  value={memory?.enabled ?? true}
+                  onValueChange={handleToggleMemory}
+                  trackColor={{ false: '#D1D5DB', true: colors.green }}
+                  thumbColor={colors.white}
+                  disabled={loadingMemory || updatingMemory}
+                  accessibilityRole="switch"
+                  accessibilityLabel="Enable learning memory"
+                  accessibilityState={{ checked: !!memory?.enabled }}
+                />
+                <Text style={styles.switchLabel}>
+                  {memory?.enabled ? 'Active' : 'Off'}
+                </Text>
+              </View>
+            )}
           </View>
 
           {loadingMemory ? (
             <ActivityIndicator style={{ paddingVertical: 16 }} color={colors.coralStrong} />
+          ) : memoryError ? (
+            <View style={styles.memoryErrorContainer}>
+              <Text style={styles.memoryErrorText}>⚠️ {memoryError}</Text>
+              <Pressable
+                style={styles.retryBtn}
+                onPress={() => fetchMemory(activeStudent.id)}
+                accessibilityRole="button"
+                accessibilityLabel="Retry loading memory"
+              >
+                <Text style={styles.retryBtnText}>Retry</Text>
+              </Pressable>
+            </View>
           ) : (
             <>
               {/* Preferred Name Tag */}
@@ -532,6 +544,34 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     marginTop: 6,
+  },
+  memoryErrorContainer: {
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    backgroundColor: '#FFF2F2',
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: '#FFD1D1',
+    marginTop: 10,
+    alignItems: 'center',
+    gap: 8,
+  },
+  memoryErrorText: {
+    color: colors.error,
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  retryBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    backgroundColor: colors.coralStrong,
+    borderRadius: radii.pill,
+  },
+  retryBtnText: {
+    color: colors.white,
+    fontSize: 12,
+    fontWeight: '800',
   },
   memoryHeaderRow: {
     flexDirection: 'row',
