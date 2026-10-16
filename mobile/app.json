@@ -54,7 +54,8 @@
           "speechRecognitionPermission": "Kidsko needs speech recognition to understand your child's questions."
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-splash-screen"
     ],
     "extra": {
       "eas": {
