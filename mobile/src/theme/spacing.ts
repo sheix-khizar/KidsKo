@@ -39,10 +39,10 @@ export const shadows = {
   },
   button: {
     shadowColor: '#FF6B6B',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 14,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.45,
+    shadowRadius: 28,
+    elevation: 8,
   },
   glow: (color = '#FF6B6B', radius = 14, height = 6): ViewStyle => createGlowShadow(color, radius, height),
   mascotSplash: {

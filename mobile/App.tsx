@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet, BackHandler } from 'react-native';
-import { Mascot } from './src/ui';
+import { View, Text, StyleSheet, BackHandler } from 'react-native';
+import * as SplashScreen from 'expo-splash-screen';
+import { Mascot, LinearGradient, Bounce, FloatStar, LoadBar } from './src/ui';
+import WelcomeScreen from './src/screens/WelcomeScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import MainShellScreen from './src/screens/MainShellScreen';
@@ -8,7 +10,7 @@ import PaywallScreen from './src/screens/PaywallScreen';
 import TranscriptScreen from './src/screens/TranscriptScreen';
 import LiveVoiceScreen from './src/screens/LiveVoiceScreen';
 import ParentalGate from './src/components/ParentalGate';
-import { fontFamilies } from './src/theme';
+import { colors, fontFamilies, gradients } from './src/theme';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import {
   useFonts,
@@ -21,8 +23,19 @@ import {
 import { getToken } from './src/services/api';
 import { loadSavedApiUrl } from './src/services/config';
 
+// Keep native splash screen visible while JS bundle boots
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
 type Student = { id: string; student_name: string };
-type Screen = 'checking' | 'register' | 'login' | 'main' | 'paywall' | 'transcript' | 'liveVoice';
+type Screen =
+  | 'checking'
+  | 'welcome'
+  | 'register'
+  | 'login'
+  | 'main'
+  | 'paywall'
+  | 'transcript'
+  | 'liveVoice';
 
 export default function App() {
   const [fontsLoaded] = useFonts({
@@ -38,16 +51,42 @@ export default function App() {
   // Bumped after a successful purchase so mounted screens re-check the plan.
   const [billingVersion, setBillingVersion] = useState(0);
 
+  // Hide native splash screen once fonts are loaded to reveal the animated loading view
   useEffect(() => {
+    if (fontsLoaded) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [fontsLoaded]);
+
+  // Auth check with minimum 1.2s display for the animated loading view
+  useEffect(() => {
+    let isMounted = true;
+    const startTime = Date.now();
+
     (async () => {
       await loadSavedApiUrl();
       const token = await getToken();
-      if (token) {
-        setScreen('main');
-      } else {
-        setScreen('login');
+
+      const elapsed = Date.now() - startTime;
+      const minDisplay = 1200; // minimum display time per Step 7.2
+      const remaining = Math.max(0, minDisplay - elapsed);
+
+      if (remaining > 0) {
+        await new Promise((resolve) => setTimeout(resolve, remaining));
+      }
+
+      if (isMounted) {
+        if (token) {
+          setScreen('main');
+        } else {
+          setScreen('welcome');
+        }
       }
     })();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Hardware back button on Android
@@ -57,7 +96,11 @@ export default function App() {
         setScreen('main');
         return true;
       }
-      return false; // On 'main', let shell handle tab or OS exit app
+      if (screen === 'login' || screen === 'register') {
+        setScreen('welcome');
+        return true;
+      }
+      return false; // On 'welcome' or 'main', let shell handle tab or OS exit app
     };
     const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => sub.remove();
@@ -70,23 +113,72 @@ export default function App() {
   const renderContent = () => {
     if (screen === 'checking' || !fontsLoaded) {
       return (
-        <View style={styles.brandedSplash}>
+        <View style={styles.splashContainer}>
+          <LinearGradient
+            colors={gradients.splash.colors}
+            start={gradients.splash.start}
+            end={gradients.splash.end}
+            style={StyleSheet.absoluteFill}
+          />
+
+          {/* Decorative soft corner circles (no blur per Section 5 spec) */}
+          <View style={styles.topRightCircle} pointerEvents="none" />
+          <View style={styles.bottomLeftCircle} pointerEvents="none" />
+
+          {/* Floating stars */}
+          <FloatStar delay={0} style={styles.starTopLeft}>
+            <Text style={styles.starEmoji}>✨</Text>
+          </FloatStar>
+          <FloatStar delay={400} style={styles.starTopRight}>
+            <Text style={styles.starEmoji}>🌟</Text>
+          </FloatStar>
+          <FloatStar delay={800} style={styles.starMidRight}>
+            <Text style={styles.starEmoji}>⭐</Text>
+          </FloatStar>
+
           <View style={styles.splashContent}>
-            <Mascot size="l" />
-            <Text style={styles.splashTitle}>Kidsko.ai</Text>
-            <Text style={styles.splashSubtitle}>Your Friendly AI Study Buddy 🦉</Text>
-            <ActivityIndicator size="small" color="#D94A4A" style={styles.splashSpinner} />
+            <Bounce>
+              <Mascot size="l" />
+            </Bounce>
+            <Text style={styles.splashTitle}>
+              Kidsko<Text style={styles.splashTitleAi}>.ai</Text>
+            </Text>
+            <Text style={styles.splashSubtitle}>
+              {'Your friendly AI teacher! 🎓\nAsk me anything, anytime!'}
+            </Text>
+            <View style={styles.loadBarWrapper}>
+              <LoadBar duration={1200} color={colors.coralStrong} />
+            </View>
           </View>
         </View>
       );
     }
 
+    if (screen === 'welcome') {
+      return (
+        <WelcomeScreen
+          onStartLearning={() => setScreen('register')}
+          onGoToLogin={() => setScreen('login')}
+        />
+      );
+    }
+
     if (screen === 'register') {
-      return <RegisterScreen onRegistered={() => setScreen('main')} onGoToLogin={() => setScreen('login')} />;
+      return (
+        <RegisterScreen
+          onRegistered={() => setScreen('main')}
+          onGoToLogin={() => setScreen('login')}
+        />
+      );
     }
 
     if (screen === 'login') {
-      return <LoginScreen onLoggedIn={() => setScreen('main')} onGoToRegister={() => setScreen('register')} />;
+      return (
+        <LoginScreen
+          onLoggedIn={() => setScreen('main')}
+          onGoToRegister={() => setScreen('register')}
+        />
+      );
     }
 
     // Authenticated screens: keep MainShellScreen mounted in background so calls/transcripts/paywall don't drop chat state
@@ -94,7 +186,7 @@ export default function App() {
       <View style={{ flex: 1 }}>
         <View style={[{ flex: 1 }, screen !== 'main' && { display: 'none' }]}>
           <MainShellScreen
-            onLogout={() => setScreen('login')}
+            onLogout={() => setScreen('welcome')}
             onOpenPaywall={() => setScreen('paywall')}
             onOpenTranscript={(student) => {
               setActiveStudent(student);
@@ -149,37 +241,89 @@ export default function App() {
   };
 
   return (
-    <SafeAreaProvider style={{ flex: 1, backgroundColor: '#FFF8F0' }}>
+    <SafeAreaProvider style={{ flex: 1, backgroundColor: colors.background }}>
       {renderContent()}
     </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  brandedSplash: {
+  splashContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFF8F0',
+    backgroundColor: colors.background,
+  },
+  topRightCircle: {
+    position: 'absolute',
+    top: -40,
+    right: -40,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: 'rgba(255, 107, 107, 0.12)',
+  },
+  bottomLeftCircle: {
+    position: 'absolute',
+    bottom: 120,
+    left: -40,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: 'rgba(78, 205, 196, 0.12)',
+  },
+  starTopLeft: {
+    position: 'absolute',
+    top: 96,
+    left: 28,
+    zIndex: 2,
+    opacity: 0.8,
+  },
+  starTopRight: {
+    position: 'absolute',
+    top: 86,
+    right: 44,
+    zIndex: 2,
+    opacity: 0.8,
+  },
+  starMidRight: {
+    position: 'absolute',
+    top: 144,
+    right: 24,
+    zIndex: 2,
+    opacity: 0.8,
+  },
+  starEmoji: {
+    fontSize: 26,
   },
   splashContent: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
+    paddingHorizontal: 32,
+    zIndex: 3,
   },
   splashTitle: {
-    fontSize: 32,
+    fontSize: 42,
     fontFamily: fontFamilies.black,
-    color: '#D94A4A',
-    marginTop: 8,
-    letterSpacing: -0.5,
+    color: colors.text,
+    marginTop: 20,
+    letterSpacing: -1,
+    lineHeight: 48,
+  },
+  splashTitleAi: {
+    color: colors.coral,
   },
   splashSubtitle: {
     fontSize: 15,
-    fontFamily: fontFamilies.semiBold,
-    color: '#636E72',
+    fontFamily: fontFamilies.bold,
+    color: colors.subtext,
+    textAlign: 'center',
+    lineHeight: 24,
+    marginTop: 10,
+    marginBottom: 28,
   },
-  splashSpinner: {
-    marginTop: 16,
+  loadBarWrapper: {
+    width: 160,
+    marginTop: 8,
   },
 });
