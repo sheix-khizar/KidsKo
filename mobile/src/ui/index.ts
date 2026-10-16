@@ -7,3 +7,4 @@ export * from './ScreenHeader';
 export * from './EmptyState';
 export * from './TabBar';
 export * from './LinearGradient';
+export * from './motion';
