@@ -17,7 +17,7 @@ import ParentsHub from '../components/ParentsHub';
 import { getStudents, createStudent, clearToken, getSavedUserId } from '../services/api';
 import { configureBilling, isPremiumActive } from '../services/billing';
 import { TabBar, TabKey } from '../ui/TabBar';
-import { Screen, Mascot, Button, Card, Pill } from '../ui';
+import { Screen, Mascot, Button, Card, Pill, FadeSlideIn } from '../ui';
 import { colors, radii, typography, spacing } from '../theme';
 
 export type Student = { id: string; student_name: string };
@@ -237,6 +237,7 @@ export default function MainShellScreen({
 
         {/* TAB 2: CALL */}
         {tab === 'call' && (
+          <FadeSlideIn key="call" duration={180} style={{ flex: 1 }}>
           <ScrollView contentContainerStyle={styles.callTabContent}>
             <View style={styles.callCardContainer}>
               <Card style={styles.callCard}>
@@ -278,10 +279,12 @@ export default function MainShellScreen({
               </Card>
             </View>
           </ScrollView>
+          </FadeSlideIn>
         )}
 
         {/* TAB 3: PARENTS */}
         {tab === 'parents' && (
+          <FadeSlideIn key="parents" duration={180} style={{ flex: 1 }}>
           <>
             {!parentsUnlocked ? (
               <View style={styles.gateWrapper}>
@@ -317,6 +320,7 @@ export default function MainShellScreen({
               </ScrollView>
             )}
           </>
+          </FadeSlideIn>
         )}
       </View>
 

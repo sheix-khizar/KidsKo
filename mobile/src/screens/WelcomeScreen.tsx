@@ -69,14 +69,14 @@ export default function WelcomeScreen({ onStartLearning, onGoToLogin }: Props) {
 
         {/* Action buttons */}
         <View style={styles.actionsSection}>
-          <PressScale style={styles.buttonScale}>
+          <PressScale style={styles.buttonScale} onPress={onStartLearning}>
             <Button
               title="🚀 Let's Start Learning!"
               onPress={onStartLearning}
               variant="primary"
             />
           </PressScale>
-          <PressScale style={[styles.buttonScale, { marginTop: 14 }]}>
+          <PressScale style={[styles.buttonScale, { marginTop: 14 }]} onPress={onGoToLogin}>
             <Button
               title="I already have an account"
               onPress={onGoToLogin}
