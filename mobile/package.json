@@ -6,7 +6,6 @@
     "@expo-google-fonts/nunito": "^0.4.2",
     "expo": "~57.0.4",
     "expo-audio": "^57.0.3",
-    "expo-camera": "~57.0.3",
     "expo-dev-client": "~57.0.9",
     "expo-file-system": "^57.0.2",
     "expo-font": "~57.0.4",

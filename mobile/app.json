@@ -9,6 +9,7 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
+        "NSCameraUsageDescription": "Kidsko needs camera access for live video calls and homework worksheet photos.",
         "NSSpeechRecognitionUsageDescription": "Kidsko needs speech recognition to understand your child's questions.",
         "NSMicrophoneUsageDescription": "Kidsko needs microphone access so your child can ask questions by voice.",
         "NSPhotoLibraryUsageDescription": "Kidsko needs photo library access so you can select homework images to upload."
@@ -35,12 +36,6 @@
     "plugins": [
       "./plugins/withCleartextTraffic",
       "expo-secure-store",
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "Kidsko needs camera access so your child can scan homework worksheets."
-        }
-      ],
       [
         "expo-image-picker",
         {
