@@ -1,3 +1,4 @@
+import { fontFamilies } from '../theme';
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -430,7 +431,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 24,
-    fontWeight: '900',
+    fontFamily: fontFamilies.black,
     color: colors.text,
     marginBottom: 4,
   },
@@ -438,7 +439,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.subtext,
     lineHeight: 18,
-    fontWeight: '500',
+    fontFamily: fontFamilies.semiBold,
   },
   sectionCard: {
     backgroundColor: colors.cardBg,
@@ -454,7 +455,7 @@ const styles = StyleSheet.create({
   },
   sectionHeading: {
     fontSize: 16,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
     color: colors.text,
     marginBottom: 2,
   },
@@ -492,16 +493,16 @@ const styles = StyleSheet.create({
   },
   childChipText: {
     fontSize: 13,
-    fontWeight: '700',
+    fontFamily: fontFamilies.bold,
     color: colors.text,
   },
   childChipTextActive: {
     color: colors.coralStrong,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
   },
   childChipCheck: {
     fontSize: 12,
-    fontWeight: '900',
+    fontFamily: fontFamilies.black,
     color: colors.coralStrong,
   },
   addChildRow: {
@@ -536,13 +537,13 @@ const styles = StyleSheet.create({
   },
   addChildBtnText: {
     color: colors.white,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
     fontSize: 13,
   },
   errorText: {
     color: colors.error,
     fontSize: 12,
-    fontWeight: '600',
+    fontFamily: fontFamilies.semiBold,
     marginTop: 6,
   },
   memoryErrorContainer: {
@@ -559,7 +560,7 @@ const styles = StyleSheet.create({
   memoryErrorText: {
     color: colors.error,
     fontSize: 12,
-    fontWeight: '600',
+    fontFamily: fontFamilies.semiBold,
     textAlign: 'center',
   },
   retryBtn: {
@@ -571,7 +572,7 @@ const styles = StyleSheet.create({
   retryBtnText: {
     color: colors.white,
     fontSize: 12,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
   },
   memoryHeaderRow: {
     flexDirection: 'row',
@@ -585,7 +586,7 @@ const styles = StyleSheet.create({
   },
   switchLabel: {
     fontSize: 10,
-    fontWeight: '700',
+    fontFamily: fontFamilies.bold,
     color: colors.subtext,
     marginTop: 2,
   },
@@ -597,7 +598,7 @@ const styles = StyleSheet.create({
   },
   preferredNameLabel: {
     fontSize: 12,
-    fontWeight: '700',
+    fontFamily: fontFamilies.bold,
     color: colors.subtext,
   },
   nameBadge: {
@@ -613,7 +614,7 @@ const styles = StyleSheet.create({
   },
   nameBadgeText: {
     fontSize: 12,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
     color: colors.coralStrong,
   },
   nameBadgeRemoveBtn: {
@@ -621,7 +622,7 @@ const styles = StyleSheet.create({
   },
   nameBadgeRemoveText: {
     fontSize: 11,
-    fontWeight: '900',
+    fontFamily: fontFamilies.black,
     color: colors.coralStrong,
   },
   factsContainer: {
@@ -644,7 +645,7 @@ const styles = StyleSheet.create({
   },
   factChipText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontFamily: fontFamilies.bold,
     color: colors.text,
   },
   factChipRemoveBtn: {
@@ -652,7 +653,7 @@ const styles = StyleSheet.create({
   },
   factChipRemoveText: {
     fontSize: 11,
-    fontWeight: '900',
+    fontFamily: fontFamilies.black,
     color: colors.subtext,
   },
   noFactsText: {
@@ -674,7 +675,7 @@ const styles = StyleSheet.create({
   },
   forgetBtnText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontFamily: fontFamilies.bold,
     color: colors.error,
   },
   actionCard: {
@@ -710,7 +711,7 @@ const styles = StyleSheet.create({
   },
   actionCardTitle: {
     fontSize: 15,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
     color: colors.text,
   },
   actionCardSub: {
@@ -721,7 +722,7 @@ const styles = StyleSheet.create({
   },
   actionArrow: {
     fontSize: 18,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
     color: colors.subtext,
   },
   planPill: {
@@ -737,7 +738,7 @@ const styles = StyleSheet.create({
   },
   planPillText: {
     fontSize: 10,
-    fontWeight: '900',
+    fontFamily: fontFamilies.black,
   },
   planPillTextFree: {
     color: colors.subtext,
@@ -754,7 +755,7 @@ const styles = StyleSheet.create({
   },
   signOutText: {
     fontSize: 14,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
     color: colors.error,
   },
 });

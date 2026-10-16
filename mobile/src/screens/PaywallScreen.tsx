@@ -1,3 +1,4 @@
+import { fontFamilies } from '../theme';
 import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, ActivityIndicator, Alert, ScrollView } from 'react-native';
 import { getCurrentOffering, getMonthlyPackage, getAnnualPackage, purchasePackage } from '../services/billing';
@@ -223,7 +224,7 @@ const styles = StyleSheet.create({
   },
   backBtnText: {
     fontSize: 14,
-    fontWeight: '700',
+    fontFamily: fontFamilies.bold,
     color: colors.text,
   },
   header: {
@@ -251,7 +252,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 24,
-    fontWeight: '900',
+    fontFamily: fontFamilies.black,
     textAlign: 'center',
     marginBottom: spacing.xs,
     color: colors.text,
@@ -303,7 +304,7 @@ const styles = StyleSheet.create({
   ribbonText: {
     color: colors.text,
     fontSize: 11,
-    fontWeight: '900',
+    fontFamily: fontFamilies.black,
     letterSpacing: 0.5,
   },
   planHeader: {
@@ -317,21 +318,21 @@ const styles = StyleSheet.create({
   },
   planTitle: {
     fontSize: 17,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
     color: colors.text,
   },
   planPriceDetail: {
     fontSize: 12,
     color: colors.subtext,
     marginTop: 3,
-    fontWeight: '500',
+    fontFamily: fontFamilies.semiBold,
   },
   planPriceCol: {
     alignItems: 'flex-end',
   },
   planPrice: {
     fontSize: 17,
-    fontWeight: '900',
+    fontFamily: fontFamilies.black,
     color: colors.text,
   },
   selectedPlanPrice: {
@@ -348,7 +349,7 @@ const styles = StyleSheet.create({
   },
   featuresHeading: {
     fontSize: 14,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
     color: colors.text,
     marginBottom: 4,
   },
@@ -359,14 +360,14 @@ const styles = StyleSheet.create({
   },
   checkIcon: {
     fontSize: 14,
-    fontWeight: '900',
+    fontFamily: fontFamilies.black,
     color: colors.green,
     marginTop: 1,
   },
   featureText: {
     fontSize: 13,
     color: colors.text,
-    fontWeight: '600',
+    fontFamily: fontFamilies.semiBold,
     flex: 1,
     lineHeight: 18,
   },
@@ -377,7 +378,7 @@ const styles = StyleSheet.create({
   trustLine: {
     fontSize: 13,
     color: colors.subtext,
-    fontWeight: '700',
+    fontFamily: fontFamilies.bold,
     textAlign: 'center',
   },
   button: {
@@ -398,7 +399,7 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: colors.white,
-    fontWeight: '900',
+    fontFamily: fontFamilies.black,
     fontSize: 16,
     letterSpacing: 0.2,
   },
@@ -411,7 +412,7 @@ const styles = StyleSheet.create({
   cancelText: {
     textAlign: 'center',
     color: colors.subtext,
-    fontWeight: '700',
+    fontFamily: fontFamilies.bold,
     fontSize: 13,
   },
 });

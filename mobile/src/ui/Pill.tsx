@@ -1,3 +1,4 @@
+import { fontFamilies } from '../theme';
 import React from 'react';
 import { View, Text, Pressable, StyleSheet, ViewStyle, TextStyle } from 'react-native';
 import { colors, radii, typography } from '../theme';
@@ -63,7 +64,7 @@ const styles = StyleSheet.create({
   },
   text: {
     ...typography.caption,
-    fontWeight: '700',
+    fontFamily: fontFamilies.bold,
   },
   pressed: {
     opacity: 0.8,

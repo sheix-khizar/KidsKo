@@ -8,7 +8,8 @@ import {
   TextStyle,
   View,
 } from 'react-native';
-import { colors, radii, shadows, typography } from '../theme';
+import { colors, radii, shadows, typography, gradients } from '../theme';
+import { LinearGradient } from './LinearGradient';
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
@@ -48,12 +49,20 @@ export function Button({
         isSecondary && styles.secondary,
         isDanger && styles.danger,
         isGhost && styles.ghost,
-        isPrimary && shadows.button,
+        isPrimary && !disabled && shadows.button,
         disabled && styles.disabled,
         pressed && styles.pressed,
         style,
       ]}
     >
+      {isPrimary && !disabled && (
+        <LinearGradient
+          colors={gradients.primary.colors}
+          start={gradients.primary.start}
+          end={gradients.primary.end}
+          style={[StyleSheet.absoluteFill, { borderRadius: radii.xl }]}
+        />
+      )}
       {loading ? (
         <ActivityIndicator
           size="small"
@@ -90,12 +99,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',
+    overflow: 'hidden',
   },
   contentRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+    zIndex: 1,
   },
   iconText: {
     fontSize: 18,

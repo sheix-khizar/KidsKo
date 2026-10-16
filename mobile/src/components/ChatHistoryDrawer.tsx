@@ -1,3 +1,4 @@
+import { fontFamilies } from '../theme';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -271,14 +272,14 @@ const styles = StyleSheet.create({
   drawerTitle: {
     ...typography.subheading,
     fontSize: 18,
-    fontWeight: '900',
+    fontFamily: fontFamilies.black,
     color: colors.coralStrong,
   },
   drawerSubtitle: {
     ...typography.caption,
     fontSize: 12,
     color: colors.subtext,
-    fontWeight: '700',
+    fontFamily: fontFamilies.bold,
     marginTop: 2,
     marginBottom: 12,
   },
@@ -293,7 +294,7 @@ const styles = StyleSheet.create({
   closeBtnText: {
     fontSize: 15,
     color: colors.subtext,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
   },
   newChatBtn: {
     backgroundColor: colors.coralStrong,
@@ -309,7 +310,7 @@ const styles = StyleSheet.create({
   newChatBtnText: {
     ...typography.label,
     color: colors.white,
-    fontWeight: '900',
+    fontFamily: fontFamilies.black,
     fontSize: 14,
   },
   listContent: {
@@ -324,7 +325,7 @@ const styles = StyleSheet.create({
   sectionHeaderText: {
     ...typography.caption,
     fontSize: 11,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
     color: colors.subtext,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -351,11 +352,11 @@ const styles = StyleSheet.create({
   threadRowTitle: {
     ...typography.body,
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: fontFamilies.semiBold,
     color: colors.text,
   },
   threadRowTitleActive: {
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
     color: colors.coralStrong,
   },
   threadRowTime: {
@@ -378,7 +379,7 @@ const styles = StyleSheet.create({
     ...typography.caption,
     fontSize: 13,
     color: colors.coralStrong,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
   },
   centerContainer: {
     flex: 1,
@@ -405,7 +406,7 @@ const styles = StyleSheet.create({
     ...typography.subheading,
     fontSize: 16,
     color: colors.text,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
   },
   emptySub: {
     ...typography.body,

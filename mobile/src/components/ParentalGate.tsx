@@ -1,3 +1,4 @@
+import { fontFamilies } from '../theme';
 import { useState, useMemo } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, Modal } from 'react-native';
 
@@ -73,8 +74,8 @@ const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
   card: { backgroundColor: '#fff', borderRadius: 20, padding: 24, width: '80%', alignItems: 'center' },
   emoji: { fontSize: 40, marginBottom: 8 },
-  title: { fontSize: 18, fontWeight: '800', color: '#111', marginBottom: 12 },
-  question: { fontSize: 16, fontWeight: '700', color: '#1a73e8', marginBottom: 12 },
+  title: { fontSize: 18, fontFamily: fontFamilies.extraBold, color: '#111', marginBottom: 12 },
+  question: { fontSize: 16, fontFamily: fontFamilies.bold, color: '#1a73e8', marginBottom: 12 },
   input: {
     width: '100%',
     borderWidth: 1.5,
@@ -97,7 +98,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  buttonText: { color: '#fff', fontWeight: '700' },
+  buttonText: { color: '#fff', fontFamily: fontFamilies.bold },
   cancelBtn: {
     marginTop: 8,
     minHeight: 44,
@@ -105,5 +106,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  cancel: { color: '#9ca3af', fontWeight: '600' },
+  cancel: { color: '#9ca3af', fontFamily: fontFamilies.semiBold },
 });

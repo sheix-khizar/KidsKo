@@ -1,3 +1,4 @@
+import { fontFamilies } from '../theme';
 import React, { useEffect, useState, useMemo } from 'react';
 import { View, Text, Pressable, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
 import { getTranscript } from '../services/api';
@@ -195,7 +196,7 @@ const styles = StyleSheet.create({
   },
   backText: {
     color: colors.coralStrong,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
     fontSize: 15,
   },
   headerTitleWrap: {
@@ -204,12 +205,12 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 17,
-    fontWeight: '900',
+    fontFamily: fontFamilies.black,
     color: colors.text,
   },
   subTitle: {
     fontSize: 11,
-    fontWeight: '600',
+    fontFamily: fontFamilies.semiBold,
     color: colors.subtext,
     marginTop: 1,
   },
@@ -221,7 +222,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: fontFamilies.semiBold,
     color: colors.subtext,
   },
   errorBox: {
@@ -235,7 +236,7 @@ const styles = StyleSheet.create({
   errorText: {
     color: colors.error,
     textAlign: 'center',
-    fontWeight: '700',
+    fontFamily: fontFamilies.bold,
     fontSize: 13,
   },
   listContent: {
@@ -256,7 +257,7 @@ const styles = StyleSheet.create({
   },
   dateHeaderText: {
     fontSize: 11,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
     color: colors.subtext,
     letterSpacing: 0.3,
   },
@@ -292,7 +293,7 @@ const styles = StyleSheet.create({
   },
   roleLabel: {
     fontSize: 11,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
   },
   userRoleLabel: {
     color: colors.coralStrong,
@@ -302,13 +303,13 @@ const styles = StyleSheet.create({
   },
   timeText: {
     fontSize: 10,
-    fontWeight: '600',
+    fontFamily: fontFamilies.semiBold,
     color: colors.subtext,
   },
   messageText: {
     fontSize: 14,
     lineHeight: 20,
-    fontWeight: '500',
+    fontFamily: fontFamilies.semiBold,
   },
   userMessageText: {
     color: colors.text,
@@ -338,7 +339,7 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: 18,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
     color: colors.text,
     marginBottom: spacing.xs,
   },

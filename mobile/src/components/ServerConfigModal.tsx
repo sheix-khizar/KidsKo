@@ -1,3 +1,4 @@
+import { fontFamilies } from '../theme';
 import React, { useState } from 'react';
 import {
   Modal,
@@ -195,7 +196,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 20,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
     color: '#1a73e8',
     marginBottom: 6,
     textAlign: 'center',
@@ -209,7 +210,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 13,
-    fontWeight: '700',
+    fontFamily: fontFamilies.bold,
     color: '#374151',
     marginBottom: 6,
   },
@@ -236,7 +237,7 @@ const styles = StyleSheet.create({
   },
   resultText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontFamily: fontFamilies.semiBold,
   },
   resultSuccessText: {
     color: '#15803d',
@@ -257,7 +258,7 @@ const styles = StyleSheet.create({
   btnPrimaryText: {
     color: '#fff',
     fontSize: 15,
-    fontWeight: '700',
+    fontFamily: fontFamilies.bold,
   },
   row: {
     flexDirection: 'row',
@@ -274,7 +275,7 @@ const styles = StyleSheet.create({
   btnSecondaryText: {
     color: '#374151',
     fontSize: 13,
-    fontWeight: '600',
+    fontFamily: fontFamilies.semiBold,
   },
   cancelBtn: {
     paddingVertical: 10,
@@ -283,6 +284,6 @@ const styles = StyleSheet.create({
   cancelBtnText: {
     color: '#6b7280',
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: fontFamilies.semiBold,
   },
 });

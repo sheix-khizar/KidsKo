@@ -1,3 +1,4 @@
+import { fontFamilies } from '../theme';
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -396,7 +397,7 @@ const styles = StyleSheet.create({
   },
   brandText: {
     ...typography.subheading,
-    fontWeight: '900',
+    fontFamily: fontFamilies.black,
     color: colors.coralStrong,
     letterSpacing: -0.5,
   },
@@ -472,7 +473,7 @@ const styles = StyleSheet.create({
   firstRunErrorText: {
     ...typography.caption,
     color: colors.coralStrong,
-    fontWeight: '700',
+    fontFamily: fontFamilies.bold,
   },
   callTabContent: {
     flexGrow: 1,
@@ -560,7 +561,7 @@ const styles = StyleSheet.create({
   actionCardArrow: {
     fontSize: 18,
     color: colors.subtext,
-    fontWeight: '700',
+    fontFamily: fontFamilies.bold,
   },
   modalOverlay: {
     flex: 1,
@@ -608,11 +609,11 @@ const styles = StyleSheet.create({
   },
   switcherItemNameActive: {
     color: colors.coralStrong,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
   },
   checkmark: {
     fontSize: 16,
     color: colors.coralStrong,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
   },
 });

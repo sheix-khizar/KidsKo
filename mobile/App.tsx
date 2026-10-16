@@ -8,6 +8,8 @@ import PaywallScreen from './src/screens/PaywallScreen';
 import TranscriptScreen from './src/screens/TranscriptScreen';
 import LiveVoiceScreen from './src/screens/LiveVoiceScreen';
 import ParentalGate from './src/components/ParentalGate';
+import { fontFamilies } from './src/theme';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import {
   useFonts,
   Nunito_400Regular,
@@ -147,9 +149,9 @@ export default function App() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#FFF8F0' }}>
+    <SafeAreaProvider style={{ flex: 1, backgroundColor: '#FFF8F0' }}>
       {renderContent()}
-    </View>
+    </SafeAreaProvider>
   );
 }
 
@@ -167,14 +169,14 @@ const styles = StyleSheet.create({
   },
   splashTitle: {
     fontSize: 32,
-    fontWeight: '900',
+    fontFamily: fontFamilies.black,
     color: '#D94A4A',
     marginTop: 8,
     letterSpacing: -0.5,
   },
   splashSubtitle: {
     fontSize: 15,
-    fontWeight: '600',
+    fontFamily: fontFamilies.semiBold,
     color: '#636E72',
   },
   splashSpinner: {

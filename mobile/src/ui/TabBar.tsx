@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
-import { colors, typography } from '../theme';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { colors, typography, fontFamilies } from '../theme';
 
 export type TabKey = 'chat' | 'call' | 'parents';
 
@@ -16,8 +17,11 @@ const TABS: { key: TabKey; label: string; icon: string }[] = [
 ];
 
 export function TabBar({ activeTab, onSelectTab }: TabBarProps) {
+  const insets = useSafeAreaInsets();
+  const bottomPadding = Math.max(insets.bottom, 8);
+
   return (
-    <View style={[styles.container, { paddingBottom: Platform.OS === 'ios' ? 24 : 8 }]}>
+    <View style={[styles.container, { paddingBottom: bottomPadding, height: 68 + bottomPadding }]}>
       {TABS.map((tab) => {
         const isActive = activeTab === tab.key;
         return (
@@ -43,6 +47,7 @@ export function TabBar({ activeTab, onSelectTab }: TabBarProps) {
             >
               {tab.label}
             </Text>
+            {isActive && <View style={styles.activeDot} />}
           </Pressable>
         );
       })}
@@ -52,36 +57,35 @@ export function TabBar({ activeTab, onSelectTab }: TabBarProps) {
 
 const styles = StyleSheet.create({
   container: {
-    height: 80,
     flexDirection: 'row',
     backgroundColor: colors.white,
     borderTopWidth: 2,
     borderTopColor: colors.border,
     alignItems: 'center',
     justifyContent: 'space-around',
-    paddingTop: 8,
+    paddingTop: 6,
   },
   tabItem: {
     flex: 1,
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: 3,
   },
   iconWrapper: {
     paddingHorizontal: 16,
-    paddingVertical: 4,
+    paddingVertical: 3,
     borderRadius: 16,
   },
   activeIconWrapper: {
-    backgroundColor: '#FFEAEA',
+    backgroundColor: 'rgba(255, 107, 107, 0.12)',
   },
   iconText: {
     fontSize: 20,
   },
   tabLabel: {
     ...typography.caption,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
     fontSize: 12,
   },
   activeTabLabel: {
@@ -90,7 +94,15 @@ const styles = StyleSheet.create({
   inactiveTabLabel: {
     color: colors.subtext,
   },
+  activeDot: {
+    width: 20,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: colors.coralStrong,
+    marginTop: 1,
+  },
   pressed: {
-    opacity: 0.8,
+    opacity: 0.82,
+    transform: [{ scale: 0.98 }],
   },
 });

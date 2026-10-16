@@ -60,3 +60,23 @@ export const typography: Record<string, TextStyle> = {
     lineHeight: 16,
   },
 };
+
+export type NunitoWeight = '400' | '600' | '700' | '800' | '900' | 'normal' | 'bold';
+
+export function nunito(weight: NunitoWeight = '600'): { fontFamily: string } {
+  switch (weight) {
+    case '900':
+      return { fontFamily: fontFamilies.black };
+    case '800':
+      return { fontFamily: fontFamilies.extraBold };
+    case '700':
+    case 'bold':
+      return { fontFamily: fontFamilies.bold };
+    case '600':
+      return { fontFamily: fontFamilies.semiBold };
+    case '400':
+    case 'normal':
+    default:
+      return { fontFamily: fontFamilies.regular };
+  }
+}

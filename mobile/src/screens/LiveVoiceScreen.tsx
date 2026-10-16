@@ -1,3 +1,4 @@
+import { fontFamilies } from '../theme';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, ActivityIndicator, AppState, AppStateStatus } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission, usePhotoOutput } from 'react-native-vision-camera';
@@ -341,7 +342,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 20,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
     color: '#FFFFFF',
     marginBottom: 8,
     textAlign: 'center',
@@ -358,12 +359,12 @@ const styles = StyleSheet.create({
   timerText: {
     fontSize: 13,
     color: '#FFE66D',
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
   },
   errorSub: {
     fontSize: 14,
     color: '#FF8A80',
-    fontWeight: '600',
+    fontFamily: fontFamilies.semiBold,
     marginBottom: 16,
     textAlign: 'center',
   },
@@ -390,7 +391,7 @@ const styles = StyleSheet.create({
   },
   endButtonText: {
     color: '#FFFFFF',
-    fontWeight: '900',
+    fontFamily: fontFamilies.black,
     fontSize: 14,
   },
   actionRow: {
@@ -418,7 +419,7 @@ const styles = StyleSheet.create({
   },
   videoToggleButtonText: {
     color: '#FFFFFF',
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
     fontSize: 14,
   },
 
@@ -466,7 +467,7 @@ const styles = StyleSheet.create({
   liveVideoBadgeText: {
     color: '#00E676',
     fontSize: 10,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
     letterSpacing: 0.5,
   },
   cameraOverlayToggle: {
@@ -481,7 +482,7 @@ const styles = StyleSheet.create({
   cameraOverlayToggleText: {
     color: '#FF8A80',
     fontSize: 11,
-    fontWeight: '700',
+    fontFamily: fontFamilies.bold,
   },
   avatarCircle: {
     width: 110,
@@ -508,7 +509,7 @@ const styles = StyleSheet.create({
     borderColor: '#FF9F43',
   },
   avatarEmoji: { fontSize: 50 },
-  thinkingText: { color: '#FFE66D', fontWeight: '800', fontSize: 13, marginTop: 6 },
+  thinkingText: { color: '#FFE66D', fontFamily: fontFamilies.extraBold, fontSize: 13, marginTop: 6 },
 
   listeningBadge: {
     position: 'absolute',
@@ -518,7 +519,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
   },
-  listeningBadgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
+  listeningBadgeText: { color: '#FFFFFF', fontSize: 11, fontFamily: fontFamilies.extraBold },
 
   speakingBadge: {
     position: 'absolute',
@@ -528,7 +529,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
   },
-  speakingBadgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
+  speakingBadgeText: { color: '#FFFFFF', fontSize: 11, fontFamily: fontFamilies.extraBold },
 
   transcriptBox: {
     backgroundColor: 'rgba(0,0,0,0.3)',
@@ -540,9 +541,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
   },
-  transcriptLabel: { color: '#FFE66D', fontSize: 11, fontWeight: '700', marginBottom: 2 },
-  transcriptText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600', fontStyle: 'italic', textAlign: 'center' },
-  promptHint: { color: 'rgba(255,255,255,0.65)', fontSize: 12, fontWeight: '600', textAlign: 'center' },
+  transcriptLabel: { color: '#FFE66D', fontSize: 11, fontFamily: fontFamilies.bold, marginBottom: 2 },
+  transcriptText: { color: '#FFFFFF', fontSize: 13, fontFamily: fontFamilies.semiBold, fontStyle: 'italic', textAlign: 'center' },
+  promptHint: { color: 'rgba(255,255,255,0.65)', fontSize: 12, fontFamily: fontFamilies.semiBold, textAlign: 'center' },
 
   noticeBanner: {
     backgroundColor: '#35211B',
@@ -556,6 +557,6 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 340,
   },
-  noticeBannerText: { color: '#FFE082', fontSize: 13, fontWeight: '800', textAlign: 'center' },
-  noticeDismissText: { color: 'rgba(255,224,130,0.7)', fontSize: 11, fontWeight: '600', marginTop: 3 },
+  noticeBannerText: { color: '#FFE082', fontSize: 13, fontFamily: fontFamilies.extraBold, textAlign: 'center' },
+  noticeDismissText: { color: 'rgba(255,224,130,0.7)', fontSize: 11, fontFamily: fontFamilies.semiBold, marginTop: 3 },
 });

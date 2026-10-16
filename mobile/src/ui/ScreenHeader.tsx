@@ -1,3 +1,4 @@
+import { fontFamilies } from '../theme';
 import React from 'react';
 import { View, Text, Pressable, StyleSheet, ViewStyle } from 'react-native';
 import { colors, typography } from '../theme';
@@ -61,7 +62,7 @@ const styles = StyleSheet.create({
   backText: {
     fontSize: 22,
     color: colors.text,
-    fontWeight: '700',
+    fontFamily: fontFamilies.bold,
   },
   title: {
     ...typography.subheading,

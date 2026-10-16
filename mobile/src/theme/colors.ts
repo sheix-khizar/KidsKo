@@ -24,6 +24,7 @@ export const colors = {
 
   // Status & Role
   parentNavy: '#1E3A5F',
+  parentBlue: '#2980B9',
   error: '#D94A4A',
   success: '#00B894',
   white: '#FFFFFF',

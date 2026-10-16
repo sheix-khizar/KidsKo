@@ -1,3 +1,4 @@
+import { fontFamilies } from '../theme';
 import { useState, useRef, useEffect } from 'react';
 import {
   View,
@@ -517,7 +518,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingRight: 4,
   },
-  backButton: { color: colors.coralStrong, fontWeight: '700', fontSize: 14 },
+  backButton: { color: colors.coralStrong, fontFamily: fontFamilies.bold, fontSize: 14 },
   hamburgerButton: {
     width: 38,
     height: 38,
@@ -531,14 +532,14 @@ const styles = StyleSheet.create({
   hamburgerIcon: {
     fontSize: 20,
     color: colors.text,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
     marginTop: -2,
   },
   headerTitleContainer: {
     flex: 1,
   },
-  headerTitle: { ...typography.subheading, fontSize: 18, fontWeight: '900', color: colors.coralStrong },
-  headerSubtitle: { ...typography.caption, fontSize: 13, color: colors.subtext, fontWeight: '700', marginTop: 1 },
+  headerTitle: { ...typography.subheading, fontSize: 18, fontFamily: fontFamilies.black, color: colors.coralStrong },
+  headerSubtitle: { ...typography.caption, fontSize: 13, color: colors.subtext, fontFamily: fontFamilies.bold, marginTop: 1 },
   usagePill: {
     alignSelf: 'flex-start',
     marginTop: 8,
@@ -557,7 +558,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF08A',
     borderColor: '#FDE047',
   },
-  usagePillText: { ...typography.caption, fontSize: 11, fontWeight: '800', color: colors.text },
+  usagePillText: { ...typography.caption, fontSize: 11, fontFamily: fontFamilies.extraBold, color: colors.text },
   welcomeContainer: {
     flexGrow: 1,
     justifyContent: 'center',
@@ -591,7 +592,7 @@ const styles = StyleSheet.create({
   continueCardTag: {
     ...typography.caption,
     fontSize: 11,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
     color: colors.coralStrong,
     textTransform: 'uppercase',
   },
@@ -603,7 +604,7 @@ const styles = StyleSheet.create({
   continueCardArrow: {
     fontSize: 18,
     color: colors.coralStrong,
-    fontWeight: '900',
+    fontFamily: fontFamilies.black,
   },
   welcomeTitle: {
     ...typography.heading,
@@ -641,7 +642,7 @@ const styles = StyleSheet.create({
   chipText: {
     ...typography.body,
     fontSize: 14,
-    fontWeight: '700',
+    fontFamily: fontFamilies.bold,
     color: colors.text,
   },
   messagesList: { flex: 1, backgroundColor: colors.background },
@@ -679,8 +680,8 @@ const styles = StyleSheet.create({
   bubbleText: { ...typography.body, fontSize: 15, color: colors.text, lineHeight: 22 },
   bubbleTextUser: { color: colors.white },
   typingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingBottom: 8 },
-  typingText: { ...typography.caption, fontSize: 13, color: colors.subtext, fontWeight: '600' },
-  error: { color: colors.error, textAlign: 'center', paddingHorizontal: 16, paddingBottom: 6, fontSize: 12, fontWeight: '700' },
+  typingText: { ...typography.caption, fontSize: 13, color: colors.subtext, fontFamily: fontFamilies.semiBold },
+  error: { color: colors.error, textAlign: 'center', paddingHorizontal: 16, paddingBottom: 6, fontSize: 12, fontFamily: fontFamilies.bold },
   inputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -745,7 +746,7 @@ const styles = StyleSheet.create({
   sendButtonInactive: {
     backgroundColor: '#E2E8F0',
   },
-  sendButtonText: { color: colors.white, fontSize: 18, fontWeight: '900' },
+  sendButtonText: { color: colors.white, fontSize: 18, fontFamily: fontFamilies.black },
   attachmentBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -770,7 +771,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  removeAttachmentText: { color: colors.subtext, fontSize: 16, fontWeight: '800' },
+  removeAttachmentText: { color: colors.subtext, fontSize: 16, fontFamily: fontFamilies.extraBold },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalContent: {
     backgroundColor: colors.cardBg,
@@ -789,13 +790,13 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
   },
-  optionButtonText: { color: colors.white, fontWeight: '800', fontSize: 15 },
+  optionButtonText: { color: colors.white, fontFamily: fontFamilies.extraBold, fontSize: 15 },
   optionButtonSecondary: {
     backgroundColor: colors.cardBg,
     borderWidth: 1.5,
     borderColor: colors.border,
   },
-  optionButtonTextSecondary: { color: colors.text, fontWeight: '800', fontSize: 15 },
+  optionButtonTextSecondary: { color: colors.text, fontFamily: fontFamilies.extraBold, fontSize: 15 },
   cancelModalButton: {
     marginTop: 8,
     minHeight: 44,
@@ -804,5 +805,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  cancelModalText: { color: colors.subtext, fontWeight: '700', fontSize: 15 },
+  cancelModalText: { color: colors.subtext, fontFamily: fontFamilies.bold, fontSize: 15 },
 });

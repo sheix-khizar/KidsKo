@@ -1,3 +1,4 @@
+import { fontFamilies } from '../theme';
 import { useState, useEffect } from 'react';
 import {
   View,
@@ -262,7 +263,7 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.coralStrong,
     textAlign: 'center',
-    fontWeight: '700',
+    fontFamily: fontFamilies.bold,
   },
   connectionFixCard: {
     backgroundColor: '#FFF4E5',
@@ -273,7 +274,7 @@ const styles = StyleSheet.create({
   },
   connectionFixTitle: {
     color: colors.text,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
     fontSize: 13,
     marginBottom: 4,
     textAlign: 'center',
@@ -300,7 +301,7 @@ const styles = StyleSheet.create({
   },
   switchLinkBold: {
     color: colors.coralStrong,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
   },
   footerContainer: {
     marginTop: spacing.xl,
