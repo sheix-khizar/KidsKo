@@ -164,7 +164,8 @@ export default function MainShellScreen({
 
   return (
     <Screen safeBottom={false}>
-      {/* Shell Header: Child Switcher Chip */}
+      {/* Shell Header: Child Switcher Chip (non-chat tabs) */}
+      {tab !== 'chat' && (
       <View style={[styles.shellHeader, { paddingTop: spacing.sm }]}>
         <View style={styles.brandRow}>
           <Text style={styles.brandText}>Kidsko.ai 🦉</Text>
@@ -185,6 +186,7 @@ export default function MainShellScreen({
           </Pressable>
         )}
       </View>
+      )}
 
       {/* Main Tab Body */}
       <View style={styles.bodyContainer}>
@@ -228,6 +230,7 @@ export default function MainShellScreen({
               embedded={true}
               onBack={() => {}}
               onLimitReached={onLimitReached}
+              onSwitchStudent={() => setShowSwitcherModal(true)}
             />
           ) : null}
         </View>
