@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from './safeArea';
 import { colors, typography, fontFamilies } from '../theme';
 
 export type TabKey = 'chat' | 'call' | 'parents';

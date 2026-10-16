@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, BackHandler } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
-import { Mascot, LinearGradient, Bounce, FloatStar, LoadBar } from './src/ui';
+import { Mascot, LinearGradient, Bounce, FloatStar, LoadBar, SafeAreaProvider } from './src/ui';
 import WelcomeScreen from './src/screens/WelcomeScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import LoginScreen from './src/screens/LoginScreen';
@@ -11,7 +11,6 @@ import TranscriptScreen from './src/screens/TranscriptScreen';
 import LiveVoiceScreen from './src/screens/LiveVoiceScreen';
 import ParentalGate from './src/components/ParentalGate';
 import { colors, fontFamilies, gradients } from './src/theme';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
 import {
   useFonts,
   Nunito_400Regular,

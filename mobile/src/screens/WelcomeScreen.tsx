@@ -1,8 +1,15 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Mascot, Button, LinearGradient, Bounce, FloatStar, PressScale } from '../ui';
+import {
+  Mascot,
+  Button,
+  LinearGradient,
+  Bounce,
+  FloatStar,
+  PressScale,
+  useSafeAreaInsets,
+} from '../ui';
 import { colors, fontFamilies, gradients } from '../theme';
 
 type Props = {

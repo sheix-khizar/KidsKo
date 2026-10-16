@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, ViewStyle, StatusBar } from 'react-native';
-import { SafeAreaView, Edge } from 'react-native-safe-area-context';
+import { SafeAreaView, Edge } from './safeArea';
 import { colors } from '../theme';
 
 type ScreenProps = {
