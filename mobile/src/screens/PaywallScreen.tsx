@@ -381,7 +381,7 @@ const styles = StyleSheet.create({
   },
   selectedPlanCard: {
     borderColor: colors.coralStrong,
-    backgroundColor: '#FFF9F5',
+    backgroundColor: colors.cardBgMuted,
   },
   ribbon: {
     position: 'absolute',

@@ -744,12 +744,12 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   usagePillLow: {
-    backgroundColor: '#FFF0F0',
+    backgroundColor: colors.errorBg,
     borderColor: colors.coralStrong,
   },
   usagePillPremium: {
-    backgroundColor: '#FEF08A',
-    borderColor: '#FDE047',
+    backgroundColor: colors.sun,
+    borderColor: colors.orange,
   },
   usagePillText: {
     fontSize: 11,
@@ -873,7 +873,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 14,
-    backgroundColor: '#FFE66D',
+    backgroundColor: colors.sun,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -965,7 +965,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   micButtonListening: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: colors.errorBg,
     borderWidth: 1.5,
     borderColor: colors.coralStrong,
   },
@@ -986,7 +986,7 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   inputListening: {
-    backgroundColor: '#FFF0F0',
+    backgroundColor: colors.errorBg,
     borderColor: colors.coralStrong,
   },
   sendButtonScale: {
@@ -1002,7 +1002,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sendButtonInactive: {
-    backgroundColor: '#E2E8F0',
+    backgroundColor: colors.disabledBg,
   },
   sendButtonText: {
     color: colors.white,
@@ -1023,7 +1023,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 10,
-    backgroundColor: '#CBD5E1',
+    backgroundColor: colors.disabledBg,
   },
   attachmentInfo: {
     flex: 1,

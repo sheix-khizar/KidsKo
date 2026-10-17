@@ -566,7 +566,7 @@ const styles = StyleSheet.create({
     ...typography.heading,
     fontSize: 28,
     fontFamily: fontFamilies.black,
-    color: '#FFFFFF',
+    color: colors.white,
     textAlign: 'center',
     marginBottom: 8,
   },
@@ -612,7 +612,7 @@ const styles = StyleSheet.create({
     ...typography.subheading,
     fontSize: 17,
     fontFamily: fontFamilies.extraBold,
-    color: '#FFFFFF',
+    color: colors.white,
     marginBottom: 4,
   },
   callActionSub: {
@@ -633,7 +633,7 @@ const styles = StyleSheet.create({
   callArrowText: {
     fontSize: 22,
     fontFamily: fontFamilies.bold,
-    color: '#FFFFFF',
+    color: colors.white,
     marginTop: -2,
   },
   callPillContainer: {
@@ -760,7 +760,7 @@ const styles = StyleSheet.create({
   },
   switcherItemActive: {
     borderColor: colors.coralStrong,
-    backgroundColor: '#FFEAEA',
+    backgroundColor: colors.cardBgMuted,
   },
   switcherItemIcon: {
     fontSize: 20,

@@ -458,7 +458,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 11,
     fontFamily: fontFamilies.semiBold,
-    color: '#B2BEC3',
+    color: colors.mutedText,
     marginTop: 14,
     lineHeight: 18,
   },
@@ -473,7 +473,7 @@ const styles = StyleSheet.create({
     color: colors.subtext,
   },
   errorContainer: {
-    backgroundColor: '#FFEAEA',
+    backgroundColor: colors.errorBg,
     borderWidth: 1.5,
     borderColor: colors.error,
     borderRadius: 14,
@@ -487,9 +487,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   connectionFixCard: {
-    backgroundColor: '#FFF3CD',
+    backgroundColor: colors.warningBg,
     borderWidth: 1.5,
-    borderColor: '#FFEEBA',
+    borderColor: colors.warningBorder,
     borderRadius: 14,
     padding: 14,
     marginBottom: 14,
@@ -497,13 +497,13 @@ const styles = StyleSheet.create({
   connectionFixTitle: {
     fontSize: 14,
     fontFamily: fontFamilies.bold,
-    color: '#856404',
+    color: colors.warningText,
     marginBottom: 4,
   },
   connectionFixSub: {
     fontSize: 12,
     fontFamily: fontFamilies.semiBold,
-    color: '#856404',
+    color: colors.warningText,
     lineHeight: 18,
   },
 });

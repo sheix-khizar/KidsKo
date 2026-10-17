@@ -305,7 +305,7 @@ export default function ParentsHub({
                 <Switch
                   value={memory?.enabled ?? true}
                   onValueChange={handleToggleMemory}
-                  trackColor={{ false: '#D1D5DB', true: colors.green }}
+                  trackColor={{ false: colors.borderLight, true: colors.green }}
                   thumbColor={colors.white}
                   disabled={loadingMemory || updatingMemory}
                   accessibilityRole="switch"
@@ -521,7 +521,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 22,
     fontFamily: fontFamilies.black,
-    color: '#FFFFFF',
+    color: colors.white,
     letterSpacing: -0.3,
   },
   headerSubtitle: {
@@ -545,7 +545,7 @@ const styles = StyleSheet.create({
     width: 54,
     height: 54,
     borderRadius: 18,
-    backgroundColor: '#FFE3D3',
+    backgroundColor: colors.cardBgMuted,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
@@ -553,9 +553,9 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   childAvatarSquircleActive: {
-    borderColor: '#FFFFFF',
+    borderColor: colors.white,
     borderWidth: 3,
-    shadowColor: '#FFFFFF',
+    shadowColor: colors.white,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.5,
     shadowRadius: 8,
@@ -575,10 +575,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: '#FFFFFF',
+    borderColor: colors.white,
   },
   activeChildBadgeCheck: {
-    color: '#FFFFFF',
+    color: colors.white,
     fontSize: 10,
     fontFamily: fontFamilies.black,
   },
@@ -589,7 +589,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   childAvatarNameActive: {
-    color: '#FFFFFF',
+    color: colors.white,
     fontFamily: fontFamilies.extraBold,
   },
   addChildSquircle: {
@@ -604,7 +604,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
   addChildSquircleActive: {
-    borderColor: '#FFFFFF',
+    borderColor: colors.white,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
   },
   addChildPlus: {
@@ -629,7 +629,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     fontSize: 14,
     fontFamily: fontFamilies.semiBold,
-    color: '#FFFFFF',
+    color: colors.white,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.25)',
   },
@@ -643,12 +643,12 @@ const styles = StyleSheet.create({
     minWidth: 64,
   },
   inlineAddBtnText: {
-    color: '#FFFFFF',
+    color: colors.white,
     fontFamily: fontFamilies.extraBold,
     fontSize: 13,
   },
   inlineErrorText: {
-    color: '#FFB4B4',
+    color: colors.errorBorder,
     fontSize: 12,
     fontFamily: fontFamilies.bold,
     marginTop: 6,
@@ -692,10 +692,10 @@ const styles = StyleSheet.create({
   memoryErrorContainer: {
     paddingVertical: 14,
     paddingHorizontal: 12,
-    backgroundColor: '#FFF2F2',
+    backgroundColor: colors.errorBg,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: '#FFD1D1',
+    borderColor: colors.errorBorder,
     marginTop: 10,
     alignItems: 'center',
     gap: 8,
@@ -731,12 +731,12 @@ const styles = StyleSheet.create({
   nameBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF2EB',
+    backgroundColor: colors.cardBgMuted,
     paddingHorizontal: 10,
     paddingVertical: 3,
     borderRadius: radii.pill,
     borderWidth: 1,
-    borderColor: '#FBD3C1',
+    borderColor: colors.borderLight,
     gap: 6,
   },
   nameBadgeText: {
@@ -762,12 +762,12 @@ const styles = StyleSheet.create({
   factChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EEF2F6',
+    backgroundColor: colors.background,
     borderRadius: radii.pill,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: '#D8E2EC',
+    borderColor: colors.border,
     gap: 6,
   },
   factChipText: {
@@ -832,7 +832,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   actionIconBadgePremium: {
-    backgroundColor: '#FFF8E1',
+    backgroundColor: colors.warningBg,
   },
   actionIcon: {
     fontSize: 20,
@@ -867,7 +867,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
   },
   planPillFree: {
-    backgroundColor: '#E2E8F0',
+    backgroundColor: colors.disabledBg,
   },
   planPillPremium: {
     backgroundColor: colors.sun,

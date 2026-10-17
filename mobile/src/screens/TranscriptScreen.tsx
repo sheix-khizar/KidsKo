@@ -250,10 +250,10 @@ const styles = StyleSheet.create({
   errorBox: {
     margin: spacing.md,
     padding: spacing.md,
-    backgroundColor: '#FFEAEA',
+    backgroundColor: colors.errorBg,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: '#FFC7C7',
+    borderColor: colors.errorBorder,
   },
   errorText: {
     color: colors.error,
@@ -302,8 +302,8 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   userBubbleCard: {
-    backgroundColor: '#FFF2EB',
-    borderColor: '#FBD3C1',
+    backgroundColor: colors.cardBgMuted,
+    borderColor: colors.borderLight,
     marginLeft: 24,
   },
   assistantBubbleCard: {
