@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, BackHandler } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
-import { Mascot, LinearGradient, Bounce, FloatStar, LoadBar, SafeAreaProvider } from './src/ui';
+import { Mascot, LinearGradient, Bounce, FloatStar, LoadBar, SafeAreaProvider, FadeSlideIn } from './src/ui';
 import WelcomeScreen from './src/screens/WelcomeScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import LoginScreen from './src/screens/LoginScreen';
@@ -155,33 +155,40 @@ export default function App() {
 
     if (screen === 'welcome') {
       return (
-        <WelcomeScreen
+        <FadeSlideIn key='welcome' duration={220} style={{ flex: 1 }}>
+          <WelcomeScreen
           onStartLearning={() => setScreen('register')}
           onGoToLogin={() => setScreen('login')}
         />
+        </FadeSlideIn>
       );
     }
 
     if (screen === 'register') {
       return (
-        <RegisterScreen
+        <FadeSlideIn key='register' duration={220} style={{ flex: 1 }}>
+          <RegisterScreen
           onRegistered={() => setScreen('main')}
           onGoToLogin={() => setScreen('login')}
         />
+        </FadeSlideIn>
       );
     }
 
     if (screen === 'login') {
       return (
-        <LoginScreen
+        <FadeSlideIn key='login' duration={220} style={{ flex: 1 }}>
+          <LoginScreen
           onLoggedIn={() => setScreen('main')}
           onGoToRegister={() => setScreen('register')}
         />
+        </FadeSlideIn>
       );
     }
 
     // Authenticated screens: keep MainShellScreen mounted in background so calls/transcripts/paywall don't drop chat state
     return (
+      <FadeSlideIn key='auth-stack' duration={220} style={{ flex: 1 }}>
       <View style={{ flex: 1 }}>
         <View style={[{ flex: 1 }, screen !== 'main' && { display: 'none' }]}>
           <MainShellScreen
@@ -236,6 +243,7 @@ export default function App() {
           onCancel={() => setGateVisible(false)}
         />
       </View>
+      </FadeSlideIn>
     );
   };
 
