@@ -1,4 +1,6 @@
-import { fontFamilies } from '../theme';
+import { fontFamilies, gradients } from '../theme';
+import { LinearGradient } from '../ui/LinearGradient';
+import { Pulse, WaveBars, LiveDot, PressScale } from '../ui/motion';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, ActivityIndicator, AppState, AppStateStatus } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission, usePhotoOutput } from 'react-native-vision-camera';
@@ -333,6 +335,20 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
 }
 
 const styles = StyleSheet.create({
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  pulseContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  waveBarsMargin: {
+    marginTop: 6,
+    marginBottom: 4,
+  },
   container: {
     flex: 1,
     justifyContent: 'center',
