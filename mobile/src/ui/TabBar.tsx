@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useSafeAreaInsets } from './safeArea';
 import { colors, typography, fontFamilies } from '../theme';
 import { PressScale } from './motion';
@@ -34,7 +34,7 @@ export function TabBar({ activeTab, onSelectTab }: TabBarProps) {
       {TABS.map((tab) => {
         const isActive = activeTab === tab.key;
         return (
-          <PressScale
+          <Pressable
             key={tab.key}
             onPress={() => onSelectTab(tab.key)}
             style={styles.tabScale}
@@ -64,7 +64,7 @@ export function TabBar({ activeTab, onSelectTab }: TabBarProps) {
                 <View style={styles.dotPlaceholder} />
               )}
             </View>
-          </PressScale>
+          </Pressable>
         );
       })}
     </View>

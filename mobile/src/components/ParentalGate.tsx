@@ -48,18 +48,19 @@ export default function ParentalGate({ visible, onSuccess, onCancel }: Props) {
               }}
               placeholder="Type the answer"
               autoFocus
+              onSubmitEditing={handleSubmit}
             />
             {error && <Text style={styles.errorText}>That's not quite right — try again.</Text>}
-            <PressScale onPress={handleSubmit} style={styles.buttonScale}>
+            <Pressable onPress={handleSubmit} style={styles.buttonScale}>
               <View style={styles.button}>
                 <Text style={styles.buttonText}>Continue</Text>
               </View>
-            </PressScale>
-            <PressScale onPress={onCancel} style={styles.cancelScale}>
+            </Pressable>
+            <Pressable onPress={onCancel} style={styles.cancelScale}>
               <View style={styles.cancelBtn}>
                 <Text style={styles.cancel}>Cancel</Text>
               </View>
-            </PressScale>
+            </Pressable>
           </View>
         </FadeSlideIn>
       </View>

@@ -690,7 +690,7 @@ export function PressScale({
   };
 
   return (
-    <AnimatedPressable
+    <Pressable
       onPress={onPress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
@@ -698,14 +698,14 @@ export function PressScale({
       accessibilityRole={accessibilityRole}
       accessibilityLabel={accessibilityLabel}
       accessibilityState={accessibilityState}
-      style={[style, { transform: [{ scale: scaleAnim }] }]}
+      style={style}
     >
-      {children}
-    </AnimatedPressable>
+      <Animated.View style={[{ transform: [{ scale: scaleAnim }] }]}>
+        {children}
+      </Animated.View>
+    </Pressable>
   );
 }
-
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 const styles = StyleSheet.create({
   typingDotsRow: {

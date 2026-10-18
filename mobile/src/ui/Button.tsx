@@ -60,6 +60,7 @@ export function Button({
           colors={gradients.primary.colors}
           start={gradients.primary.start}
           end={gradients.primary.end}
+          pointerEvents="none"
           style={[StyleSheet.absoluteFill, { borderRadius: radii.lg }]}
         />
       )}
@@ -69,7 +70,7 @@ export function Button({
           color={isPrimary || isDanger ? colors.white : colors.text}
         />
       ) : (
-        <View style={styles.contentRow}>
+        <View style={styles.contentRow} pointerEvents="none">
           {icon ? <Text style={styles.iconText}>{icon}</Text> : null}
           <Text
             style={[

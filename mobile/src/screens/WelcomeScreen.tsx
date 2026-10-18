@@ -35,15 +35,17 @@ export default function WelcomeScreen({ onStartLearning, onGoToLogin }: Props) {
       <View style={styles.bottomLeftCircle} pointerEvents="none" />
 
       {/* Floating stars */}
-      <FloatStar delay={0} style={styles.starTopLeft}>
-        <Text style={styles.starEmoji}>✨</Text>
-      </FloatStar>
-      <FloatStar delay={400} style={styles.starTopRight}>
-        <Text style={styles.starEmoji}>🌟</Text>
-      </FloatStar>
-      <FloatStar delay={800} style={styles.starMidRight}>
-        <Text style={styles.starEmoji}>⭐</Text>
-      </FloatStar>
+      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <FloatStar delay={0} style={styles.starTopLeft}>
+          <Text style={styles.starEmoji}>✨</Text>
+        </FloatStar>
+        <FloatStar delay={400} style={styles.starTopRight}>
+          <Text style={styles.starEmoji}>🌟</Text>
+        </FloatStar>
+        <FloatStar delay={800} style={styles.starMidRight}>
+          <Text style={styles.starEmoji}>⭐</Text>
+        </FloatStar>
+      </View>
 
       {/* Center content */}
       <View
@@ -69,20 +71,17 @@ export default function WelcomeScreen({ onStartLearning, onGoToLogin }: Props) {
 
         {/* Action buttons */}
         <View style={styles.actionsSection}>
-          <PressScale style={styles.buttonScale} onPress={onStartLearning}>
-            <Button
-              title="🚀 Let's Start Learning!"
-              onPress={onStartLearning}
-              variant="primary"
-            />
-          </PressScale>
-          <PressScale style={[styles.buttonScale, { marginTop: 14 }]} onPress={onGoToLogin}>
-            <Button
-              title="I already have an account"
-              onPress={onGoToLogin}
-              variant="ghost"
-            />
-          </PressScale>
+          <Button
+            title="🚀 Let's Start Learning!"
+            onPress={onStartLearning}
+            variant="primary"
+          />
+          <Button
+            title="I already have an account"
+            onPress={onGoToLogin}
+            variant="ghost"
+            style={{ marginTop: 14 }}
+          />
         </View>
       </View>
     </View>

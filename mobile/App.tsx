@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, BackHandler } from 'react-native';
+import { View, Text, StyleSheet, BackHandler, LogBox } from 'react-native';
+
+LogBox.ignoreAllLogs(true);
 import * as SplashScreen from 'expo-splash-screen';
 import { Mascot, LinearGradient, Bounce, FloatStar, LoadBar, SafeAreaProvider, FadeSlideIn } from './src/ui';
 import WelcomeScreen from './src/screens/WelcomeScreen';
