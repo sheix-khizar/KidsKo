@@ -1,8 +1,10 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { View, Text, Pressable, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
 import { getTranscript } from '../services/api';
 import { cleanMessageText } from '../utils/messageText';
-import { colors, radii, spacing, typography } from '../theme';
+import { colors, radii, spacing, typography, fontFamilies, shadows } from '../theme';
+import { PressScale, FadeSlideIn } from '../ui/motion';
+import { useSafeAreaInsets } from '../ui/safeArea';
 
 type Message = { role: string; content: string; message_type?: string; created_at: string };
 
@@ -20,6 +22,7 @@ export default function TranscriptScreen({ studentId, studentName, onBack }: Pro
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     (async () => {
@@ -77,15 +80,21 @@ export default function TranscriptScreen({ studentId, studentName, onBack }: Pro
   return (
     <View style={styles.container}>
       {/* Header Bar */}
-      <View style={styles.header}>
-        <Pressable
-          onPress={onBack}
-          style={styles.backBtn}
-          accessibilityRole="button"
-          accessibilityLabel="Back to Parents Hub"
-        >
-          <Text style={styles.backText}>← Back</Text>
-        </Pressable>
+      <View
+        style={[
+          styles.header,
+          { paddingTop: Math.max(insets.top, 24) + 8 },
+        ]}
+      >
+        <PressScale onPress={onBack}>
+          <View
+            style={styles.backBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Back to Parents Hub"
+          >
+            <Text style={styles.backText}>← Back</Text>
+          </View>
+        </PressScale>
         <View style={styles.headerTitleWrap}>
           <Text style={styles.title} numberOfLines={1}>
             {studentName}'s Transcript
@@ -110,8 +119,12 @@ export default function TranscriptScreen({ studentId, studentName, onBack }: Pro
         <FlatList
           data={listItems}
           keyExtractor={(item) => (item.type === 'header' ? `h_${item.date}` : item.id)}
-          contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => {
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingBottom: Math.max(insets.bottom, 24) + 16 },
+          ]}
+          showsVerticalScrollIndicator={false}
+          renderItem={({ item, index }) => {
             if (item.type === 'header') {
               return (
                 <View style={styles.dateHeaderWrap}>
@@ -129,7 +142,7 @@ export default function TranscriptScreen({ studentId, studentName, onBack }: Pro
               minute: '2-digit',
             });
 
-            return (
+            const cardContent = (
               <View
                 style={[
                   styles.bubbleCard,
@@ -137,7 +150,12 @@ export default function TranscriptScreen({ studentId, studentName, onBack }: Pro
                 ]}
               >
                 <View style={styles.bubbleHeader}>
-                  <Text style={[styles.roleLabel, isUser ? styles.userRoleLabel : styles.assistantRoleLabel]}>
+                  <Text
+                    style={[
+                      styles.roleLabel,
+                      isUser ? styles.userRoleLabel : styles.assistantRoleLabel,
+                    ]}
+                  >
                     {isUser ? `🧒 ${studentName}` : '🦉 Kidsko'}
                   </Text>
                   <Text style={styles.timeText}>{timeStr}</Text>
@@ -153,15 +171,25 @@ export default function TranscriptScreen({ studentId, studentName, onBack }: Pro
                 </Text>
               </View>
             );
+
+            // Phase 8.9: Staggered FadeSlideIn for the first 8 rows only
+            if (index < 8) {
+              return (
+                <FadeSlideIn delay={index * 25}>
+                  {cardContent}
+                </FadeSlideIn>
+              );
+            }
+            return cardContent;
           }}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <View style={styles.emptyIconBadge}>
-                <Text style={styles.emptyIcon}>📜</Text>
+                <Text style={styles.emptyEmoji}>📜</Text>
               </View>
-              <Text style={styles.emptyTitle}>No chats yet</Text>
+              <Text style={styles.emptyTitle}>No messages recorded yet</Text>
               <Text style={styles.emptySub}>
-                When {studentName} asks Kidsko questions, conversations will appear here.
+                When {studentName} asks Kidsko questions, the conversation transcripts will appear here.
               </Text>
             </View>
           }
@@ -175,43 +203,63 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    paddingTop: 48,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md,
+    paddingBottom: 14,
+    backgroundColor: colors.cardBg,
     borderBottomWidth: 1.5,
     borderBottomColor: colors.border,
-    backgroundColor: colors.cardBg,
+    ...shadows.card,
   },
   backBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: radii.pill,
+    backgroundColor: colors.cardBgMuted,
     minHeight: 44,
-    minWidth: 44,
     justifyContent: 'center',
-    alignItems: 'flex-start',
+    alignItems: 'center',
   },
   backText: {
-    color: colors.coralStrong,
-    fontWeight: '800',
-    fontSize: 15,
+    fontSize: 13,
+    fontFamily: fontFamilies.bold,
+    color: colors.text,
   },
   headerTitleWrap: {
     flex: 1,
     alignItems: 'center',
+    paddingHorizontal: 8,
   },
   title: {
-    fontSize: 17,
-    fontWeight: '900',
+    ...typography.subheading,
+    fontSize: 16,
+    fontFamily: fontFamilies.black,
     color: colors.text,
   },
   subTitle: {
+    ...typography.caption,
     fontSize: 11,
-    fontWeight: '600',
+    fontFamily: fontFamilies.semiBold,
     color: colors.subtext,
     marginTop: 1,
+  },
+  errorBox: {
+    margin: spacing.md,
+    padding: spacing.md,
+    backgroundColor: colors.errorBg,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.errorBorder,
+  },
+  errorText: {
+    color: colors.error,
+    fontSize: 13,
+    fontFamily: fontFamilies.semiBold,
+    textAlign: 'center',
   },
   center: {
     flex: 1,
@@ -220,79 +268,58 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   loadingText: {
-    fontSize: 14,
-    fontWeight: '600',
+    ...typography.caption,
+    fontSize: 13,
     color: colors.subtext,
   },
-  errorBox: {
-    margin: spacing.lg,
-    padding: spacing.md,
-    borderRadius: radii.md,
-    backgroundColor: '#FDE8E8',
-    borderWidth: 1,
-    borderColor: colors.error,
-  },
-  errorText: {
-    color: colors.error,
-    textAlign: 'center',
-    fontWeight: '700',
-    fontSize: 13,
-  },
   listContent: {
-    padding: spacing.lg,
-    paddingBottom: 32,
+    padding: spacing.md,
+    paddingTop: spacing.lg,
   },
   dateHeaderWrap: {
     alignItems: 'center',
-    marginVertical: spacing.md,
+    marginVertical: 14,
   },
   dateHeaderPill: {
-    backgroundColor: colors.cardBgMuted,
-    paddingHorizontal: 14,
+    backgroundColor: 'rgba(45, 52, 54, 0.08)',
+    paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
   dateHeaderText: {
+    ...typography.caption,
     fontSize: 11,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
     color: colors.subtext,
-    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   bubbleCard: {
     borderRadius: radii.lg,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-    maxWidth: '88%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 1,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1.5,
+    ...shadows.card,
   },
   userBubbleCard: {
-    alignSelf: 'flex-end',
-    backgroundColor: '#FFF2EB',
-    borderWidth: 1.5,
-    borderColor: '#FBD3C1',
+    backgroundColor: colors.cardBgMuted,
+    borderColor: colors.borderLight,
+    marginLeft: 24,
   },
   assistantBubbleCard: {
-    alignSelf: 'flex-start',
     backgroundColor: colors.cardBg,
-    borderWidth: 1.5,
     borderColor: colors.border,
+    marginRight: 24,
   },
   bubbleHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
-    gap: 10,
+    marginBottom: 6,
   },
   roleLabel: {
-    fontSize: 11,
-    fontWeight: '800',
+    fontSize: 12,
+    fontFamily: fontFamilies.extraBold,
   },
   userRoleLabel: {
     color: colors.coralStrong,
@@ -302,25 +329,26 @@ const styles = StyleSheet.create({
   },
   timeText: {
     fontSize: 10,
-    fontWeight: '600',
     color: colors.subtext,
+    fontFamily: fontFamilies.bold,
   },
   messageText: {
+    ...typography.body,
     fontSize: 14,
     lineHeight: 20,
-    fontWeight: '500',
   },
   userMessageText: {
     color: colors.text,
+    fontFamily: fontFamilies.semiBold,
   },
   assistantMessageText: {
     color: colors.text,
+    fontFamily: fontFamilies.semiBold,
   },
   emptyContainer: {
+    padding: 36,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-    paddingHorizontal: spacing.xl,
+    marginTop: 40,
   },
   emptyIconBadge: {
     width: 64,
@@ -329,23 +357,26 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cardBg,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: spacing.md,
+    marginBottom: 14,
     borderWidth: 1.5,
     borderColor: colors.border,
+    ...shadows.card,
   },
-  emptyIcon: {
+  emptyEmoji: {
     fontSize: 32,
   },
   emptyTitle: {
-    fontSize: 18,
-    fontWeight: '800',
+    ...typography.subheading,
+    fontSize: 16,
+    fontFamily: fontFamilies.black,
     color: colors.text,
-    marginBottom: spacing.xs,
+    marginBottom: 6,
   },
   emptySub: {
-    textAlign: 'center',
-    color: colors.subtext,
+    ...typography.body,
     fontSize: 13,
+    color: colors.subtext,
+    textAlign: 'center',
     lineHeight: 18,
   },
 });

@@ -1,5 +1,7 @@
+import { fontFamilies, colors, radii, shadows } from '../theme';
 import { useState, useMemo } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, Modal } from 'react-native';
+import { FadeSlideIn, PressScale } from '../ui/motion';
 
 type Props = {
   visible: boolean;
@@ -27,83 +29,131 @@ export default function ParentalGate({ visible, onSuccess, onCancel }: Props) {
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade">
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={styles.overlay}>
-        <View style={styles.card}>
-          <Text style={styles.emoji}>🔒</Text>
-          <Text style={styles.title}>Parents Only</Text>
-          <Text style={styles.question}>
-            What is {a} + {b}?
-          </Text>
-          <TextInput
-            style={[styles.input, error && styles.inputError]}
-            keyboardType="number-pad"
-            value={answer}
-            onChangeText={(t) => {
-              setAnswer(t);
-              setError(false);
-            }}
-            placeholder="Type the answer"
-            autoFocus
-          />
-          {error && <Text style={styles.errorText}>That's not quite right — try again.</Text>}
-          <Pressable
-            style={styles.button}
-            onPress={handleSubmit}
-            accessibilityRole="button"
-            accessibilityLabel="Continue"
-          >
-            <Text style={styles.buttonText}>Continue</Text>
-          </Pressable>
-          <Pressable
-            style={styles.cancelBtn}
-            onPress={onCancel}
-            accessibilityRole="button"
-            accessibilityLabel="Cancel"
-          >
-            <Text style={styles.cancel}>Cancel</Text>
-          </Pressable>
-        </View>
+        <FadeSlideIn duration={200} style={styles.cardWrapper}>
+          <View style={styles.card}>
+            <Text style={styles.emoji}>🔒</Text>
+            <Text style={styles.title}>Parents Only</Text>
+            <Text style={styles.question}>
+              What is {a} + {b}?
+            </Text>
+            <TextInput
+              style={[styles.input, error && styles.inputError]}
+              keyboardType="number-pad"
+              value={answer}
+              onChangeText={(t) => {
+                setAnswer(t);
+                setError(false);
+              }}
+              placeholder="Type the answer"
+              autoFocus
+              onSubmitEditing={handleSubmit}
+            />
+            {error && <Text style={styles.errorText}>That's not quite right — try again.</Text>}
+            <Pressable onPress={handleSubmit} style={styles.buttonScale}>
+              <View style={styles.button}>
+                <Text style={styles.buttonText}>Continue</Text>
+              </View>
+            </Pressable>
+            <Pressable onPress={onCancel} style={styles.cancelScale}>
+              <View style={styles.cancelBtn}>
+                <Text style={styles.cancel}>Cancel</Text>
+              </View>
+            </Pressable>
+          </View>
+        </FadeSlideIn>
       </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  card: { backgroundColor: '#fff', borderRadius: 20, padding: 24, width: '80%', alignItems: 'center' },
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  cardWrapper: {
+    width: '100%',
+    maxWidth: 340,
+    alignItems: 'center',
+  },
+  card: {
+    backgroundColor: colors.cardBg,
+    borderRadius: radii.xl,
+    padding: 24,
+    width: '100%',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    ...shadows.card,
+  },
   emoji: { fontSize: 40, marginBottom: 8 },
-  title: { fontSize: 18, fontWeight: '800', color: '#111', marginBottom: 12 },
-  question: { fontSize: 16, fontWeight: '700', color: '#1a73e8', marginBottom: 12 },
+  title: {
+    fontSize: 18,
+    fontFamily: fontFamilies.extraBold,
+    color: colors.text,
+    marginBottom: 8,
+  },
+  question: {
+    fontSize: 16,
+    fontFamily: fontFamilies.bold,
+    color: colors.parentBlue,
+    marginBottom: 12,
+  },
   input: {
     width: '100%',
     borderWidth: 1.5,
-    borderColor: '#e5e7eb',
-    borderRadius: 12,
+    borderColor: colors.border,
+    borderRadius: radii.md,
     padding: 12,
     textAlign: 'center',
-    fontSize: 16,
+    fontSize: 18,
+    fontFamily: fontFamilies.bold,
+    color: colors.text,
+    backgroundColor: colors.background,
     marginBottom: 8,
   },
-  inputError: { borderColor: '#EA4335' },
-  errorText: { color: '#EA4335', fontSize: 12, marginBottom: 8 },
+  inputError: { borderColor: colors.error },
+  errorText: {
+    color: colors.error,
+    fontSize: 12,
+    fontFamily: fontFamilies.semiBold,
+    marginBottom: 8,
+  },
+  buttonScale: {
+    width: '100%',
+    marginTop: 6,
+  },
   button: {
-    backgroundColor: '#1a73e8',
-    borderRadius: 12,
+    backgroundColor: colors.parentBlue,
+    borderRadius: radii.pill,
     paddingVertical: 12,
     paddingHorizontal: 32,
-    marginTop: 4,
     minHeight: 44,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  buttonText: { color: '#fff', fontWeight: '700' },
-  cancelBtn: {
+  buttonText: {
+    color: colors.white,
+    fontFamily: fontFamilies.extraBold,
+    fontSize: 14,
+  },
+  cancelScale: {
     marginTop: 8,
+  },
+  cancelBtn: {
     minHeight: 44,
-    paddingHorizontal: 20,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 20,
   },
-  cancel: { color: '#9ca3af', fontWeight: '600' },
+  cancel: {
+    color: colors.subtext,
+    fontSize: 14,
+    fontFamily: fontFamilies.semiBold,
+  },
 });

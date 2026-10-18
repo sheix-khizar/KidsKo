@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,8 +12,14 @@ import {
 import { register, saveToken } from '../services/api';
 import { getApiUrl, loadSavedApiUrl } from '../services/config';
 import ServerConfigModal from '../components/ServerConfigModal';
-import { Screen, Mascot, Button, Card } from '../ui';
-import { colors, radii, typography, spacing } from '../theme';
+import {
+  LinearGradient,
+  Button,
+  PressScale,
+  FadeSlideIn,
+  useSafeAreaInsets,
+} from '../ui';
+import { colors, fontFamilies, gradients } from '../theme';
 
 type Props = {
   onRegistered: () => void;
@@ -21,9 +27,19 @@ type Props = {
 };
 
 export default function RegisterScreen({ onRegistered, onGoToLogin }: Props) {
+  const insets = useSafeAreaInsets();
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const [nameFocused, setNameFocused] = useState(false);
+  const [emailFocused, setEmailFocused] = useState(false);
+  const [passwordFocused, setPasswordFocused] = useState(false);
+  const [confirmPasswordFocused, setConfirmPasswordFocused] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showServerModal, setShowServerModal] = useState(false);
@@ -45,9 +61,14 @@ export default function RegisterScreen({ onRegistered, onGoToLogin }: Props) {
       setErrorMsg('Password must be at least 6 characters.');
       return;
     }
+    if (confirmPassword && password !== confirmPassword) {
+      setErrorMsg('Passwords do not match.');
+      return;
+    }
+
     setLoading(true);
     try {
-      const result = await register(email, password);
+      const result = await register(email.trim(), password);
       await saveToken(result.session.access_token, result.userId);
       onRegistered();
     } catch (err: any) {
@@ -65,49 +86,125 @@ export default function RegisterScreen({ onRegistered, onGoToLogin }: Props) {
       errorMsg.includes('Network request failed'));
 
   return (
-    <Screen>
+    <View style={styles.container}>
+      {/* ── Gradient Header with Mascot ── */}
+      <LinearGradient
+        colors={gradients.primary.colors}
+        start={gradients.primary.start}
+        end={gradients.primary.end}
+        style={[
+          styles.headerGradient,
+          { paddingTop: insets.top + 16, paddingBottom: 28 },
+        ]}
+      >
+        <FadeSlideIn delay={0}>
+          <View style={styles.headerTopRow}>
+            <View style={styles.brandRow}>
+              <View style={styles.mascotBadge}>
+                <Text style={styles.mascotEmoji}>🦉</Text>
+              </View>
+              <Text style={styles.brandTitle}>
+                Kidsko<Text style={styles.brandDot}>.ai</Text>
+              </Text>
+            </View>
+
+            {/* Server settings button */}
+            <Pressable
+              onPress={() => setShowServerModal(true)}
+              style={styles.gearButton}
+              accessibilityLabel="Server Settings"
+              accessibilityRole="button"
+            >
+              <Text style={styles.gearIcon}>⚙️</Text>
+            </Pressable>
+          </View>
+
+          <Text style={styles.headline}>Create your account! 🎉</Text>
+          <Text style={styles.subheadline}>Join thousands of young learners</Text>
+        </FadeSlideIn>
+      </LinearGradient>
+
+      {/* ── Body / Form Area ── */}
       <KeyboardAvoidingView
         style={styles.keyboardContainer}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: Math.max(insets.bottom + 24, 32) },
+          ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Header with Mascot */}
-          <View style={styles.header}>
-            <Mascot size="m" />
-            <Text style={styles.title}>Join Kidsko.ai</Text>
-            <Text style={styles.subtitle}>Create your parent account to get started 🦉</Text>
-          </View>
-
-          {/* Form Card */}
-          <Card style={styles.card}>
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Parent Email</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="name@email.com"
-                placeholderTextColor={colors.subtext}
-                autoCapitalize="none"
-                keyboardType="email-address"
-                autoCorrect={false}
-                value={email}
-                onChangeText={setEmail}
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Password</Text>
-              <View style={styles.passwordRow}>
+          {/* Your Name Field */}
+          <FadeSlideIn delay={40}>
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>Your Name</Text>
+              <View
+                style={[
+                  styles.inputContainer,
+                  nameFocused && styles.inputFocused,
+                ]}
+              >
                 <TextInput
-                  style={styles.passwordInput}
+                  style={styles.input}
+                  placeholder="e.g. Aisha"
+                  placeholderTextColor={colors.subtext}
+                  value={name}
+                  onChangeText={setName}
+                  onFocus={() => setNameFocused(true)}
+                  onBlur={() => setNameFocused(false)}
+                />
+              </View>
+            </View>
+          </FadeSlideIn>
+
+          {/* Email Field */}
+          <FadeSlideIn delay={80}>
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>Email</Text>
+              <View
+                style={[
+                  styles.inputContainer,
+                  emailFocused && styles.inputFocused,
+                ]}
+              >
+                <TextInput
+                  style={styles.input}
+                  placeholder="you@gmail.com"
+                  placeholderTextColor={colors.subtext}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  autoCorrect={false}
+                  value={email}
+                  onChangeText={setEmail}
+                  onFocus={() => setEmailFocused(true)}
+                  onBlur={() => setEmailFocused(false)}
+                />
+              </View>
+            </View>
+          </FadeSlideIn>
+
+          {/* Password Field */}
+          <FadeSlideIn delay={120}>
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>Password</Text>
+              <View
+                style={[
+                  styles.inputContainer,
+                  passwordFocused && styles.inputFocused,
+                ]}
+              >
+                <TextInput
+                  style={[styles.input, { flex: 1 }]}
                   placeholder="Min 6 characters"
                   placeholderTextColor={colors.subtext}
                   secureTextEntry={!showPassword}
                   value={password}
                   onChangeText={setPassword}
+                  onFocus={() => setPasswordFocused(true)}
+                  onBlur={() => setPasswordFocused(false)}
                 />
                 <Pressable
                   style={styles.eyeButton}
@@ -119,14 +216,56 @@ export default function RegisterScreen({ onRegistered, onGoToLogin }: Props) {
                 </Pressable>
               </View>
             </View>
+          </FadeSlideIn>
 
-            {errorMsg && (
+          {/* Confirm Password Field */}
+          <FadeSlideIn delay={160}>
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>Confirm Password</Text>
+              <View
+                style={[
+                  styles.inputContainer,
+                  confirmPasswordFocused && styles.inputFocused,
+                ]}
+              >
+                <TextInput
+                  style={[styles.input, { flex: 1 }]}
+                  placeholder="Repeat password"
+                  placeholderTextColor={colors.subtext}
+                  secureTextEntry={!showConfirmPassword}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  onFocus={() => setConfirmPasswordFocused(true)}
+                  onBlur={() => setConfirmPasswordFocused(false)}
+                />
+                <Pressable
+                  style={styles.eyeButton}
+                  onPress={() => setShowConfirmPassword((prev) => !prev)}
+                  accessibilityLabel={
+                    showConfirmPassword ? 'Hide password' : 'Show password'
+                  }
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.eyeIcon}>
+                    {showConfirmPassword ? '🙈' : '👁️'}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          </FadeSlideIn>
+
+          {/* Error notification */}
+          {errorMsg && (
+            <FadeSlideIn delay={180}>
               <View style={styles.errorContainer}>
                 <Text style={styles.errorText}>{errorMsg}</Text>
               </View>
-            )}
+            </FadeSlideIn>
+          )}
 
-            {isNetworkError && (
+          {/* Network error connection helper */}
+          {isNetworkError && (
+            <FadeSlideIn delay={190}>
               <Pressable
                 style={styles.connectionFixCard}
                 onPress={() => setShowServerModal(true)}
@@ -136,35 +275,47 @@ export default function RegisterScreen({ onRegistered, onGoToLogin }: Props) {
                   Tap here to change Server IP to your computer's local Wi-Fi IP
                 </Text>
               </Pressable>
-            )}
+            </FadeSlideIn>
+          )}
 
-            <Button
-              title="Create Account"
-              onPress={handleRegister}
-              loading={loading}
-              variant="primary"
-              style={styles.submitButton}
-            />
+          {/* Create Account Button */}
+          <FadeSlideIn delay={200}>
+            <PressScale style={styles.buttonScale}>
+              <Button
+                title="Create Account 🚀"
+                onPress={handleRegister}
+                loading={loading}
+                variant="primary"
+              />
+            </PressScale>
+          </FadeSlideIn>
 
+          {/* Switch to Login */}
+          <FadeSlideIn delay={240}>
             <Pressable
               onPress={onGoToLogin}
               style={styles.switchLink}
               accessibilityRole="button"
-              accessibilityLabel="Sign in to existing account"
+              accessibilityLabel="Sign In"
             >
               <Text style={styles.switchLinkText}>
                 Already have an account? <Text style={styles.switchLinkBold}>Sign In</Text>
               </Text>
             </Pressable>
-          </Card>
 
-          {/* Server Config Footer */}
-          <Pressable
-            style={styles.footerContainer}
-            onPress={() => setShowServerModal(true)}
-          >
-            <Text style={styles.footerText}>⚙️ Server: {serverUrl} (Tap to change)</Text>
-          </Pressable>
+            {/* Privacy note */}
+            <Text style={styles.privacyNote}>
+              🔒 Safe for kids · No ads · Always private
+            </Text>
+
+            {/* Server indicator */}
+            <Pressable
+              style={styles.serverRow}
+              onPress={() => setShowServerModal(true)}
+            >
+              <Text style={styles.serverText}>Server: {serverUrl}</Text>
+            </Pressable>
+          </FadeSlideIn>
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -176,139 +327,183 @@ export default function RegisterScreen({ onRegistered, onGoToLogin }: Props) {
           setErrorMsg(null);
         }}
       />
-    </Screen>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  headerGradient: {
+    paddingHorizontal: 22,
+  },
+  headerTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  mascotBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 15,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mascotEmoji: {
+    fontSize: 24,
+  },
+  brandTitle: {
+    fontSize: 20,
+    fontFamily: fontFamilies.black,
+    color: colors.white,
+  },
+  brandDot: {
+    color: colors.sun,
+  },
+  gearButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  gearIcon: {
+    fontSize: 18,
+  },
+  headline: {
+    fontSize: 26,
+    fontFamily: fontFamilies.black,
+    color: colors.white,
+    letterSpacing: -0.5,
+  },
+  subheadline: {
+    fontSize: 13,
+    fontFamily: fontFamilies.bold,
+    color: 'rgba(255, 255, 255, 0.85)',
+    marginTop: 4,
+  },
   keyboardContainer: {
     flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: 'center',
-    padding: spacing.lg,
+    paddingHorizontal: 22,
+    paddingTop: 24,
   },
-  header: {
-    alignItems: 'center',
-    marginBottom: spacing.lg,
+  field: {
+    marginBottom: 16,
   },
-  title: {
-    ...typography.title,
-    color: colors.text,
-    marginTop: spacing.md,
-    textAlign: 'center',
-  },
-  subtitle: {
-    ...typography.body,
+  fieldLabel: {
+    fontSize: 13,
+    fontFamily: fontFamilies.extraBold,
     color: colors.subtext,
-    marginTop: 4,
-    textAlign: 'center',
+    marginBottom: 6,
   },
-  card: {
-    padding: spacing.xl,
-    gap: spacing.md,
-  },
-  inputGroup: {
-    gap: 6,
-  },
-  inputLabel: {
-    ...typography.label,
-    fontSize: 14,
-    color: colors.text,
-  },
-  input: {
-    backgroundColor: colors.cardBg,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: colors.text,
-  },
-  passwordRow: {
+  inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.cardBg,
-    borderWidth: 1.5,
+    backgroundColor: colors.background,
+    borderWidth: 2,
     borderColor: colors.border,
-    borderRadius: radii.md,
-  },
-  passwordInput: {
-    flex: 1,
+    borderRadius: 16,
     paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
+    minHeight: 52,
+  },
+  inputFocused: {
+    borderColor: colors.coral,
+  },
+  input: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: fontFamilies.semiBold,
     color: colors.text,
+    paddingVertical: Platform.OS === 'ios' ? 14 : 10,
   },
   eyeButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 6,
+    marginLeft: 4,
   },
   eyeIcon: {
     fontSize: 18,
   },
-  errorContainer: {
-    backgroundColor: '#FFEAEA',
-    borderWidth: 1,
-    borderColor: colors.coralStrong,
-    borderRadius: radii.sm,
-    padding: spacing.sm,
-  },
-  errorText: {
-    ...typography.caption,
-    color: colors.coralStrong,
-    textAlign: 'center',
-    fontWeight: '700',
-  },
-  connectionFixCard: {
-    backgroundColor: '#FFF4E5',
-    borderColor: colors.orange,
-    borderWidth: 1.5,
-    borderRadius: radii.md,
-    padding: spacing.md,
-  },
-  connectionFixTitle: {
-    color: colors.text,
-    fontWeight: '800',
-    fontSize: 13,
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  connectionFixSub: {
-    color: colors.subtext,
-    fontSize: 12,
-    textAlign: 'center',
-    textDecorationLine: 'underline',
-  },
-  submitButton: {
-    marginTop: spacing.xs,
+  buttonScale: {
+    width: '100%',
+    marginTop: 6,
+    marginBottom: 16,
   },
   switchLink: {
-    marginTop: spacing.sm,
-    paddingVertical: spacing.xs,
-    minHeight: 44,
-    justifyContent: 'center',
     alignItems: 'center',
+    paddingVertical: 8,
   },
   switchLinkText: {
-    ...typography.body,
+    fontSize: 14,
+    fontFamily: fontFamilies.bold,
     color: colors.subtext,
   },
   switchLinkBold: {
-    color: colors.coralStrong,
-    fontWeight: '800',
+    color: colors.coral,
+    fontFamily: fontFamilies.black,
   },
-  footerContainer: {
-    marginTop: spacing.xl,
+  privacyNote: {
+    textAlign: 'center',
+    fontSize: 11,
+    fontFamily: fontFamilies.semiBold,
+    color: colors.mutedText,
+    marginTop: 14,
+    lineHeight: 18,
+  },
+  serverRow: {
     alignItems: 'center',
-    paddingVertical: spacing.sm,
+    marginTop: 20,
+    opacity: 0.6,
   },
-  footerText: {
-    ...typography.caption,
+  serverText: {
+    fontSize: 11,
+    fontFamily: fontFamilies.semiBold,
     color: colors.subtext,
+  },
+  errorContainer: {
+    backgroundColor: colors.errorBg,
+    borderWidth: 1.5,
+    borderColor: colors.error,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 14,
+  },
+  errorText: {
+    color: colors.error,
+    fontSize: 13,
+    fontFamily: fontFamilies.bold,
+    textAlign: 'center',
+  },
+  connectionFixCard: {
+    backgroundColor: colors.warningBg,
+    borderWidth: 1.5,
+    borderColor: colors.warningBorder,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 14,
+  },
+  connectionFixTitle: {
+    fontSize: 14,
+    fontFamily: fontFamilies.bold,
+    color: colors.warningText,
+    marginBottom: 4,
+  },
+  connectionFixSub: {
+    fontSize: 12,
+    fontFamily: fontFamilies.semiBold,
+    color: colors.warningText,
+    lineHeight: 18,
   },
 });

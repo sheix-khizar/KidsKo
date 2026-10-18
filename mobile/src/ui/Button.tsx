@@ -8,7 +8,8 @@ import {
   TextStyle,
   View,
 } from 'react-native';
-import { colors, radii, shadows, typography } from '../theme';
+import { colors, radii, shadows, typography, gradients, fontFamilies } from '../theme';
+import { LinearGradient } from './LinearGradient';
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
@@ -48,19 +49,28 @@ export function Button({
         isSecondary && styles.secondary,
         isDanger && styles.danger,
         isGhost && styles.ghost,
-        isPrimary && shadows.button,
+        isPrimary && !disabled && shadows.button,
         disabled && styles.disabled,
         pressed && styles.pressed,
         style,
       ]}
     >
+      {isPrimary && !disabled && (
+        <LinearGradient
+          colors={gradients.primary.colors}
+          start={gradients.primary.start}
+          end={gradients.primary.end}
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, { borderRadius: radii.lg }]}
+        />
+      )}
       {loading ? (
         <ActivityIndicator
           size="small"
           color={isPrimary || isDanger ? colors.white : colors.text}
         />
       ) : (
-        <View style={styles.contentRow}>
+        <View style={styles.contentRow} pointerEvents="none">
           {icon ? <Text style={styles.iconText}>{icon}</Text> : null}
           <Text
             style={[
@@ -84,18 +94,20 @@ export function Button({
 const styles = StyleSheet.create({
   base: {
     minHeight: 52,
-    borderRadius: radii.xl,
+    borderRadius: radii.lg,
     paddingHorizontal: 24,
-    paddingVertical: 14,
+    paddingVertical: 16,
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',
+    overflow: 'hidden',
   },
   contentRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+    zIndex: 1,
   },
   iconText: {
     fontSize: 18,
@@ -110,9 +122,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.coralStrong,
   },
   ghost: {
-    backgroundColor: colors.white,
+    backgroundColor: 'rgba(255, 107, 107, 0.08)',
     borderWidth: 2,
-    borderColor: colors.border,
+    borderColor: 'rgba(255, 107, 107, 0.25)',
   },
   pressed: {
     opacity: 0.88,
@@ -129,6 +141,8 @@ const styles = StyleSheet.create({
   },
   primaryText: {
     color: colors.white,
+    fontFamily: fontFamilies.black,
+    fontSize: 18,
   },
   secondaryText: {
     color: colors.text,
@@ -137,7 +151,9 @@ const styles = StyleSheet.create({
     color: colors.white,
   },
   ghostText: {
-    color: colors.text,
+    color: colors.coral,
+    fontFamily: fontFamilies.extraBold,
+    fontSize: 15,
   },
   disabledText: {
     color: colors.subtext,

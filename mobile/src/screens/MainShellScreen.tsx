@@ -1,3 +1,4 @@
+import { fontFamilies } from '../theme';
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -16,8 +17,9 @@ import ParentsHub from '../components/ParentsHub';
 import { getStudents, createStudent, clearToken, getSavedUserId } from '../services/api';
 import { configureBilling, isPremiumActive } from '../services/billing';
 import { TabBar, TabKey } from '../ui/TabBar';
-import { Screen, Mascot, Button, Card, Pill } from '../ui';
-import { colors, radii, typography, spacing } from '../theme';
+import { LinearGradient } from '../ui/LinearGradient';
+import { Screen, Mascot, Button, Card, Pill, FadeSlideIn, Bounce, PressScale } from '../ui';
+import { colors, radii, typography, spacing, gradients } from '../theme';
 
 export type Student = { id: string; student_name: string };
 
@@ -163,7 +165,8 @@ export default function MainShellScreen({
 
   return (
     <Screen safeBottom={false}>
-      {/* Shell Header: Child Switcher Chip */}
+      {/* Shell Header: Child Switcher Chip (non-chat tabs) */}
+      {tab !== 'chat' && (
       <View style={[styles.shellHeader, { paddingTop: spacing.sm }]}>
         <View style={styles.brandRow}>
           <Text style={styles.brandText}>Kidsko.ai 🦉</Text>
@@ -184,6 +187,7 @@ export default function MainShellScreen({
           </Pressable>
         )}
       </View>
+      )}
 
       {/* Main Tab Body */}
       <View style={styles.bodyContainer}>
@@ -227,57 +231,104 @@ export default function MainShellScreen({
               embedded={true}
               onBack={() => {}}
               onLimitReached={onLimitReached}
+              onSwitchStudent={() => setShowSwitcherModal(true)}
             />
           ) : null}
         </View>
 
-        {/* TAB 2: CALL */}
+        {/* TAB 2: CALL (Prototype dark call design) */}
         {tab === 'call' && (
-          <ScrollView contentContainerStyle={styles.callTabContent}>
-            <View style={styles.callCardContainer}>
-              <Card style={styles.callCard}>
-                <Mascot size="l" style={styles.callMascot} />
-                <Text style={styles.callTitle}>Talk to Kidsko 🦉</Text>
+          <FadeSlideIn key="call" duration={180} style={{ flex: 1 }}>
+            <LinearGradient
+              colors={gradients.callDark.colors}
+              start={gradients.callDark.start}
+              end={gradients.callDark.end}
+              style={StyleSheet.absoluteFill}
+            />
+
+            {/* Soft decorative background orb */}
+            <View style={styles.callBackdropOrb} pointerEvents="none" />
+
+            <ScrollView
+              contentContainerStyle={styles.callTabContent}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.callHeaderCenter}>
+                <Bounce>
+                  <LinearGradient
+                    colors={gradients.primary.colors}
+                    start={gradients.primary.start}
+                    end={gradients.primary.end}
+                    style={styles.callMascotBadge}
+                  >
+                    <Text style={styles.callMascotEmoji}>🦉</Text>
+                  </LinearGradient>
+                </Bounce>
+                <Text style={styles.callTitle}>Talk to Kidsko!</Text>
                 <Text style={styles.callSubtitle}>
                   {activeStudent
                     ? `Ready to talk with ${activeStudent.student_name}? Speak naturally or show your homework!`
-                    : 'Select a child to start your call.'}
+                    : 'Choose how you want to talk to me today 👇'}
                 </Text>
+              </View>
 
-                <View style={styles.callPillWrapper}>
-                  <Pill
-                    label={
-                      isPremium
-                        ? 'Premium plan: 100 Voice & Video minutes a week'
-                        : 'Free plan: 10 Voice & Video minutes a week'
-                    }
-                    color={isPremium ? colors.mint : colors.cardBgMuted}
-                    borderColor={isPremium ? colors.green : colors.border}
-                  />
+              {/* The Single "Start Call" Action Card */}
+              <PressScale
+                style={styles.callActionCardScale}
+                onPress={() => {
+                  if (activeStudent) {
+                    onStartCall(activeStudent);
+                  }
+                }}
+                disabled={!activeStudent}
+              >
+                <View style={styles.callActionCard}>
+                  <LinearGradient
+                    colors={gradients.primary.colors}
+                    start={gradients.primary.start}
+                    end={gradients.primary.end}
+                    style={styles.callIconSquircle}
+                  >
+                    <Text style={styles.callIconEmoji}>🎙️</Text>
+                  </LinearGradient>
+                  <View style={styles.callActionInfo}>
+                    <Text style={styles.callActionTitle}>Voice & Video Call</Text>
+                    <Text style={styles.callActionSub}>
+                      Talk & listen naturally, or show homework with camera 📷
+                    </Text>
+                  </View>
+                  <View style={styles.callArrowCircle}>
+                    <Text style={styles.callArrowText}>›</Text>
+                  </View>
                 </View>
+              </PressScale>
 
-                <Text style={styles.callHint}>
-                  💡 You can turn your camera on during the call to show homework!
+              {/* Plan usage pill from real billing state */}
+              <View style={styles.callPillContainer}>
+                <View style={styles.callPlanPill}>
+                  <Text style={styles.callPlanIcon}>{isPremium ? '⭐' : '⏱️'}</Text>
+                  <Text style={styles.callPlanText}>
+                    {isPremium
+                      ? 'Premium: 100 mins weekly Voice & Video'
+                      : 'Free: 10 mins weekly Voice & Video'}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Tip Card */}
+              <View style={styles.callTipCard}>
+                <Text style={styles.callTipIcon}>💡</Text>
+                <Text style={styles.callTipText}>
+                  Tip: Tap the camera icon anytime in-call to show your worksheet to Kidsko!
                 </Text>
-
-                <Button
-                  title="📞 Start Call"
-                  onPress={() => {
-                    if (activeStudent) {
-                      onStartCall(activeStudent);
-                    }
-                  }}
-                  variant="primary"
-                  style={styles.startCallButton}
-                  disabled={!activeStudent}
-                />
-              </Card>
-            </View>
-          </ScrollView>
+              </View>
+            </ScrollView>
+          </FadeSlideIn>
         )}
 
         {/* TAB 3: PARENTS */}
         {tab === 'parents' && (
+          <FadeSlideIn key="parents" duration={180} style={{ flex: 1 }}>
           <>
             {!parentsUnlocked ? (
               <View style={styles.gateWrapper}>
@@ -313,6 +364,7 @@ export default function MainShellScreen({
               </ScrollView>
             )}
           </>
+          </FadeSlideIn>
         )}
       </View>
 
@@ -396,7 +448,7 @@ const styles = StyleSheet.create({
   },
   brandText: {
     ...typography.subheading,
-    fontWeight: '900',
+    fontFamily: fontFamilies.black,
     color: colors.coralStrong,
     letterSpacing: -0.5,
   },
@@ -472,49 +524,161 @@ const styles = StyleSheet.create({
   firstRunErrorText: {
     ...typography.caption,
     color: colors.coralStrong,
-    fontWeight: '700',
+    fontFamily: fontFamilies.bold,
+  },
+  callBackdropOrb: {
+    position: 'absolute',
+    top: 50,
+    alignSelf: 'center',
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: 'rgba(255, 107, 107, 0.12)',
   },
   callTabContent: {
     flexGrow: 1,
+    paddingHorizontal: 20,
+    paddingTop: 36,
+    paddingBottom: 48,
+    alignItems: 'center',
+  },
+  callHeaderCenter: {
+    alignItems: 'center',
+    marginBottom: 28,
+  },
+  callMascotBadge: {
+    width: 96,
+    height: 96,
+    borderRadius: 28,
+    alignItems: 'center',
     justifyContent: 'center',
-    padding: spacing.lg,
+    marginBottom: 16,
+    shadowColor: colors.coral,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 8,
   },
-  callCardContainer: {
-    alignItems: 'center',
-  },
-  callCard: {
-    width: '100%',
-    alignItems: 'center',
-    padding: spacing.xl,
-    gap: spacing.md,
-  },
-  callMascot: {
-    marginBottom: spacing.xs,
+  callMascotEmoji: {
+    fontSize: 48,
   },
   callTitle: {
     ...typography.heading,
-    fontSize: 24,
-    color: colors.text,
+    fontSize: 28,
+    fontFamily: fontFamilies.black,
+    color: colors.white,
     textAlign: 'center',
+    marginBottom: 8,
   },
   callSubtitle: {
     ...typography.body,
-    color: colors.subtext,
+    fontSize: 14,
+    fontFamily: fontFamilies.semiBold,
+    color: 'rgba(255, 255, 255, 0.75)',
     textAlign: 'center',
-    maxWidth: 290,
+    lineHeight: 20,
+    maxWidth: 300,
   },
-  callPillWrapper: {
-    marginVertical: spacing.xs,
-  },
-  callHint: {
-    ...typography.caption,
-    color: colors.subtext,
-    textAlign: 'center',
-    fontStyle: 'italic',
-  },
-  startCallButton: {
+  callActionCardScale: {
     width: '100%',
-    marginTop: spacing.sm,
+    maxWidth: 340,
+    marginBottom: 16,
+  },
+  callActionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: radii.xl,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    padding: 16,
+  },
+  callIconSquircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  callIconEmoji: {
+    fontSize: 24,
+  },
+  callActionInfo: {
+    flex: 1,
+    marginRight: 8,
+  },
+  callActionTitle: {
+    ...typography.subheading,
+    fontSize: 17,
+    fontFamily: fontFamilies.extraBold,
+    color: colors.white,
+    marginBottom: 4,
+  },
+  callActionSub: {
+    ...typography.caption,
+    fontSize: 12,
+    fontFamily: fontFamilies.semiBold,
+    color: 'rgba(255, 255, 255, 0.7)',
+    lineHeight: 16,
+  },
+  callArrowCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  callArrowText: {
+    fontSize: 22,
+    fontFamily: fontFamilies.bold,
+    color: colors.white,
+    marginTop: -2,
+  },
+  callPillContainer: {
+    marginBottom: 16,
+  },
+  callPlanPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    gap: 6,
+  },
+  callPlanIcon: {
+    fontSize: 14,
+  },
+  callPlanText: {
+    fontSize: 12,
+    fontFamily: fontFamilies.bold,
+    color: 'rgba(255, 255, 255, 0.9)',
+  },
+  callTipCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 10,
+    maxWidth: 340,
+  },
+  callTipIcon: {
+    fontSize: 18,
+  },
+  callTipText: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: fontFamilies.semiBold,
+    color: 'rgba(255, 255, 255, 0.75)',
+    lineHeight: 17,
   },
   gateWrapper: {
     flex: 1,
@@ -560,7 +724,7 @@ const styles = StyleSheet.create({
   actionCardArrow: {
     fontSize: 18,
     color: colors.subtext,
-    fontWeight: '700',
+    fontFamily: fontFamilies.bold,
   },
   modalOverlay: {
     flex: 1,
@@ -596,7 +760,7 @@ const styles = StyleSheet.create({
   },
   switcherItemActive: {
     borderColor: colors.coralStrong,
-    backgroundColor: '#FFEAEA',
+    backgroundColor: colors.cardBgMuted,
   },
   switcherItemIcon: {
     fontSize: 20,
@@ -608,11 +772,11 @@ const styles = StyleSheet.create({
   },
   switcherItemNameActive: {
     color: colors.coralStrong,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
   },
   checkmark: {
     fontSize: 16,
     color: colors.coralStrong,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
   },
 });

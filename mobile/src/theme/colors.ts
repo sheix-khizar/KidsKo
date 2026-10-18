@@ -24,7 +24,15 @@ export const colors = {
 
   // Status & Role
   parentNavy: '#1E3A5F',
+  parentBlue: '#2980B9',
   error: '#D94A4A',
+  errorBg: '#FFEAEA',
+  errorBorder: '#FFC7C7',
+  warningBg: '#FFF3CD',
+  warningBorder: '#FFEEBA',
+  warningText: '#856404',
+  mutedText: '#B2BEC3',
+  disabledBg: '#E2E8F0',
   success: '#00B894',
   white: '#FFFFFF',
 } as const;

@@ -1,3 +1,4 @@
+import { fontFamilies, colors } from '../theme';
 import React, { useState } from 'react';
 import {
   Modal,
@@ -143,7 +144,7 @@ export default function ServerConfigModal({ visible, onClose, onSaved }: Props) 
             disabled={testing}
           >
             {testing ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color={colors.white} />
             ) : (
               <Text style={styles.btnPrimaryText}>Test & Connect</Text>
             )}
@@ -185,42 +186,42 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 380,
-    backgroundColor: '#fff',
+    backgroundColor: colors.cardBg,
     borderRadius: 20,
     padding: 22,
-    shadowColor: '#000',
+    shadowColor: colors.text,
     shadowOpacity: 0.15,
     shadowRadius: 10,
     elevation: 8,
   },
   title: {
     fontSize: 20,
-    fontWeight: '800',
-    color: '#1a73e8',
+    fontFamily: fontFamilies.extraBold,
+    color: colors.coralStrong,
     marginBottom: 6,
     textAlign: 'center',
   },
   subtitle: {
     fontSize: 13,
-    color: '#6b7280',
+    color: colors.subtext,
     lineHeight: 18,
     marginBottom: 16,
     textAlign: 'center',
   },
   label: {
     fontSize: 13,
-    fontWeight: '700',
-    color: '#374151',
+    fontFamily: fontFamilies.bold,
+    color: colors.text,
     marginBottom: 6,
   },
   input: {
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: colors.border,
     borderRadius: 12,
     padding: 12,
     fontSize: 14,
-    color: '#111827',
+    color: colors.text,
     marginBottom: 12,
   },
   resultBadge: {
@@ -229,20 +230,20 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   resultSuccess: {
-    backgroundColor: '#dcfce7',
+    backgroundColor: colors.cardBgMuted,
   },
   resultError: {
-    backgroundColor: '#fee2e2',
+    backgroundColor: colors.errorBg,
   },
   resultText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontFamily: fontFamilies.semiBold,
   },
   resultSuccessText: {
-    color: '#15803d',
+    color: colors.success,
   },
   resultErrorText: {
-    color: '#b91c1c',
+    color: colors.error,
   },
   btn: {
     paddingVertical: 12,
@@ -251,13 +252,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   btnPrimary: {
-    backgroundColor: '#1a73e8',
+    backgroundColor: colors.coralStrong,
     marginBottom: 10,
   },
   btnPrimaryText: {
-    color: '#fff',
+    color: colors.white,
     fontSize: 15,
-    fontWeight: '700',
+    fontFamily: fontFamilies.bold,
   },
   row: {
     flexDirection: 'row',
@@ -269,20 +270,20 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   btnSecondary: {
-    backgroundColor: '#e5e7eb',
+    backgroundColor: colors.borderLight,
   },
   btnSecondaryText: {
-    color: '#374151',
+    color: colors.text,
     fontSize: 13,
-    fontWeight: '600',
+    fontFamily: fontFamilies.semiBold,
   },
   cancelBtn: {
     paddingVertical: 10,
     alignItems: 'center',
   },
   cancelBtnText: {
-    color: '#6b7280',
+    color: colors.subtext,
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: fontFamilies.semiBold,
   },
 });

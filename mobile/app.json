@@ -6,6 +6,11 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFF8F0"
+    },
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
@@ -49,7 +54,8 @@
           "speechRecognitionPermission": "Kidsko needs speech recognition to understand your child's questions."
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-splash-screen"
     ],
     "extra": {
       "eas": {

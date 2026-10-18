@@ -8,27 +8,42 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
   Modal,
   Image,
   ScrollView,
 } from 'react-native';
-import { Mascot } from '../ui';
+import {
+  LinearGradient,
+  LiveDot,
+  TypingDots,
+  Pulse,
+  PressScale,
+  FadeSlideIn,
+} from '../ui';
 import { sendMessage, Message } from '../services/chat';
 import { analyzeHomework } from '../services/homework';
 import { useVoiceInput } from '../hooks/useVoiceInput';
-import { pickImageFromGallery, captureImageFromCamera, ProcessedImage } from '../utils/imageHelper';
+import {
+  pickImageFromGallery,
+  captureImageFromCamera,
+  ProcessedImage,
+} from '../utils/imageHelper';
 import { cleanMessageText } from '../utils/messageText';
-import { colors, radii, typography, spacing } from '../theme';
+import { colors, radii, fontFamilies, gradients } from '../theme';
 import ChatHistoryDrawer from '../components/ChatHistoryDrawer';
 import ParentalGate from '../components/ParentalGate';
-import { ThreadSummary, getThreads, getThreadMessages, deleteThread } from '../services/threads';
+import {
+  ThreadSummary,
+  getThreads,
+  getThreadMessages,
+  deleteThread,
+} from '../services/threads';
 
-const SUGGESTION_CHIPS = [
-  { text: 'Why is the sky blue?', isHomework: false },
-  { text: 'Help me with fractions', isHomework: false },
-  { text: 'Tell me about dinosaurs', isHomework: false },
-  { text: '📸 Help with my homework', isHomework: true },
+const PROMPT_CARDS = [
+  { text: 'Why is the sky blue?', icon: '🌍', isHomework: false },
+  { text: 'Help me with maths!', icon: '🔢', isHomework: false },
+  { text: 'Tell me about dinosaurs', icon: '🦕', isHomework: false },
+  { text: 'Help with my homework', icon: '📸', isHomework: true },
 ];
 
 type Props = {
@@ -39,6 +54,7 @@ type Props = {
   initialExplanation?: string;
   onLimitReached?: () => void;
   embedded?: boolean;
+  onSwitchStudent?: () => void;
 };
 
 export default function ChatScreen({
@@ -49,6 +65,7 @@ export default function ChatScreen({
   initialExplanation,
   onLimitReached,
   embedded = false,
+  onSwitchStudent,
 }: Props) {
   const [messages, setMessages] = useState<Message[]>(
     initialExplanation
@@ -69,7 +86,7 @@ export default function ChatScreen({
   const [showImagePickerModal, setShowImagePickerModal] = useState(false);
   const [previewImage, setPreviewImage] = useState<ProcessedImage | null>(null);
 
-  // History drawer and continuity states (L4)
+  // History drawer and continuity states
   const [showDrawer, setShowDrawer] = useState(false);
   const [lastThread, setLastThread] = useState<ThreadSummary | null>(null);
   const [threadToDelete, setThreadToDelete] = useState<ThreadSummary | null>(null);
@@ -169,9 +186,9 @@ export default function ChatScreen({
     }
   };
 
-
-  const handleSend = async () => {
-    const userText = input.trim();
+  const handleSend = async (overridePrompt?: string) => {
+    const textToSend = typeof overridePrompt === 'string' ? overridePrompt : input;
+    const userText = textToSend.trim();
     const imageToSend = previewImage;
 
     if ((!userText && !imageToSend) || sending) return;
@@ -260,87 +277,147 @@ export default function ChatScreen({
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <View style={styles.header}>
-        <View style={styles.headerTopRow}>
-          <View style={styles.headerLeftActions}>
-            {!embedded && (
-              <Pressable onPress={onBack} style={styles.backButtonTouch}>
-                <Text style={styles.backButton}>← Back</Text>
-              </Pressable>
-            )}
-            <Pressable
-              onPress={() => setShowDrawer(true)}
-              style={styles.hamburgerButton}
-              accessibilityRole="button"
-              accessibilityLabel="Open chat history drawer"
-            >
-              <Text style={styles.hamburgerIcon}>☰</Text>
-            </Pressable>
-          </View>
-          <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerTitle}>Kidsko.ai 🦉</Text>
-            <Text style={styles.headerSubtitle}>{studentName}</Text>
-          </View>
-        </View>
-        {remaining !== null && (
-          <View style={[styles.usagePill, isPremium && styles.usagePillPremium, remaining <= 5 && !isPremium && styles.usagePillLow]}>
-            <Text style={styles.usagePillText}>
-              {isPremium ? (remaining <= 20 ? `⭐ Premium (${remaining} left this week)` : '⭐ Premium') : `💬 ${remaining} left this week`}
-            </Text>
-          </View>
-        )}
-      </View>
-
-      {messages.length === 0 ? (
-        <ScrollView contentContainerStyle={styles.welcomeContainer}>
-          {lastThread && (
-            <Pressable
-              style={({ pressed }) => [
-                styles.continueCard,
-                pressed && styles.continueCardPressed,
-              ]}
-              onPress={() => handleSelectThread(lastThread)}
-              accessibilityRole="button"
-              accessibilityLabel={`Continue chat: ${lastThread.title}`}
-            >
-              <View style={styles.continueCardContent}>
-                <View style={styles.continueCardHeader}>
-                  <Text style={styles.continueCardTag}>Continue where you left off ⏱️</Text>
-                </View>
-                <Text style={styles.continueCardTitle} numberOfLines={1}>
-                  {lastThread.title}
-                </Text>
-              </View>
-              <Text style={styles.continueCardArrow}>→</Text>
+      {/* ── Topbar Matching Prototype ── */}
+      <View style={styles.topbar}>
+        <View style={styles.topbarLeft}>
+          {!embedded && (
+            <Pressable onPress={onBack} style={styles.backButtonTouch}>
+              <Text style={styles.backButton}>←</Text>
             </Pressable>
           )}
+          <Pressable
+            onPress={() => setShowDrawer(true)}
+            style={styles.hamburgerButton}
+            accessibilityRole="button"
+            accessibilityLabel="Open chat history drawer"
+          >
+            <View style={styles.hamburgerBar1} />
+            <View style={styles.hamburgerBar2} />
+            <View style={styles.hamburgerBar3} />
+          </Pressable>
+        </View>
 
-          <Mascot size="m" style={{ marginBottom: 12 }} />
-          <Text style={styles.welcomeTitle}>Hi, {studentName}! 🦉</Text>
-          <Text style={styles.welcomeSubtitle}>What would you like to explore today?</Text>
-
-          <View style={styles.chipsContainer}>
-            {SUGGESTION_CHIPS.map((chip, idx) => (
-              <Pressable
-                key={idx}
-                style={({ pressed }) => [
-                  styles.chipButton,
-                  pressed && styles.chipButtonPressed,
-                ]}
-                onPress={() => {
-                  if (chip.isHomework) {
-                    setShowImagePickerModal(true);
-                  } else {
-                    setInput(chip.text);
-                  }
-                }}
-                accessibilityRole="button"
-                accessibilityLabel={chip.text}
-              >
-                <Text style={styles.chipText}>{chip.text}</Text>
-              </Pressable>
-            ))}
+        <Pressable
+          style={styles.topbarCenter}
+          onPress={onSwitchStudent}
+          disabled={!onSwitchStudent}
+          accessibilityRole="button"
+          accessibilityLabel={`Active student is ${studentName}. Tap to switch student.`}
+        >
+          <LinearGradient
+            colors={gradients.primary.colors}
+            start={gradients.primary.start}
+            end={gradients.primary.end}
+            style={styles.studentAvatar}
+          >
+            <Text style={styles.studentAvatarEmoji}>👧</Text>
+          </LinearGradient>
+          <View style={styles.studentInfoCol}>
+            <Text style={styles.topbarTitle}>
+              {studentName}'s <Text style={styles.chatHighlight}>Chat</Text>
+            </Text>
+            <View style={styles.statusRow}>
+              <LiveDot size={6} color={colors.mint} />
+              <Text style={styles.statusText}>Kidsko is online</Text>
+            </View>
           </View>
+        </Pressable>
+
+        <Pressable
+          onPress={handleNewChat}
+          style={styles.newChatButton}
+          accessibilityRole="button"
+          accessibilityLabel="Start new chat"
+        >
+          <Text style={styles.newChatIcon}>✏️</Text>
+        </Pressable>
+      </View>
+
+      {/* Usage pill indicator if active */}
+      {remaining !== null && (
+        <View
+          style={[
+            styles.usagePill,
+            isPremium && styles.usagePillPremium,
+            remaining <= 5 && !isPremium && styles.usagePillLow,
+          ]}
+        >
+          <Text style={styles.usagePillText}>
+            {isPremium
+              ? remaining <= 20
+                ? `⭐ Premium (${remaining} left this week)`
+                : '⭐ Premium'
+              : `💬 ${remaining} left this week`}
+          </Text>
+        </View>
+      )}
+
+      {/* ── Content Area: Greeting or Messages ── */}
+      {messages.length === 0 ? (
+        <ScrollView
+          contentContainerStyle={styles.welcomeContainer}
+          showsVerticalScrollIndicator={false}
+        >
+          {lastThread && (
+            <PressScale style={styles.continueCardWrapper}>
+              <Pressable
+                style={styles.continueCard}
+                onPress={() => handleSelectThread(lastThread)}
+                accessibilityRole="button"
+                accessibilityLabel={`Continue chat: ${lastThread.title}`}
+              >
+                <View style={styles.continueCardContent}>
+                  <Text style={styles.continueCardTag}>CONTINUE WHERE YOU LEFT OFF ⏱️</Text>
+                  <Text style={styles.continueCardTitle} numberOfLines={1}>
+                    {lastThread.title}
+                  </Text>
+                </View>
+                <Text style={styles.continueCardArrow}>→</Text>
+              </Pressable>
+            </PressScale>
+          )}
+
+          {/* Greeting Hero with primary gradient */}
+          <FadeSlideIn delay={0}>
+            <LinearGradient
+              colors={gradients.primary.colors}
+              start={gradients.primary.start}
+              end={gradients.primary.end}
+              style={styles.heroCard}
+            >
+              <Text style={styles.heroOwlEmoji}>🦉</Text>
+              <Text style={styles.heroTitle}>Hi {studentName}! 👋</Text>
+              <Text style={styles.heroSubtitle}>
+                I'm Kidsko! What do you want to learn today?
+              </Text>
+            </LinearGradient>
+          </FadeSlideIn>
+
+          {/* 2x2 Prompt Suggestion Cards */}
+          <FadeSlideIn delay={60}>
+            <Text style={styles.promptsSectionHeader}>TRY ASKING ME...</Text>
+            <View style={styles.promptsGrid}>
+              {PROMPT_CARDS.map((card, idx) => (
+                <PressScale key={idx} style={styles.promptCardScale}>
+                  <Pressable
+                    style={styles.promptCard}
+                    onPress={() => {
+                      if (card.isHomework) {
+                        setShowImagePickerModal(true);
+                      } else {
+                        handleSend(card.text);
+                      }
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={card.text}
+                  >
+                    <Text style={styles.promptCardIcon}>{card.icon}</Text>
+                    <Text style={styles.promptCardText}>{card.text}</Text>
+                  </Pressable>
+                </PressScale>
+              ))}
+            </View>
+          </FadeSlideIn>
         </ScrollView>
       ) : (
         <FlatList
@@ -348,29 +425,58 @@ export default function ChatScreen({
           data={messages}
           keyExtractor={(_, i) => i.toString()}
           style={styles.messagesList}
-          contentContainerStyle={{ padding: 14, gap: 12 }}
-          renderItem={({ item }) => (
-            <View style={[styles.msgRow, item.role === 'user' && styles.msgRowUser]}>
-              <View style={[styles.avatar, item.role === 'user' && styles.avatarUser]}>
-                <Text>{item.role === 'user' ? '🧒' : '🦉'}</Text>
+          contentContainerStyle={styles.messagesContent}
+          renderItem={({ item, index }) => (
+            <FadeSlideIn delay={Math.min(index * 30, 150)}>
+              <View
+                style={[
+                  styles.msgRow,
+                  item.role === 'user' && styles.msgRowUser,
+                ]}
+              >
+                <View
+                  style={[
+                    styles.avatar,
+                    item.role === 'user' && styles.avatarUser,
+                  ]}
+                >
+                  <Text style={styles.avatarEmoji}>
+                    {item.role === 'user' ? '👧' : '🦉'}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.bubble,
+                    item.role === 'user' && styles.bubbleUser,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.bubbleText,
+                      item.role === 'user' && styles.bubbleTextUser,
+                    ]}
+                  >
+                    {cleanMessageText(item.content)}
+                  </Text>
+                </View>
               </View>
-              <View style={[styles.bubble, item.role === 'user' && styles.bubbleUser]}>
-                <Text style={[styles.bubbleText, item.role === 'user' && styles.bubbleTextUser]}>
-                  {cleanMessageText(item.content)}
-                </Text>
-              </View>
-            </View>
+            </FadeSlideIn>
           )}
         />
       )}
 
-      {/* Image Attachment Bar (directly above inputBar) */}
+      {/* Homework photo preview bar if image selected */}
       {previewImage && (
         <View style={styles.attachmentBar}>
-          <Image source={{ uri: previewImage.uri }} style={styles.attachmentThumbnail} />
+          <Image
+            source={{ uri: previewImage.uri }}
+            style={styles.attachmentThumbnail}
+          />
           <View style={styles.attachmentInfo}>
             <Text style={styles.attachmentTitle}>Homework Photo Attached 📷</Text>
-            <Text style={styles.attachmentSub}>Type your question below or tap send</Text>
+            <Text style={styles.attachmentSub}>
+              Type your question below or tap send
+            </Text>
           </View>
           <Pressable
             style={styles.removeAttachmentBtn}
@@ -383,36 +489,33 @@ export default function ChatScreen({
         </View>
       )}
 
+      {/* Typing animation while AI replies */}
       {sending && (
         <View style={styles.typingRow}>
-          <ActivityIndicator size="small" color={colors.coralStrong} />
-          <Text style={styles.typingText}>Kidsko is thinking...</Text>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarEmoji}>🦉</Text>
+          </View>
+          <View style={styles.typingBubble}>
+            <TypingDots color={colors.coral} />
+          </View>
         </View>
       )}
 
       {errorMsg && <Text style={styles.error}>{errorMsg}</Text>}
 
+      {/* ── Pill Input Bar ── */}
       <View style={styles.inputBar}>
         <Pressable
-          style={styles.imagePickerButton}
+          style={styles.attachButton}
           onPress={() => setShowImagePickerModal(true)}
           accessibilityRole="button"
           accessibilityLabel="Attach homework photo"
         >
-          <Text style={styles.imagePickerButtonText}>📷</Text>
-        </Pressable>
-
-        <Pressable
-          style={[styles.micButton, listening && styles.micButtonListening]}
-          onPress={listening ? stopListening : startListening}
-          accessibilityRole="button"
-          accessibilityLabel="Voice input"
-        >
-          <Text style={styles.micButtonText}>{listening ? '🔴' : '🎙️'}</Text>
+          <Text style={styles.attachIcon}>📷</Text>
         </Pressable>
 
         <TextInput
-          style={[styles.input, listening && styles.inputListening]}
+          style={[styles.inputField, listening && styles.inputListening]}
           placeholder={
             listening
               ? 'Listening... Speak now!'
@@ -425,18 +528,44 @@ export default function ChatScreen({
           onChangeText={setInput}
           multiline
         />
-        <Pressable
-          style={[
-            styles.sendButton,
-            !input.trim() && !previewImage && styles.sendButtonInactive,
-          ]}
-          onPress={handleSend}
-          disabled={(!input.trim() && !previewImage) || sending}
-          accessibilityRole="button"
-          accessibilityLabel="Send message"
-        >
-          <Text style={styles.sendButtonText}>➤</Text>
-        </Pressable>
+
+        {/* Mic button with pulse animation when listening */}
+        {listening ? (
+          <Pulse variant="plain" style={styles.micPulse}>
+            <Pressable
+              style={[styles.micButton, styles.micButtonListening]}
+              onPress={stopListening}
+              accessibilityRole="button"
+              accessibilityLabel="Stop voice input"
+            >
+              <Text style={styles.micIcon}>🔴</Text>
+            </Pressable>
+          </Pulse>
+        ) : (
+          <Pressable
+            style={styles.micButton}
+            onPress={startListening}
+            accessibilityRole="button"
+            accessibilityLabel="Voice input"
+          >
+            <Text style={styles.micIcon}>🎙️</Text>
+          </Pressable>
+        )}
+
+        <PressScale style={styles.sendButtonScale}>
+          <Pressable
+            style={[
+              styles.sendButton,
+              !input.trim() && !previewImage && styles.sendButtonInactive,
+            ]}
+            onPress={() => handleSend()}
+            disabled={(!input.trim() && !previewImage) || sending}
+            accessibilityRole="button"
+            accessibilityLabel="Send message"
+          >
+            <Text style={styles.sendButtonText}>➤</Text>
+          </Pressable>
+        </PressScale>
       </View>
 
       {/* Image Selection Modal */}
@@ -444,14 +573,21 @@ export default function ChatScreen({
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Select Homework Photo</Text>
-            <Text style={styles.modalSubtitle}>How would you like to attach the photo?</Text>
+            <Text style={styles.modalSubtitle}>
+              How would you like to attach the photo?
+            </Text>
 
             <Pressable style={styles.optionButton} onPress={handleTakeCamera}>
               <Text style={styles.optionButtonText}>📸 Take Photo with Camera</Text>
             </Pressable>
 
-            <Pressable style={[styles.optionButton, styles.optionButtonSecondary]} onPress={handlePickGallery}>
-              <Text style={styles.optionButtonTextSecondary}>🖼️ Choose from Gallery</Text>
+            <Pressable
+              style={[styles.optionButton, styles.optionButtonSecondary]}
+              onPress={handlePickGallery}
+            >
+              <Text style={styles.optionButtonTextSecondary}>
+                🖼️ Choose from Gallery
+              </Text>
             </Pressable>
 
             <Pressable
@@ -466,7 +602,7 @@ export default function ChatScreen({
         </View>
       </Modal>
 
-      {/* Chat History Drawer (L4) */}
+      {/* Chat History Drawer */}
       <ChatHistoryDrawer
         visible={showDrawer}
         onClose={() => setShowDrawer(false)}
@@ -479,7 +615,7 @@ export default function ChatScreen({
         onRequestDeleteThread={handleRequestDeleteThread}
       />
 
-      {/* Parental Gate for deleting chat thread (L4) */}
+      {/* Parental Gate for deleting chat thread */}
       <ParentalGate
         visible={showParentalGate}
         onSuccess={handleParentalGateSuccess}
@@ -494,178 +630,264 @@ export default function ChatScreen({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  header: {
-    paddingTop: 16,
-    paddingBottom: 12,
-    paddingHorizontal: 16,
-    backgroundColor: colors.cardBg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
   },
-  headerTopRow: {
+  topbar: {
+    height: 56,
+    paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    justifyContent: 'space-between',
+    backgroundColor: colors.white,
+    borderBottomWidth: 2,
+    borderBottomColor: colors.border,
   },
-  headerLeftActions: {
+  topbarLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  backButtonTouch: {
+    padding: 6,
+  },
+  backButton: {
+    fontSize: 20,
+    fontFamily: fontFamilies.bold,
+    color: colors.coral,
+  },
+  hamburgerButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 5,
+  },
+  hamburgerBar1: {
+    width: 22,
+    height: 2,
+    backgroundColor: colors.text,
+    borderRadius: 2,
+  },
+  hamburgerBar2: {
+    width: 14,
+    height: 2,
+    backgroundColor: colors.text,
+    borderRadius: 2,
+  },
+  hamburgerBar3: {
+    width: 22,
+    height: 2,
+    backgroundColor: colors.text,
+    borderRadius: 2,
+  },
+  topbarCenter: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
   },
-  backButtonTouch: {
-    paddingVertical: 4,
-    paddingRight: 4,
-  },
-  backButton: { color: colors.coralStrong, fontWeight: '700', fontSize: 14 },
-  hamburgerButton: {
-    width: 38,
-    height: 38,
+  studentAvatar: {
+    width: 34,
+    height: 34,
     borderRadius: 12,
-    backgroundColor: colors.cardBgMuted,
-    borderWidth: 1,
-    borderColor: colors.border,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  hamburgerIcon: {
-    fontSize: 20,
+  studentAvatarEmoji: {
+    fontSize: 18,
+  },
+  studentInfoCol: {
+    justifyContent: 'center',
+  },
+  topbarTitle: {
+    fontSize: 14,
+    fontFamily: fontFamilies.black,
     color: colors.text,
-    fontWeight: '800',
-    marginTop: -2,
+    lineHeight: 16,
   },
-  headerTitleContainer: {
-    flex: 1,
+  chatHighlight: {
+    color: colors.coral,
   },
-  headerTitle: { ...typography.subheading, fontSize: 18, fontWeight: '900', color: colors.coralStrong },
-  headerSubtitle: { ...typography.caption, fontSize: 13, color: colors.subtext, fontWeight: '700', marginTop: 1 },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  statusText: {
+    fontSize: 10,
+    fontFamily: fontFamilies.bold,
+    color: colors.mint,
+  },
+  newChatButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  newChatIcon: {
+    fontSize: 18,
+  },
   usagePill: {
-    alignSelf: 'flex-start',
-    marginTop: 8,
+    alignSelf: 'center',
+    marginTop: 6,
     paddingHorizontal: 12,
-    paddingVertical: 5,
+    paddingVertical: 4,
     borderRadius: radii.full,
     backgroundColor: colors.cardBgMuted,
     borderWidth: 1,
     borderColor: colors.border,
   },
   usagePillLow: {
-    backgroundColor: '#FFF0F0',
+    backgroundColor: colors.errorBg,
     borderColor: colors.coralStrong,
   },
   usagePillPremium: {
-    backgroundColor: '#FEF08A',
-    borderColor: '#FDE047',
+    backgroundColor: colors.sun,
+    borderColor: colors.orange,
   },
-  usagePillText: { ...typography.caption, fontSize: 11, fontWeight: '800', color: colors.text },
+  usagePillText: {
+    fontSize: 11,
+    fontFamily: fontFamilies.extraBold,
+    color: colors.text,
+  },
   welcomeContainer: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
+    padding: 18,
+  },
+  continueCardWrapper: {
+    width: '100%',
+    marginBottom: 16,
   },
   continueCard: {
     width: '100%',
-    maxWidth: 340,
-    backgroundColor: colors.cardBg,
-    borderRadius: radii.lg,
+    backgroundColor: colors.white,
+    borderRadius: 20,
     borderWidth: 1.5,
     borderColor: colors.border,
-    padding: 14,
-    marginBottom: 20,
+    padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-  },
-  continueCardPressed: {
-    backgroundColor: colors.cardBgMuted,
-    borderColor: colors.coralStrong,
   },
   continueCardContent: {
     flex: 1,
     paddingRight: 10,
   },
-  continueCardHeader: {
+  continueCardTag: {
+    fontSize: 11,
+    fontFamily: fontFamilies.extraBold,
+    color: colors.coral,
+    letterSpacing: 0.5,
     marginBottom: 4,
   },
-  continueCardTag: {
-    ...typography.caption,
-    fontSize: 11,
-    fontWeight: '800',
-    color: colors.coralStrong,
-    textTransform: 'uppercase',
-  },
   continueCardTitle: {
-    ...typography.label,
     fontSize: 14,
+    fontFamily: fontFamilies.bold,
     color: colors.text,
   },
   continueCardArrow: {
     fontSize: 18,
-    color: colors.coralStrong,
-    fontWeight: '900',
+    color: colors.coral,
+    fontFamily: fontFamilies.black,
   },
-  welcomeTitle: {
-    ...typography.heading,
+  heroCard: {
+    borderRadius: 24,
+    padding: 22,
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  heroOwlEmoji: {
+    fontSize: 52,
+    marginBottom: 8,
+  },
+  heroTitle: {
     fontSize: 22,
-    color: colors.text,
+    fontFamily: fontFamilies.black,
+    color: colors.white,
     textAlign: 'center',
   },
-  welcomeSubtitle: {
-    ...typography.body,
+  heroSubtitle: {
     fontSize: 14,
-    color: colors.subtext,
-    marginTop: 6,
-    marginBottom: 20,
+    fontFamily: fontFamilies.bold,
+    color: 'rgba(255, 255, 255, 0.95)',
     textAlign: 'center',
+    marginTop: 6,
   },
-  chipsContainer: {
-    width: '100%',
-    maxWidth: 340,
-    gap: 10,
+  promptsSectionHeader: {
+    fontSize: 12,
+    fontFamily: fontFamilies.extraBold,
+    color: colors.subtext,
+    letterSpacing: 0.5,
+    marginBottom: 12,
   },
-  chipButton: {
-    backgroundColor: colors.cardBg,
+  promptsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  promptCardScale: {
+    width: '48%',
+  },
+  promptCard: {
+    backgroundColor: colors.white,
     borderWidth: 1.5,
     borderColor: colors.border,
-    borderRadius: radii.lg,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: 20,
+    padding: 13,
+    minHeight: 104,
+    justifyContent: 'space-between',
   },
-  chipButtonPressed: {
-    backgroundColor: colors.cardBgMuted,
-    borderColor: colors.coralStrong,
+  promptCardIcon: {
+    fontSize: 26,
+    marginBottom: 6,
   },
-  chipText: {
-    ...typography.body,
-    fontSize: 14,
-    fontWeight: '700',
+  promptCardText: {
+    fontSize: 13.5,
+    fontFamily: fontFamilies.extraBold,
     color: colors.text,
+    lineHeight: 18,
   },
-  messagesList: { flex: 1, backgroundColor: colors.background },
-  msgRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
-  msgRowUser: { flexDirection: 'row-reverse' },
+  messagesList: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  messagesContent: {
+    padding: 16,
+    gap: 14,
+  },
+  msgRow: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'flex-start',
+  },
+  msgRowUser: {
+    flexDirection: 'row-reverse',
+  },
   avatar: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: 14,
     backgroundColor: colors.sun,
-    borderWidth: 1.5,
-    borderColor: colors.white,
     justifyContent: 'center',
     alignItems: 'center',
   },
   avatarUser: {
     backgroundColor: colors.cardBgMuted,
-    borderColor: colors.border,
+  },
+  avatarEmoji: {
+    fontSize: 18,
   },
   bubble: {
-    backgroundColor: colors.cardBg,
+    backgroundColor: colors.white,
     borderRadius: 20,
     borderBottomLeftRadius: 4,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
     padding: 14,
     maxWidth: '78%',
@@ -676,76 +898,117 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 4,
     borderWidth: 0,
   },
-  bubbleText: { ...typography.body, fontSize: 15, color: colors.text, lineHeight: 22 },
-  bubbleTextUser: { color: colors.white },
-  typingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingBottom: 8 },
-  typingText: { ...typography.caption, fontSize: 13, color: colors.subtext, fontWeight: '600' },
-  error: { color: colors.error, textAlign: 'center', paddingHorizontal: 16, paddingBottom: 6, fontSize: 12, fontWeight: '700' },
+  bubbleText: {
+    fontSize: 15,
+    fontFamily: fontFamilies.semiBold,
+    color: colors.text,
+    lineHeight: 22,
+  },
+  bubbleTextUser: {
+    color: colors.white,
+  },
+  typingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  typingBubble: {
+    backgroundColor: colors.white,
+    borderRadius: 18,
+    borderBottomLeftRadius: 4,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  error: {
+    color: colors.error,
+    textAlign: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 6,
+    fontSize: 12,
+    fontFamily: fontFamilies.bold,
+  },
   inputBar: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     gap: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 10,
-    backgroundColor: colors.cardBg,
-    borderTopWidth: 1,
+    backgroundColor: colors.white,
+    borderTopWidth: 2,
     borderTopColor: colors.border,
   },
-  imagePickerButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.cardBgMuted,
-    borderWidth: 1,
-    borderColor: colors.border,
+  attachButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.background,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  imagePickerButtonText: { fontSize: 20 },
+  attachIcon: {
+    fontSize: 20,
+  },
+  micPulse: {
+    width: 40,
+    height: 40,
+  },
   micButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.cardBgMuted,
-    borderWidth: 1,
-    borderColor: colors.border,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.background,
     justifyContent: 'center',
     alignItems: 'center',
   },
   micButtonListening: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: colors.errorBg,
     borderWidth: 1.5,
     borderColor: colors.coralStrong,
   },
-  micButtonText: { fontSize: 20 },
-  input: {
+  micIcon: {
+    fontSize: 20,
+  },
+  inputField: {
     flex: 1,
     backgroundColor: colors.background,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
     borderRadius: 22,
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: Platform.OS === 'ios' ? 10 : 8,
     fontSize: 15,
+    fontFamily: fontFamilies.semiBold,
     maxHeight: 110,
     color: colors.text,
   },
   inputListening: {
-    backgroundColor: '#FFF0F0',
+    backgroundColor: colors.errorBg,
     borderColor: colors.coralStrong,
   },
+  sendButtonScale: {
+    width: 40,
+    height: 40,
+  },
   sendButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: colors.coralStrong,
     justifyContent: 'center',
     alignItems: 'center',
   },
   sendButtonInactive: {
-    backgroundColor: '#E2E8F0',
+    backgroundColor: colors.disabledBg,
   },
-  sendButtonText: { color: colors.white, fontSize: 18, fontWeight: '900' },
+  sendButtonText: {
+    color: colors.white,
+    fontSize: 16,
+    fontFamily: fontFamilies.black,
+  },
   attachmentBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -756,22 +1019,46 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     gap: 12,
   },
-  attachmentThumbnail: { width: 44, height: 44, borderRadius: 10, backgroundColor: '#CBD5E1' },
-  attachmentInfo: { flex: 1, justifyContent: 'center' },
-  attachmentTitle: { ...typography.label, fontSize: 13, color: colors.text },
-  attachmentSub: { ...typography.caption, fontSize: 11, color: colors.subtext },
-  removeAttachmentBtn: {
+  attachmentThumbnail: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: 10,
+    backgroundColor: colors.disabledBg,
+  },
+  attachmentInfo: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  attachmentTitle: {
+    fontSize: 13,
+    fontFamily: fontFamilies.bold,
+    color: colors.text,
+  },
+  attachmentSub: {
+    fontSize: 11,
+    fontFamily: fontFamilies.semiBold,
+    color: colors.subtext,
+  },
+  removeAttachmentBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: colors.white,
     borderWidth: 1,
     borderColor: colors.border,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  removeAttachmentText: { color: colors.subtext, fontSize: 16, fontWeight: '800' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  removeAttachmentText: {
+    color: colors.subtext,
+    fontSize: 16,
+    fontFamily: fontFamilies.extraBold,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
   modalContent: {
     backgroundColor: colors.cardBg,
     borderTopLeftRadius: 28,
@@ -780,8 +1067,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
-  modalTitle: { ...typography.heading, fontSize: 19, color: colors.text },
-  modalSubtitle: { ...typography.caption, fontSize: 13, color: colors.subtext, marginBottom: 8, textAlign: 'center' },
+  modalTitle: {
+    fontSize: 19,
+    fontFamily: fontFamilies.black,
+    color: colors.text,
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    fontFamily: fontFamilies.semiBold,
+    color: colors.subtext,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
   optionButton: {
     width: '100%',
     backgroundColor: colors.coralStrong,
@@ -789,13 +1086,21 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
   },
-  optionButtonText: { color: colors.white, fontWeight: '800', fontSize: 15 },
+  optionButtonText: {
+    color: colors.white,
+    fontFamily: fontFamilies.extraBold,
+    fontSize: 15,
+  },
   optionButtonSecondary: {
     backgroundColor: colors.cardBg,
     borderWidth: 1.5,
     borderColor: colors.border,
   },
-  optionButtonTextSecondary: { color: colors.text, fontWeight: '800', fontSize: 15 },
+  optionButtonTextSecondary: {
+    color: colors.text,
+    fontFamily: fontFamilies.extraBold,
+    fontSize: 15,
+  },
   cancelModalButton: {
     marginTop: 8,
     minHeight: 44,
@@ -804,5 +1109,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  cancelModalText: { color: colors.subtext, fontWeight: '700', fontSize: 15 },
+  cancelModalText: {
+    color: colors.subtext,
+    fontFamily: fontFamilies.bold,
+    fontSize: 15,
+  },
 });

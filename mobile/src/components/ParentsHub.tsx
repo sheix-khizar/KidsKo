@@ -13,12 +13,13 @@ import { Student } from '../screens/MainShellScreen';
 import {
   getStudentMemory,
   updateStudentMemory,
-  clearStudentMemory,
   createStudent,
   StudentMemoryData,
 } from '../services/api';
 import { isPremiumActive } from '../services/billing';
-import { colors, radii, spacing, typography } from '../theme';
+import { colors, radii, spacing, typography, fontFamilies, gradients, shadows } from '../theme';
+import { LinearGradient } from '../ui/LinearGradient';
+import { PressScale, FadeSlideIn } from '../ui/motion';
 
 type Props = {
   students: Student[];
@@ -42,6 +43,7 @@ export default function ParentsHub({
   billingVersion = 0,
 }: Props) {
   // Add child state
+  const [showAddInput, setShowAddInput] = useState(false);
   const [newChildName, setNewChildName] = useState('');
   const [addingChild, setAddingChild] = useState(false);
   const [addChildError, setAddChildError] = useState<string | null>(null);
@@ -97,6 +99,7 @@ export default function ParentsHub({
     try {
       await createStudent(trimmed);
       setNewChildName('');
+      setShowAddInput(false);
       await onRefreshStudents();
     } catch (err: any) {
       setAddChildError(err.message || 'Could not add child');
@@ -162,15 +165,13 @@ export default function ParentsHub({
           onPress: async () => {
             setUpdatingMemory(true);
             try {
-              await clearStudentMemory(activeStudent.id);
-              setMemory({
-                studentId: activeStudent.id,
-                preferredName: null,
+              await updateStudentMemory(activeStudent.id, {
                 facts: [],
-                enabled: memory?.enabled ?? true,
+                preferredName: null,
               });
+              await fetchMemory(activeStudent.id);
             } catch (err: any) {
-              Alert.alert('Error', err.message || 'Failed to clear memory');
+              Alert.alert('Error', err.message || 'Failed to reset memory');
             } finally {
               setUpdatingMemory(false);
             }
@@ -182,71 +183,114 @@ export default function ParentsHub({
 
   return (
     <View style={styles.container}>
-      {/* 1. Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>Parents Hub 🔒</Text>
-        <Text style={styles.subtitle}>
-          Manage your family, review past learning, and control child privacy.
-        </Text>
-      </View>
+      {/* 1. Prototype Navy Gradient Header */}
+      <LinearGradient
+        colors={gradients.parents.colors}
+        start={gradients.parents.start}
+        end={gradients.parents.end}
+        style={styles.navyHeader}
+      >
+        <View style={styles.headerTitleRow}>
+          <Text style={styles.headerEmoji}>🧑‍🤝‍🧑</Text>
+          <View style={styles.headerTitleCol}>
+            <Text style={styles.headerTitle}>Parent Dashboard</Text>
+            <Text style={styles.headerSubtitle}>Manage your children's learning</Text>
+          </View>
+        </View>
 
-      {/* 2. Children Management Section */}
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionHeading}>Family & Children</Text>
-        <Text style={styles.sectionSub}>Select a child to view transcripts or adjust settings:</Text>
-
-        <View style={styles.childrenChips}>
+        {/* Children squircle avatars list */}
+        <View style={styles.childrenAvatarsRow}>
           {students.map((st) => {
             const isSelected = activeStudent?.id === st.id;
             return (
-              <Pressable
+              <PressScale
                 key={st.id}
-                style={[styles.childChip, isSelected && styles.childChipActive]}
                 onPress={() => onSelectStudent(st)}
                 accessibilityRole="button"
                 accessibilityLabel={`Select child ${st.student_name}`}
               >
-                <Text style={styles.childChipIcon}>🧒</Text>
-                <Text style={[styles.childChipText, isSelected && styles.childChipTextActive]}>
-                  {st.student_name}
-                </Text>
-                {isSelected && <Text style={styles.childChipCheck}>✓</Text>}
-              </Pressable>
+                <View style={styles.childAvatarCol}>
+                  <View
+                    style={[
+                      styles.childAvatarSquircle,
+                      isSelected && styles.childAvatarSquircleActive,
+                    ]}
+                  >
+                    <Text style={styles.childAvatarEmoji}>🧒</Text>
+                    {isSelected && (
+                      <View style={styles.activeChildBadge}>
+                        <Text style={styles.activeChildBadgeCheck}>✓</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text
+                    style={[
+                      styles.childAvatarName,
+                      isSelected && styles.childAvatarNameActive,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {st.student_name}
+                  </Text>
+                </View>
+              </PressScale>
             );
           })}
-        </View>
 
-        {/* Add Another Child Form */}
-        <View style={styles.addChildRow}>
-          <TextInput
-            style={styles.addChildInput}
-            placeholder="Child's name"
-            placeholderTextColor={colors.subtext}
-            value={newChildName}
-            onChangeText={(txt) => {
-              setNewChildName(txt);
-              if (addChildError) setAddChildError(null);
-            }}
-            maxLength={30}
-          />
-          <Pressable
-            style={[styles.addChildBtn, addingChild && styles.addChildBtnDisabled]}
-            onPress={handleAddChild}
-            disabled={addingChild}
+          {/* Add Child Squircle */}
+          <PressScale
+            onPress={() => setShowAddInput((prev) => !prev)}
             accessibilityRole="button"
             accessibilityLabel="Add another child"
           >
-            {addingChild ? (
-              <ActivityIndicator color={colors.white} size="small" />
-            ) : (
-              <Text style={styles.addChildBtnText}>+ Add</Text>
-            )}
-          </Pressable>
+            <View style={styles.childAvatarCol}>
+              <View
+                style={[
+                  styles.addChildSquircle,
+                  showAddInput && styles.addChildSquircleActive,
+                ]}
+              >
+                <Text style={styles.addChildPlus}>{showAddInput ? '✕' : '+'}</Text>
+              </View>
+              <Text style={styles.childAvatarName}>Add</Text>
+            </View>
+          </PressScale>
         </View>
-        {addChildError && <Text style={styles.errorText}>{addChildError}</Text>}
-      </View>
 
-      {/* 3. What Kidsko Remembers (Stage 10 / Step 4.5) */}
+        {/* Inline Add Child Input */}
+        {showAddInput && (
+          <FadeSlideIn duration={180}>
+            <View style={styles.inlineAddRow}>
+              <TextInput
+                style={styles.inlineAddInput}
+                placeholder="Child's name"
+                placeholderTextColor="rgba(255, 255, 255, 0.6)"
+                value={newChildName}
+                onChangeText={(txt) => {
+                  setNewChildName(txt);
+                  if (addChildError) setAddChildError(null);
+                }}
+                maxLength={30}
+                autoFocus
+              />
+              <PressScale onPress={handleAddChild} disabled={addingChild}>
+                <View style={styles.inlineAddBtn}>
+                  {addingChild ? (
+                    <ActivityIndicator color={colors.white} size="small" />
+                  ) : (
+                    <Text style={styles.inlineAddBtnText}>Save</Text>
+                  )}
+                </View>
+              </PressScale>
+            </View>
+            {addChildError && (
+              <Text style={styles.inlineErrorText}>{addChildError}</Text>
+            )}
+          </FadeSlideIn>
+        )}
+      </LinearGradient>
+
+      {/* 2. What Kidsko Remembers Section */}
       {activeStudent && (
         <View style={styles.sectionCard}>
           <View style={styles.memoryHeaderRow}>
@@ -261,7 +305,7 @@ export default function ParentsHub({
                 <Switch
                   value={memory?.enabled ?? true}
                   onValueChange={handleToggleMemory}
-                  trackColor={{ false: '#D1D5DB', true: colors.green }}
+                  trackColor={{ false: colors.borderLight, true: colors.green }}
                   thumbColor={colors.white}
                   disabled={loadingMemory || updatingMemory}
                   accessibilityRole="switch"
@@ -280,21 +324,20 @@ export default function ParentsHub({
           ) : memoryError ? (
             <View style={styles.memoryErrorContainer}>
               <Text style={styles.memoryErrorText}>⚠️ {memoryError}</Text>
-              <Pressable
-                style={styles.retryBtn}
-                onPress={() => fetchMemory(activeStudent.id)}
-                accessibilityRole="button"
-                accessibilityLabel="Retry loading memory"
-              >
-                <Text style={styles.retryBtnText}>Retry</Text>
-              </Pressable>
+              <PressScale onPress={() => fetchMemory(activeStudent.id)}>
+                <View style={styles.retryBtn}>
+                  <Text style={styles.retryBtnText}>Retry</Text>
+                </View>
+              </PressScale>
             </View>
           ) : (
             <>
               {/* Preferred Name Tag */}
               {memory?.preferredName && (
                 <View style={styles.preferredNameRow}>
-                  <Text style={styles.preferredNameLabel}>Name to call {activeStudent.student_name}:</Text>
+                  <Text style={styles.preferredNameLabel}>
+                    Name to call {activeStudent.student_name}:
+                  </Text>
                   <View style={styles.nameBadge}>
                     <Text style={styles.nameBadgeText}>{memory.preferredName}</Text>
                     <Pressable
@@ -313,20 +356,31 @@ export default function ParentsHub({
               {/* Facts Chips */}
               <View style={styles.factsContainer}>
                 {memory?.facts && memory.facts.length > 0 ? (
-                  memory.facts.map((fact, index) => (
-                    <View key={`${fact}_${index}`} style={styles.factChip}>
-                      <Text style={styles.factChipText}>{fact}</Text>
-                      <Pressable
-                        style={styles.factChipRemoveBtn}
-                        onPress={() => handleRemoveFact(index)}
-                        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Remove fact ${fact}`}
-                      >
-                        <Text style={styles.factChipRemoveText}>✕</Text>
-                      </Pressable>
-                    </View>
-                  ))
+                  memory.facts.map((fact, index) => {
+                    const chip = (
+                      <View key={`${fact}_${index}`} style={styles.factChip}>
+                        <Text style={styles.factChipText}>{fact}</Text>
+                        <Pressable
+                          style={styles.factChipRemoveBtn}
+                          onPress={() => handleRemoveFact(index)}
+                          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Remove fact ${fact}`}
+                        >
+                          <Text style={styles.factChipRemoveText}>✕</Text>
+                        </Pressable>
+                      </View>
+                    );
+
+                    if (index < 8) {
+                      return (
+                        <FadeSlideIn key={`${fact}_${index}`} delay={index * 25}>
+                          {chip}
+                        </FadeSlideIn>
+                      );
+                    }
+                    return chip;
+                  })
                 ) : (
                   <Text style={styles.noFactsText}>
                     {memory?.enabled
@@ -336,109 +390,268 @@ export default function ParentsHub({
                 )}
               </View>
 
-              {/* Forget Everything Button — visible whenever any preferred name OR facts are stored */}
+              {/* Forget Everything Button */}
               {Boolean(memory?.preferredName || (memory?.facts && memory.facts.length > 0)) && (
-                <Pressable
-                  style={styles.forgetBtn}
+                <PressScale
                   onPress={handleForgetEverything}
                   disabled={updatingMemory}
-                  accessibilityRole="button"
-                  accessibilityLabel="Forget everything"
+                  style={styles.forgetScale}
                 >
-                  <Text style={styles.forgetBtnText}>🗑️ Forget Everything</Text>
-                </Pressable>
+                  <View style={styles.forgetBtn}>
+                    <Text style={styles.forgetBtnText}>🗑️ Forget Everything</Text>
+                  </View>
+                </PressScale>
               )}
             </>
           )}
         </View>
       )}
 
-      {/* 4. Chat History & Transcripts */}
+      {/* 3. Chat History & Transcripts Action Card */}
       {activeStudent && (
-        <Pressable
-          style={styles.actionCard}
+        <PressScale
           onPress={() => onOpenTranscript(activeStudent)}
+          style={styles.actionCardScale}
           accessibilityRole="button"
           accessibilityLabel="View Chat Transcripts"
         >
-          <View style={styles.actionCardRow}>
-            <View style={styles.actionIconBadge}>
-              <Text style={styles.actionIcon}>📜</Text>
+          <View style={styles.actionCard}>
+            <View style={styles.actionCardRow}>
+              <View style={styles.actionIconBadge}>
+                <Text style={styles.actionIcon}>📜</Text>
+              </View>
+              <View style={styles.actionCardContent}>
+                <Text style={styles.actionCardTitle}>Chat History & Transcripts</Text>
+                <Text style={styles.actionCardSub}>
+                  Read past conversations and homework help for {activeStudent.student_name}
+                </Text>
+              </View>
+              <Text style={styles.actionArrow}>→</Text>
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.actionCardTitle}>Chat History & Transcripts</Text>
+          </View>
+        </PressScale>
+      )}
+
+      {/* 4. Subscription & Plan Action Card */}
+      <PressScale
+        onPress={onOpenPaywall}
+        style={styles.actionCardScale}
+        accessibilityRole="button"
+        accessibilityLabel="Manage Subscription Plan"
+      >
+        <View style={styles.actionCard}>
+          <View style={styles.actionCardRow}>
+            <View
+              style={[
+                styles.actionIconBadge,
+                isPremium && styles.actionIconBadgePremium,
+              ]}
+            >
+              <Text style={styles.actionIcon}>{isPremium ? '⭐' : '📦'}</Text>
+            </View>
+            <View style={styles.actionCardContent}>
+              <View style={styles.planTitleRow}>
+                <Text style={styles.actionCardTitle}>Plan & Usage Allowance</Text>
+                <View
+                  style={[
+                    styles.planPill,
+                    isPremium ? styles.planPillPremium : styles.planPillFree,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.planPillText,
+                      isPremium ? styles.planPillTextPremium : styles.planPillTextFree,
+                    ]}
+                  >
+                    {isPremium ? 'PREMIUM' : 'FREE'}
+                  </Text>
+                </View>
+              </View>
               <Text style={styles.actionCardSub}>
-                Read past conversations and homework help for {activeStudent.student_name}
+                {isPremium
+                  ? '100 min Voice/Video • 200 msgs • 15 scans / week'
+                  : '10 min Voice/Video • 30 msgs • 3 scans / week'}
               </Text>
             </View>
             <Text style={styles.actionArrow}>→</Text>
           </View>
-        </Pressable>
-      )}
-
-      {/* 5. Subscription & Plan */}
-      <Pressable
-        style={styles.actionCard}
-        onPress={onOpenPaywall}
-        accessibilityRole="button"
-        accessibilityLabel="Manage Subscription Plan"
-      >
-        <View style={styles.actionCardRow}>
-          <View style={[styles.actionIconBadge, isPremium && styles.actionIconBadgePremium]}>
-            <Text style={styles.actionIcon}>{isPremium ? '⭐' : '📦'}</Text>
-          </View>
-          <View style={{ flex: 1 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Text style={styles.actionCardTitle}>Plan & Usage Allowance</Text>
-              <View style={[styles.planPill, isPremium ? styles.planPillPremium : styles.planPillFree]}>
-                <Text style={[styles.planPillText, isPremium ? styles.planPillTextPremium : styles.planPillTextFree]}>
-                  {isPremium ? 'PREMIUM' : 'FREE'}
-                </Text>
-              </View>
-            </View>
-            <Text style={styles.actionCardSub}>
-              {isPremium
-                ? '100 min Voice/Video • 200 msgs • 15 scans / week'
-                : '10 min Voice/Video • 30 msgs • 3 scans / week'}
-            </Text>
-          </View>
-          <Text style={styles.actionArrow}>→</Text>
         </View>
-      </Pressable>
+      </PressScale>
 
-      {/* 6. Sign Out */}
-      <Pressable
-        style={styles.signOutBtn}
+      {/* 5. Sign Out Button */}
+      <PressScale
         onPress={onRequestLogout}
+        style={styles.signOutScale}
         accessibilityRole="button"
         accessibilityLabel="Sign out of parent account"
       >
-        <Text style={styles.signOutText}>🚪 Sign Out</Text>
-      </Pressable>
+        <View style={styles.signOutBtn}>
+          <Text style={styles.signOutText}>🚪 Sign Out</Text>
+        </View>
+      </PressScale>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    padding: spacing.lg,
+    padding: spacing.md,
     paddingBottom: 40,
     gap: 16,
   },
-  header: {
-    marginBottom: spacing.xs,
+  navyHeader: {
+    borderRadius: radii.xl,
+    padding: 20,
+    overflow: 'hidden',
+    ...shadows.card,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: '900',
-    color: colors.text,
-    marginBottom: 4,
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    gap: 12,
   },
-  subtitle: {
+  headerEmoji: {
+    fontSize: 32,
+  },
+  headerTitleCol: {
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontFamily: fontFamilies.black,
+    color: colors.white,
+    letterSpacing: -0.3,
+  },
+  headerSubtitle: {
     fontSize: 13,
-    color: colors.subtext,
-    lineHeight: 18,
-    fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontFamily: fontFamilies.semiBold,
+    marginTop: 2,
+  },
+  childrenAvatarsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    flexWrap: 'wrap',
+  },
+  childAvatarCol: {
+    alignItems: 'center',
+    gap: 6,
+    width: 60,
+  },
+  childAvatarSquircle: {
+    width: 54,
+    height: 54,
+    borderRadius: 18,
+    backgroundColor: colors.cardBgMuted,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+    position: 'relative',
+  },
+  childAvatarSquircleActive: {
+    borderColor: colors.white,
+    borderWidth: 3,
+    shadowColor: colors.white,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  childAvatarEmoji: {
+    fontSize: 26,
+  },
+  activeChildBadge: {
+    position: 'absolute',
+    bottom: -4,
+    right: -4,
+    backgroundColor: colors.coralStrong,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: colors.white,
+  },
+  activeChildBadgeCheck: {
+    color: colors.white,
+    fontSize: 10,
+    fontFamily: fontFamilies.black,
+  },
+  childAvatarName: {
+    fontSize: 12,
+    fontFamily: fontFamilies.bold,
+    color: 'rgba(255, 255, 255, 0.85)',
+    textAlign: 'center',
+  },
+  childAvatarNameActive: {
+    color: colors.white,
+    fontFamily: fontFamilies.extraBold,
+  },
+  addChildSquircle: {
+    width: 54,
+    height: 54,
+    borderRadius: 18,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  addChildSquircleActive: {
+    borderColor: colors.white,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  addChildPlus: {
+    fontSize: 22,
+    fontFamily: fontFamilies.bold,
+    color: 'rgba(255, 255, 255, 0.9)',
+  },
+  inlineAddRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  inlineAddInput: {
+    flex: 1,
+    height: 42,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: radii.md,
+    paddingHorizontal: 12,
+    fontSize: 14,
+    fontFamily: fontFamilies.semiBold,
+    color: colors.white,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  inlineAddBtn: {
+    backgroundColor: colors.coralStrong,
+    paddingHorizontal: 16,
+    height: 42,
+    borderRadius: radii.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 64,
+  },
+  inlineAddBtnText: {
+    color: colors.white,
+    fontFamily: fontFamilies.extraBold,
+    fontSize: 13,
+  },
+  inlineErrorText: {
+    color: colors.errorBorder,
+    fontSize: 12,
+    fontFamily: fontFamilies.bold,
+    marginTop: 6,
   },
   sectionCard: {
     backgroundColor: colors.cardBg,
@@ -446,15 +659,11 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     borderWidth: 1.5,
     borderColor: colors.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 1,
+    ...shadows.card,
   },
   sectionHeading: {
     fontSize: 16,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
     color: colors.text,
     marginBottom: 2,
   },
@@ -463,115 +672,6 @@ const styles = StyleSheet.create({
     color: colors.subtext,
     marginBottom: spacing.md,
     lineHeight: 16,
-  },
-  childrenChips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: spacing.md,
-  },
-  childChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    minHeight: 44,
-    justifyContent: 'center',
-    borderRadius: radii.pill,
-    backgroundColor: colors.cardBgMuted,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    gap: 6,
-  },
-  childChipActive: {
-    backgroundColor: '#FFF2EB',
-    borderColor: colors.coralStrong,
-  },
-  childChipIcon: {
-    fontSize: 14,
-  },
-  childChipText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  childChipTextActive: {
-    color: colors.coralStrong,
-    fontWeight: '800',
-  },
-  childChipCheck: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: colors.coralStrong,
-  },
-  addChildRow: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center',
-  },
-  addChildInput: {
-    flex: 1,
-    height: 44,
-    minHeight: 44,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    paddingHorizontal: 12,
-    fontSize: 14,
-    color: colors.text,
-    backgroundColor: colors.background,
-  },
-  addChildBtn: {
-    backgroundColor: colors.parentNavy,
-    paddingHorizontal: 16,
-    height: 44,
-    minHeight: 44,
-    minWidth: 44,
-    borderRadius: radii.md,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  addChildBtnDisabled: {
-    opacity: 0.6,
-  },
-  addChildBtnText: {
-    color: colors.white,
-    fontWeight: '800',
-    fontSize: 13,
-  },
-  errorText: {
-    color: colors.error,
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 6,
-  },
-  memoryErrorContainer: {
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    backgroundColor: '#FFF2F2',
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: '#FFD1D1',
-    marginTop: 10,
-    alignItems: 'center',
-    gap: 8,
-  },
-  memoryErrorText: {
-    color: colors.error,
-    fontSize: 12,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  retryBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    backgroundColor: colors.coralStrong,
-    borderRadius: radii.pill,
-  },
-  retryBtnText: {
-    color: colors.white,
-    fontSize: 12,
-    fontWeight: '800',
   },
   memoryHeaderRow: {
     flexDirection: 'row',
@@ -585,9 +685,37 @@ const styles = StyleSheet.create({
   },
   switchLabel: {
     fontSize: 10,
-    fontWeight: '700',
+    fontFamily: fontFamilies.bold,
     color: colors.subtext,
     marginTop: 2,
+  },
+  memoryErrorContainer: {
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    backgroundColor: colors.errorBg,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.errorBorder,
+    marginTop: 10,
+    alignItems: 'center',
+    gap: 8,
+  },
+  memoryErrorText: {
+    color: colors.error,
+    fontSize: 12,
+    fontFamily: fontFamilies.semiBold,
+    textAlign: 'center',
+  },
+  retryBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    backgroundColor: colors.coralStrong,
+    borderRadius: radii.pill,
+  },
+  retryBtnText: {
+    color: colors.white,
+    fontSize: 12,
+    fontFamily: fontFamilies.extraBold,
   },
   preferredNameRow: {
     flexDirection: 'row',
@@ -597,23 +725,23 @@ const styles = StyleSheet.create({
   },
   preferredNameLabel: {
     fontSize: 12,
-    fontWeight: '700',
+    fontFamily: fontFamilies.bold,
     color: colors.subtext,
   },
   nameBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF2EB',
+    backgroundColor: colors.cardBgMuted,
     paddingHorizontal: 10,
     paddingVertical: 3,
     borderRadius: radii.pill,
     borderWidth: 1,
-    borderColor: '#FBD3C1',
+    borderColor: colors.borderLight,
     gap: 6,
   },
   nameBadgeText: {
     fontSize: 12,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
     color: colors.coralStrong,
   },
   nameBadgeRemoveBtn: {
@@ -621,7 +749,7 @@ const styles = StyleSheet.create({
   },
   nameBadgeRemoveText: {
     fontSize: 11,
-    fontWeight: '900',
+    fontFamily: fontFamilies.black,
     color: colors.coralStrong,
   },
   factsContainer: {
@@ -634,17 +762,17 @@ const styles = StyleSheet.create({
   factChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EEF2F6',
+    backgroundColor: colors.background,
     borderRadius: radii.pill,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: '#D8E2EC',
+    borderColor: colors.border,
     gap: 6,
   },
   factChipText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontFamily: fontFamilies.bold,
     color: colors.text,
   },
   factChipRemoveBtn: {
@@ -652,7 +780,7 @@ const styles = StyleSheet.create({
   },
   factChipRemoveText: {
     fontSize: 11,
-    fontWeight: '900',
+    fontFamily: fontFamilies.black,
     color: colors.subtext,
   },
   noFactsText: {
@@ -662,9 +790,11 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     paddingVertical: 6,
   },
-  forgetBtn: {
+  forgetScale: {
     alignSelf: 'flex-start',
     marginTop: spacing.xs,
+  },
+  forgetBtn: {
     paddingVertical: 10,
     paddingHorizontal: 14,
     minHeight: 44,
@@ -674,8 +804,11 @@ const styles = StyleSheet.create({
   },
   forgetBtnText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontFamily: fontFamilies.bold,
     color: colors.error,
+  },
+  actionCardScale: {
+    width: '100%',
   },
   actionCard: {
     backgroundColor: colors.cardBg,
@@ -683,11 +816,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     borderWidth: 1.5,
     borderColor: colors.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 1,
+    ...shadows.card,
   },
   actionCardRow: {
     flexDirection: 'row',
@@ -703,14 +832,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   actionIconBadgePremium: {
-    backgroundColor: '#FFF8E1',
+    backgroundColor: colors.warningBg,
   },
   actionIcon: {
     fontSize: 20,
   },
+  actionCardContent: {
+    flex: 1,
+  },
+  planTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   actionCardTitle: {
     fontSize: 15,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
     color: colors.text,
   },
   actionCardSub: {
@@ -721,7 +858,7 @@ const styles = StyleSheet.create({
   },
   actionArrow: {
     fontSize: 18,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
     color: colors.subtext,
   },
   planPill: {
@@ -730,14 +867,14 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
   },
   planPillFree: {
-    backgroundColor: '#E2E8F0',
+    backgroundColor: colors.disabledBg,
   },
   planPillPremium: {
     backgroundColor: colors.sun,
   },
   planPillText: {
     fontSize: 10,
-    fontWeight: '900',
+    fontFamily: fontFamilies.black,
   },
   planPillTextFree: {
     color: colors.subtext,
@@ -745,16 +882,19 @@ const styles = StyleSheet.create({
   planPillTextPremium: {
     color: colors.text,
   },
+  signOutScale: {
+    width: '100%',
+    marginTop: 6,
+  },
   signOutBtn: {
     alignItems: 'center',
     paddingVertical: 14,
     borderRadius: radii.pill,
     backgroundColor: 'rgba(217, 74, 74, 0.08)',
-    marginTop: 6,
   },
   signOutText: {
     fontSize: 14,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
     color: colors.error,
   },
 });

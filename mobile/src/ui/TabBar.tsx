@@ -1,6 +1,8 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
-import { colors, typography } from '../theme';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { useSafeAreaInsets } from './safeArea';
+import { colors, typography, fontFamilies } from '../theme';
+import { PressScale } from './motion';
 
 export type TabKey = 'chat' | 'call' | 'parents';
 
@@ -16,33 +18,52 @@ const TABS: { key: TabKey; label: string; icon: string }[] = [
 ];
 
 export function TabBar({ activeTab, onSelectTab }: TabBarProps) {
+  const insets = useSafeAreaInsets();
+  const bottomPadding = Math.max(insets.bottom, 8);
+
   return (
-    <View style={[styles.container, { paddingBottom: Platform.OS === 'ios' ? 24 : 8 }]}>
+    <View
+      style={[
+        styles.container,
+        {
+          paddingBottom: bottomPadding,
+          height: 64 + bottomPadding,
+        },
+      ]}
+    >
       {TABS.map((tab) => {
         const isActive = activeTab === tab.key;
         return (
           <Pressable
             key={tab.key}
             onPress={() => onSelectTab(tab.key)}
-            style={({ pressed }) => [
-              styles.tabItem,
-              pressed && styles.pressed,
-            ]}
+            style={styles.tabScale}
             accessibilityRole="tab"
-            accessibilityState={{ selected: isActive }}
             accessibilityLabel={`${tab.label} tab`}
           >
-            <View style={[styles.iconWrapper, isActive && styles.activeIconWrapper]}>
-              <Text style={styles.iconText}>{tab.icon}</Text>
+            <View style={styles.tabItem}>
+              <View
+                style={[
+                  styles.iconWrapper,
+                  isActive && styles.activeIconWrapper,
+                ]}
+              >
+                <Text style={styles.iconText}>{tab.icon}</Text>
+              </View>
+              <Text
+                style={[
+                  styles.tabLabel,
+                  isActive ? styles.activeTabLabel : styles.inactiveTabLabel,
+                ]}
+              >
+                {tab.label}
+              </Text>
+              {isActive ? (
+                <View style={styles.activeDot} />
+              ) : (
+                <View style={styles.dotPlaceholder} />
+              )}
             </View>
-            <Text
-              style={[
-                styles.tabLabel,
-                isActive ? styles.activeTabLabel : styles.inactiveTabLabel,
-              ]}
-            >
-              {tab.label}
-            </Text>
           </Pressable>
         );
       })}
@@ -52,36 +73,44 @@ export function TabBar({ activeTab, onSelectTab }: TabBarProps) {
 
 const styles = StyleSheet.create({
   container: {
-    height: 80,
     flexDirection: 'row',
     backgroundColor: colors.white,
-    borderTopWidth: 2,
+    borderTopWidth: 1.5,
     borderTopColor: colors.border,
     alignItems: 'center',
     justifyContent: 'space-around',
-    paddingTop: 8,
+    paddingTop: 4,
+    shadowColor: '#2D3436',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  tabScale: {
+    flex: 1,
+    height: '100%',
   },
   tabItem: {
     flex: 1,
-    height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    paddingVertical: 2,
+    gap: 2,
   },
   iconWrapper: {
     paddingHorizontal: 16,
-    paddingVertical: 4,
+    paddingVertical: 3,
     borderRadius: 16,
   },
   activeIconWrapper: {
-    backgroundColor: '#FFEAEA',
+    backgroundColor: 'rgba(255, 107, 107, 0.08)',
   },
   iconText: {
     fontSize: 20,
   },
   tabLabel: {
     ...typography.caption,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
     fontSize: 12,
   },
   activeTabLabel: {
@@ -90,7 +119,17 @@ const styles = StyleSheet.create({
   inactiveTabLabel: {
     color: colors.subtext,
   },
-  pressed: {
-    opacity: 0.8,
+  activeDot: {
+    width: 20,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: colors.coralStrong,
+    marginTop: 2,
+  },
+  dotPlaceholder: {
+    width: 20,
+    height: 3,
+    marginTop: 2,
+    backgroundColor: 'transparent',
   },
 });

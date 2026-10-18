@@ -1,7 +1,23 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, ActivityIndicator, Alert, ScrollView } from 'react-native';
-import { getCurrentOffering, getMonthlyPackage, getAnnualPackage, purchasePackage } from '../services/billing';
-import { colors, radii, spacing, typography } from '../theme';
+import {
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+} from 'react-native';
+import {
+  getCurrentOffering,
+  getMonthlyPackage,
+  getAnnualPackage,
+  purchasePackage,
+} from '../services/billing';
+import { colors, radii, spacing, typography, fontFamilies, gradients, shadows } from '../theme';
+import { LinearGradient } from '../ui/LinearGradient';
+import { PressScale, FadeSlideIn, Bounce } from '../ui/motion';
+import { useSafeAreaInsets } from '../ui/safeArea';
 
 type Props = { onBack: () => void; onPurchased: () => void };
 
@@ -10,6 +26,7 @@ export default function PaywallScreen({ onBack, onPurchased }: Props) {
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<'yearly' | 'monthly'>('yearly');
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     (async () => {
@@ -20,15 +37,24 @@ export default function PaywallScreen({ onBack, onPurchased }: Props) {
   }, []);
 
   const handleUpgrade = async () => {
-    const targetPackage = selectedPlan === 'yearly' ? getAnnualPackage(offering) : getMonthlyPackage(offering);
+    const targetPackage =
+      selectedPlan === 'yearly'
+        ? getAnnualPackage(offering)
+        : getMonthlyPackage(offering);
 
     if (!targetPackage) {
       if (__DEV__) {
-        Alert.alert('Sandbox Mode', `Simulating ${selectedPlan === 'yearly' ? 'Annual ($199/yr)' : 'Monthly ($19.99/mo)'} purchase for dev testing.`);
+        Alert.alert(
+          'Sandbox Mode',
+          `Simulating ${selectedPlan === 'yearly' ? 'Annual ($199/yr)' : 'Monthly ($19.99/mo)'} purchase for dev testing.`
+        );
         onPurchased();
         return;
       }
-      Alert.alert('Package Unavailable', 'The selected subscription package could not be loaded. Please try again.');
+      Alert.alert(
+        'Package Unavailable',
+        'The selected subscription package could not be loaded. Please try again.'
+      );
       return;
     }
 
@@ -57,137 +83,217 @@ export default function PaywallScreen({ onBack, onPurchased }: Props) {
   const monthlyPackage = getMonthlyPackage(offering);
 
   const yearlyPriceText = yearlyPackage?.product?.priceString || '$199/year';
-  const monthlyPriceText = monthlyPackage?.product?.priceString || '$19.99/month';
+  const monthlyPriceText =
+    monthlyPackage?.product?.priceString || '$19.99/month';
 
   return (
-    <ScrollView contentContainerStyle={styles.container} bounces={false}>
+    <ScrollView
+      contentContainerStyle={[
+        styles.container,
+        {
+          paddingTop: Math.max(insets.top, 24) + 12,
+          paddingBottom: Math.max(insets.bottom, 24) + 16,
+        },
+      ]}
+      bounces={false}
+      showsVerticalScrollIndicator={false}
+    >
       {/* Top Navigation Bar */}
       <View style={styles.topNav}>
-        <Pressable
-          onPress={onBack}
-          style={styles.backBtn}
-          accessibilityRole="button"
-          accessibilityLabel="Back to previous screen"
-        >
-          <Text style={styles.backBtnText}>✕ Close</Text>
-        </Pressable>
+        <PressScale onPress={onBack}>
+          <View style={styles.backBtn}>
+            <Text style={styles.backBtnText}>✕ Close</Text>
+          </View>
+        </PressScale>
       </View>
 
       {/* Header with Mascot Badge */}
-      <View style={styles.header}>
-        <View style={styles.mascotBadge}>
-          <Text style={styles.mascotEmoji}>🦉</Text>
+      <FadeSlideIn delay={0}>
+        <View style={styles.header}>
+          <Bounce>
+            <LinearGradient
+              colors={gradients.primary.colors}
+              start={gradients.primary.start}
+              end={gradients.primary.end}
+              style={styles.mascotBadge}
+            >
+              <Text style={styles.mascotEmoji}>🦉</Text>
+            </LinearGradient>
+          </Bounce>
+          <Text style={styles.title}>Unlock Kidsko Premium</Text>
+          <Text style={styles.subtitle}>
+            Supercharge your child's learning with expanded Voice, Video & Chat guidance
+          </Text>
         </View>
-        <Text style={styles.title}>Unlock Kidsko Premium</Text>
-        <Text style={styles.subtitle}>
-          Supercharge your child's learning with expanded Voice, Video & Chat guidance
-        </Text>
-      </View>
+      </FadeSlideIn>
 
       {/* Plan Selection Cards */}
-      <View style={styles.plansContainer}>
-        {/* Yearly Card (Recommended) */}
-        <Pressable
-          style={[styles.planCard, selectedPlan === 'yearly' && styles.selectedPlanCard]}
-          onPress={() => setSelectedPlan('yearly')}
-          accessibilityRole="radio"
-          accessibilityState={{ selected: selectedPlan === 'yearly' }}
-          accessibilityLabel="Annual Plan, $199 per year, best value"
-        >
-          <View style={styles.ribbon}>
-            <Text style={styles.ribbonText}>SAVE 17% • BEST VALUE</Text>
-          </View>
-          <View style={styles.planHeader}>
-            <View style={styles.planTitleCol}>
-              <Text style={styles.planTitle}>Annual Plan</Text>
-              <Text style={styles.planPriceDetail}>$16.58 / month (billed yearly)</Text>
+      <FadeSlideIn delay={60}>
+        <View style={styles.plansContainer}>
+          {/* Yearly Card (Recommended) */}
+          <PressScale
+            onPress={() => setSelectedPlan('yearly')}
+            style={styles.planCardScale}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: selectedPlan === 'yearly' }}
+            accessibilityLabel="Annual Plan, $199 per year, best value"
+          >
+            <View
+              style={[
+                styles.planCard,
+                selectedPlan === 'yearly' && styles.selectedPlanCard,
+              ]}
+            >
+              <LinearGradient
+                colors={gradients.primary.colors}
+                start={gradients.primary.start}
+                end={gradients.primary.end}
+                style={styles.ribbon}
+              >
+                <Text style={styles.ribbonText}>SAVE 17% • BEST VALUE</Text>
+              </LinearGradient>
+              <View style={styles.planHeader}>
+                <View style={styles.planTitleCol}>
+                  <Text style={styles.planTitle}>Annual Plan</Text>
+                  <Text style={styles.planPriceDetail}>
+                    $16.58 / month (billed yearly)
+                  </Text>
+                </View>
+                <View style={styles.planPriceCol}>
+                  <Text
+                    style={[
+                      styles.planPrice,
+                      selectedPlan === 'yearly' && styles.selectedPlanPrice,
+                    ]}
+                  >
+                    {yearlyPriceText}
+                  </Text>
+                </View>
+              </View>
             </View>
-            <View style={styles.planPriceCol}>
-              <Text style={[styles.planPrice, selectedPlan === 'yearly' && styles.selectedPlanPrice]}>
-                {yearlyPriceText}
-              </Text>
-            </View>
-          </View>
-        </Pressable>
+          </PressScale>
 
-        {/* Monthly Card */}
-        <Pressable
-          style={[styles.planCard, selectedPlan === 'monthly' && styles.selectedPlanCard]}
-          onPress={() => setSelectedPlan('monthly')}
-          accessibilityRole="radio"
-          accessibilityState={{ selected: selectedPlan === 'monthly' }}
-          accessibilityLabel="Monthly Plan, $19.99 per month"
-        >
-          <View style={styles.planHeader}>
-            <View style={styles.planTitleCol}>
-              <Text style={styles.planTitle}>Monthly Plan</Text>
-              <Text style={styles.planPriceDetail}>Flexible month-to-month subscription</Text>
+          {/* Monthly Card */}
+          <PressScale
+            onPress={() => setSelectedPlan('monthly')}
+            style={styles.planCardScale}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: selectedPlan === 'monthly' }}
+            accessibilityLabel="Monthly Plan, $19.99 per month"
+          >
+            <View
+              style={[
+                styles.planCard,
+                selectedPlan === 'monthly' && styles.selectedPlanCard,
+              ]}
+            >
+              <View style={styles.planHeader}>
+                <View style={styles.planTitleCol}>
+                  <Text style={styles.planTitle}>Monthly Plan</Text>
+                  <Text style={styles.planPriceDetail}>
+                    Flexible month-to-month subscription
+                  </Text>
+                </View>
+                <View style={styles.planPriceCol}>
+                  <Text
+                    style={[
+                      styles.planPrice,
+                      selectedPlan === 'monthly' && styles.selectedPlanPrice,
+                    ]}
+                  >
+                    {monthlyPriceText}
+                  </Text>
+                </View>
+              </View>
             </View>
-            <View style={styles.planPriceCol}>
-              <Text style={[styles.planPrice, selectedPlan === 'monthly' && styles.selectedPlanPrice]}>
-                {monthlyPriceText}
-              </Text>
-            </View>
-          </View>
-        </Pressable>
-      </View>
+          </PressScale>
+        </View>
+      </FadeSlideIn>
 
       {/* Features List */}
-      <View style={styles.featuresCard}>
-        <Text style={styles.featuresHeading}>Everything included with Premium:</Text>
-        <View style={styles.featureItem}>
-          <Text style={styles.checkIcon}>✓</Text>
-          <Text style={styles.featureText}>100 Voice & Video minutes / week (vs. 10 free)</Text>
+      <FadeSlideIn delay={120}>
+        <View style={styles.featuresCard}>
+          <Text style={styles.featuresHeading}>
+            Everything included with Premium:
+          </Text>
+          <View style={styles.featureItem}>
+            <Text style={styles.checkIcon}>✓</Text>
+            <Text style={styles.featureText}>
+              100 Voice & Video minutes / week (vs. 10 free)
+            </Text>
+          </View>
+          <View style={styles.featureItem}>
+            <Text style={styles.checkIcon}>✓</Text>
+            <Text style={styles.featureText}>
+              200 text chat messages / week (vs. 30 free)
+            </Text>
+          </View>
+          <View style={styles.featureItem}>
+            <Text style={styles.checkIcon}>✓</Text>
+            <Text style={styles.featureText}>
+              15 homework photo uploads / week (vs. 3 free)
+            </Text>
+          </View>
+          <View style={styles.featureItem}>
+            <Text style={styles.checkIcon}>✓</Text>
+            <Text style={styles.featureText}>
+              Shared pooled family allowance across all children
+            </Text>
+          </View>
+          <View style={styles.featureItem}>
+            <Text style={styles.checkIcon}>✓</Text>
+            <Text style={styles.featureText}>
+              Detailed parent progress reports & transcripts
+            </Text>
+          </View>
         </View>
-        <View style={styles.featureItem}>
-          <Text style={styles.checkIcon}>✓</Text>
-          <Text style={styles.featureText}>200 text chat messages / week (vs. 30 free)</Text>
-        </View>
-        <View style={styles.featureItem}>
-          <Text style={styles.checkIcon}>✓</Text>
-          <Text style={styles.featureText}>15 homework photo uploads / week (vs. 3 free)</Text>
-        </View>
-        <View style={styles.featureItem}>
-          <Text style={styles.checkIcon}>✓</Text>
-          <Text style={styles.featureText}>Shared pooled family allowance across all children</Text>
-        </View>
-        <View style={styles.featureItem}>
-          <Text style={styles.checkIcon}>✓</Text>
-          <Text style={styles.featureText}>Detailed parent progress reports & transcripts</Text>
-        </View>
-      </View>
+      </FadeSlideIn>
 
       {/* Trust Line */}
       <View style={styles.trustLineContainer}>
-        <Text style={styles.trustLine}>🔒 No ads. Kids' data stays private.</Text>
+        <Text style={styles.trustLine}>
+          🔒 No ads. Kids' data stays private.
+        </Text>
       </View>
 
-      {/* Action CTA */}
-      <Pressable
-        style={[styles.button, purchasing && styles.buttonDisabled]}
-        onPress={handleUpgrade}
-        disabled={purchasing}
-        accessibilityRole="button"
-        accessibilityLabel={selectedPlan === 'yearly' ? 'Start Annual Plan' : 'Start Monthly Plan'}
-      >
-        {purchasing ? (
-          <ActivityIndicator color={colors.white} />
-        ) : (
-          <Text style={styles.buttonText}>
-            {selectedPlan === 'yearly' ? 'Start Annual Plan ($199/yr)' : 'Start Monthly Plan ($19.99/mo)'}
-          </Text>
-        )}
-      </Pressable>
+      {/* Action CTA with Gradient */}
+      <FadeSlideIn delay={180}>
+        <PressScale
+          onPress={handleUpgrade}
+          disabled={purchasing}
+          style={styles.ctaScale}
+          accessibilityRole="button"
+          accessibilityLabel={
+            selectedPlan === 'yearly'
+              ? 'Start Annual Plan'
+              : 'Start Monthly Plan'
+          }
+        >
+          <LinearGradient
+            colors={gradients.primary.colors}
+            start={gradients.primary.start}
+            end={gradients.primary.end}
+            style={[styles.buttonGradient, purchasing && styles.buttonDisabled]}
+          >
+            {purchasing ? (
+              <ActivityIndicator color={colors.white} />
+            ) : (
+              <Text style={styles.buttonText}>
+                {selectedPlan === 'yearly'
+                  ? 'Start Annual Plan ($199/yr) 🚀'
+                  : 'Start Monthly Plan ($19.99/mo) 🚀'}
+              </Text>
+            )}
+          </LinearGradient>
+        </PressScale>
+      </FadeSlideIn>
 
       {/* Cancel / Dismiss */}
-      <Pressable
-        onPress={onBack}
-        style={styles.cancelBtn}
-        accessibilityRole="button"
-        accessibilityLabel="Stay on free plan"
-      >
-        <Text style={styles.cancelText}>Not now, stay on free plan</Text>
-      </Pressable>
+      <PressScale onPress={onBack}>
+        <View style={styles.cancelBtn}>
+          <Text style={styles.cancelText}>Not now, stay on free plan</Text>
+        </View>
+      </PressScale>
     </ScrollView>
   );
 }
@@ -195,9 +301,7 @@ export default function PaywallScreen({ onBack, onPurchased }: Props) {
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    padding: spacing.xl,
-    paddingTop: 54,
-    paddingBottom: 40,
+    paddingHorizontal: spacing.lg,
     backgroundColor: colors.background,
   },
   loadingContainer: {
@@ -209,7 +313,7 @@ const styles = StyleSheet.create({
   topNav: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   backBtn: {
     paddingVertical: 8,
@@ -223,49 +327,47 @@ const styles = StyleSheet.create({
   },
   backBtnText: {
     fontSize: 14,
-    fontWeight: '700',
+    fontFamily: fontFamilies.bold,
     color: colors.text,
   },
   header: {
     alignItems: 'center',
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
   },
   mascotBadge: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: colors.cardBg,
+    width: 72,
+    height: 72,
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: spacing.sm,
-    borderWidth: 2,
-    borderColor: colors.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
+    marginBottom: 12,
+    ...shadows.glow(colors.coral, 16, 6),
   },
   mascotEmoji: {
-    fontSize: 32,
+    fontSize: 36,
   },
   title: {
+    ...typography.heading,
     fontSize: 24,
-    fontWeight: '900',
-    textAlign: 'center',
-    marginBottom: spacing.xs,
+    fontFamily: fontFamilies.black,
     color: colors.text,
+    textAlign: 'center',
+    marginBottom: 6,
   },
   subtitle: {
-    fontSize: 14,
-    textAlign: 'center',
+    ...typography.body,
+    fontSize: 13,
     color: colors.subtext,
-    lineHeight: 20,
-    paddingHorizontal: spacing.md,
+    textAlign: 'center',
+    lineHeight: 18,
+    maxWidth: 300,
   },
   plansContainer: {
+    gap: 12,
     marginBottom: spacing.lg,
-    gap: 14,
+  },
+  planCardScale: {
+    width: '100%',
   },
   planCard: {
     backgroundColor: colors.cardBg,
@@ -274,144 +376,135 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: colors.border,
     position: 'relative',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 1,
+    overflow: 'hidden',
+    ...shadows.card,
   },
   selectedPlanCard: {
     borderColor: colors.coralStrong,
-    backgroundColor: '#FFFBF9',
-    shadowColor: colors.coralStrong,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 3,
+    backgroundColor: colors.cardBgMuted,
   },
   ribbon: {
     position: 'absolute',
-    top: -12,
-    right: 16,
-    backgroundColor: colors.sun,
+    top: 0,
+    right: 0,
     paddingHorizontal: 12,
     paddingVertical: 4,
-    borderRadius: radii.pill,
-    borderWidth: 1.5,
-    borderColor: '#E6CF53',
+    borderBottomLeftRadius: radii.md,
   },
   ribbonText: {
-    color: colors.text,
-    fontSize: 11,
-    fontWeight: '900',
+    color: colors.white,
+    fontFamily: fontFamilies.black,
+    fontSize: 10,
     letterSpacing: 0.5,
   },
   planHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginTop: 8,
   },
   planTitleCol: {
     flex: 1,
-    marginRight: 10,
   },
   planTitle: {
-    fontSize: 17,
-    fontWeight: '800',
+    fontSize: 16,
+    fontFamily: fontFamilies.extraBold,
     color: colors.text,
   },
   planPriceDetail: {
+    ...typography.caption,
     fontSize: 12,
     color: colors.subtext,
-    marginTop: 3,
-    fontWeight: '500',
+    marginTop: 2,
   },
   planPriceCol: {
     alignItems: 'flex-end',
   },
   planPrice: {
-    fontSize: 17,
-    fontWeight: '900',
+    fontSize: 16,
+    fontFamily: fontFamilies.extraBold,
     color: colors.text,
   },
   selectedPlanPrice: {
     color: colors.coralStrong,
+    fontSize: 18,
+    fontFamily: fontFamilies.black,
   },
   featuresCard: {
     backgroundColor: colors.cardBg,
     borderRadius: radii.xl,
     padding: spacing.lg,
-    marginBottom: spacing.lg,
     borderWidth: 1.5,
     borderColor: colors.border,
-    gap: 12,
+    marginBottom: spacing.md,
+    ...shadows.card,
   },
   featuresHeading: {
+    ...typography.subheading,
     fontSize: 14,
-    fontWeight: '800',
+    fontFamily: fontFamilies.extraBold,
     color: colors.text,
-    marginBottom: 4,
+    marginBottom: spacing.md,
   },
   featureItem: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: 10,
+    marginBottom: 10,
   },
   checkIcon: {
     fontSize: 14,
-    fontWeight: '900',
     color: colors.green,
-    marginTop: 1,
+    fontFamily: fontFamilies.black,
   },
   featureText: {
+    ...typography.body,
     fontSize: 13,
     color: colors.text,
-    fontWeight: '600',
     flex: 1,
-    lineHeight: 18,
   },
   trustLineContainer: {
     alignItems: 'center',
     marginBottom: spacing.lg,
   },
   trustLine: {
-    fontSize: 13,
+    ...typography.caption,
+    fontSize: 12,
+    fontFamily: fontFamilies.bold,
     color: colors.subtext,
-    fontWeight: '700',
-    textAlign: 'center',
   },
-  button: {
-    backgroundColor: colors.coralStrong,
+  ctaScale: {
+    width: '100%',
+    marginBottom: 8,
+  },
+  buttonGradient: {
     borderRadius: radii.pill,
-    paddingVertical: 16,
-    alignItems: 'center',
+    height: 52,
     minHeight: 52,
     justifyContent: 'center',
-    shadowColor: colors.coralStrong,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.28,
-    shadowRadius: 8,
-    elevation: 4,
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    ...shadows.button,
   },
   buttonDisabled: {
-    opacity: 0.7,
+    opacity: 0.6,
   },
   buttonText: {
+    ...typography.label,
     color: colors.white,
-    fontWeight: '900',
+    fontFamily: fontFamilies.black,
     fontSize: 16,
-    letterSpacing: 0.2,
   },
   cancelBtn: {
-    marginTop: spacing.md,
+    alignItems: 'center',
     paddingVertical: 12,
     minHeight: 44,
     justifyContent: 'center',
   },
   cancelText: {
-    textAlign: 'center',
-    color: colors.subtext,
-    fontWeight: '700',
+    ...typography.caption,
     fontSize: 13,
+    fontFamily: fontFamilies.bold,
+    color: colors.subtext,
   },
 });
