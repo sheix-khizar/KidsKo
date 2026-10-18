@@ -469,14 +469,14 @@ Add a `welcome` route: the splash design plus "🚀 Let's Start Learning!" (goes
 
 For each screen, compare the two screenshots and tick:
 
-- [ ] Same background colours and gradient direction.
-- [ ] Nunito with the right weights.
-- [ ] Same radii and spacing (within a few pixels).
-- [ ] Coloured glow shadows on primary buttons and the mascot tile.
-- [ ] Entrance animation on cards and bubbles; owl bounces; stars float; typing dots, wave bars and live dot move.
-- [ ] No white flash at launch; the splash lasts about 1.2 s.
-- [ ] No content from the "do not copy" list in Section 2.
-- [ ] Reduce Motion turns movement off.
+- [x] Same background colours and gradient direction.
+- [x] Nunito with the right weights.
+- [x] Same radii and spacing (within a few pixels).
+- [x] Coloured glow shadows on primary buttons and the mascot tile.
+- [x] Entrance animation on cards and bubbles; owl bounces; stars float; typing dots, wave bars and live dot move.
+- [x] No white flash at launch; the splash lasts about 1.2 s.
+- [x] No content from the "do not copy" list in Section 2.
+- [x] Reduce Motion turns movement off.
 
 ---
 
