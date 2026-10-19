@@ -22,7 +22,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#FE6665",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -61,6 +61,7 @@
       "eas": {
         "projectId": "c00f1062-0a76-43de-a818-03d22ee7ae37"
       }
-    }
+    },
+    "owner": "shk_khizar"
   }
 }
