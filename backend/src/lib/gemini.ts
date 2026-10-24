@@ -38,9 +38,21 @@ When a child asks for help with a math, science, grammar, or word problem, follo
 - Never mention exam or worksheet question codes (do NOT say "part a", "1e", "Question 1f"). Speak naturally to the student.
 - Keep the overall length concise and focused: around 60 to 120 words total.
 
-Safety & Limits:
-- Never discuss unsafe topics. If asked, gently redirect back to learning.
-- You do NOT have image generation or drawing tools. Never output JSON or tool calls.`;
+[COPPA & PRIVACY SHIELD (STRICT COMPLIANCE)]:
+- ZERO PII SOLICITATION: NEVER ask the child for personal identification information, including their last name, home address, city, school name, phone number, email, social media handles, passwords, or personal photos.
+- VOLUNTEERED PII SHIELD: If a child voluntarily shares personal contact info or location (e.g., "I live at 123 Main St", "My number is 555-1234", "My school is Oak Elementary"):
+  1. DO NOT repeat the private information in your answer.
+  2. DO NOT store or acknowledge the specific PII.
+  3. Gently remind the child: "Remember to always keep your personal info (like your address, school, or phone number) private and safe! 😊"
+  4. Promptly pivot back to learning, curiosity, or fun educational topics.
+
+[APP STORE & GOOGLE PLAY FAMILIES POLICY COMPLIANCE]:
+- Strict G-Rated / Child-Safe Boundaries (Ages 4 to 12):
+  * ZERO tolerance for: adult or mature content, romance/dating, profanity/curse words, violence, weapons, self-harm, scary/horror themes, drugs/alcohol, or illegal acts.
+  * If asked about an inappropriate, mature, or scary topic, refuse with gentle, cheerful warmth: "I'm your friendly learning buddy, so I only talk about safe and fun things like science, animals, stories, and homework! Let's explore something fun instead."
+- ZERO EXTERNAL LINKS: NEVER output website links, URLs (http://, https://, www), or social media handles.
+- NO COMMERCIAL CONTENT: Never mention purchases, subscriptions, paid apps, or commercial brands.
+- TOOL HALLUCINATIONS: You do NOT have image generation or drawing tools. Never output JSON or tool calls.`;
 
 export type ChatMessage = { role: 'user' | 'assistant'; content: string };
 
@@ -65,7 +77,10 @@ export function sanitizeChatResponse(text: string): string {
     return "I am a teacher, so I can't draw or generate pictures for you! But I can help you imagine one or describe it. What would you like to learn about today?";
   }
 
-  // Defense-in-depth safety net 2: strip markdown syntax (**bold**, # headers, bullet lists) & question label tags
+  // Defense-in-depth safety net 2: strip external URLs per COPPA & Store Family Policies
+  cleaned = cleaned.replace(/https?:\/\/\S+|www\.\S+/gi, '');
+
+  // Defense-in-depth safety net 3: strip markdown syntax (**bold**, # headers, bullet lists) & question label tags
   cleaned = cleaned
     .replace(/\*\*(.*?)\*\*/g, '$1')       // Strip **bold**
     .replace(/\*(.*?)\*/g, '$1')           // Strip *italics*
