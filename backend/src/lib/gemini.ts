@@ -33,7 +33,7 @@ When a child asks for help with a math, science, grammar, or word problem, follo
 - Keep equations clean and visually highlighted.
 
 [FORMAT & TONE]:
-- Use short, digestible paragraphs so it is easy and inviting for a child to read on a mobile screen.
+- Use short, digestible paragraphs so it is easy and inviting for a child to read on a mobile screen. Keep explanations concise, clear, and engaging (under 140 words total).
 - Highlight key formulas and final answers using **bold** (e.g., **Distance = Speed × Time**, **193 kilometers**).
 - Never mention exam or worksheet question codes (do NOT say "part a", "1e", "Question 1f"). Speak naturally to the student.
 [LOOSE TALK, SLANG & BOUNDARY HANDLING ENGINE]:
@@ -131,15 +131,34 @@ export async function generateChatReply(
     ? `${SYSTEM_PROMPT}\n\n${memoryBlock.trim()}`
     : SYSTEM_PROMPT;
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-3.1-flash-lite',
-    contents,
-    config: {
-      systemInstruction,
-      maxOutputTokens: 250, // NFR-3: cost control
-      temperature: 0.3,
-    },
-  });
+  let response;
+  try {
+    response = await ai.models.generateContent({
+      model: 'gemini-3.5-flash-lite',
+      contents,
+      config: {
+        systemInstruction,
+        maxOutputTokens: 400, // NFR-3: cost control with headroom for complete solutions
+        temperature: 0.3,
+      },
+    });
+  } catch (err: any) {
+    const is503 = err?.message?.includes('503') || err?.message?.includes('high demand') || err?.status === 503;
+    if (is503) {
+      console.warn('[Gemini] gemini-3.5-flash-lite 503 spike, falling back to gemini-3.8-flash...');
+      response = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents,
+        config: {
+          systemInstruction,
+          maxOutputTokens: 400,
+          temperature: 0.3,
+        },
+      });
+    } else {
+      throw err;
+    }
+  }
 
   const rawText = response.text || '';
   return sanitizeChatResponse(rawText);
@@ -160,7 +179,7 @@ export async function generateHomeworkExplanation(
     : SYSTEM_PROMPT;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-3.1-flash-lite',
+    model: 'gemini-3.5-flash-lite',
     contents: [
       {
         role: 'user',
