@@ -28,7 +28,7 @@ import {
   captureImageFromCamera,
   ProcessedImage,
 } from '../utils/imageHelper';
-import { cleanMessageText } from '../utils/messageText';
+import { cleanMessageText, parseFormattedText } from '../utils/messageText';
 import { colors, radii, fontFamilies, gradients } from '../theme';
 import ChatHistoryDrawer from '../components/ChatHistoryDrawer';
 import ParentalGate from '../components/ParentalGate';
@@ -456,7 +456,17 @@ export default function ChatScreen({
                       item.role === 'user' && styles.bubbleTextUser,
                     ]}
                   >
-                    {cleanMessageText(item.content)}
+                    {parseFormattedText(cleanMessageText(item.content)).map((span, sIdx) => (
+                      <Text
+                        key={sIdx}
+                        style={[
+                          span.bold && styles.bubbleTextBold,
+                          item.role === 'user' && styles.bubbleTextUser,
+                        ]}
+                      >
+                        {span.text}
+                      </Text>
+                    ))}
                   </Text>
                 </View>
               </View>
@@ -906,6 +916,9 @@ const styles = StyleSheet.create({
   },
   bubbleTextUser: {
     color: colors.white,
+  },
+  bubbleTextBold: {
+    fontFamily: fontFamilies.black,
   },
   typingRow: {
     flexDirection: 'row',

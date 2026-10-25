@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
 import { getTranscript } from '../services/api';
-import { cleanMessageText } from '../utils/messageText';
+import { cleanMessageText, parseFormattedText } from '../utils/messageText';
 import { colors, radii, spacing, typography, fontFamilies, shadows } from '../theme';
 import { PressScale, FadeSlideIn } from '../ui/motion';
 import { useSafeAreaInsets } from '../ui/safeArea';
@@ -167,7 +167,17 @@ export default function TranscriptScreen({ studentId, studentName, onBack }: Pro
                     isUser ? styles.userMessageText : styles.assistantMessageText,
                   ]}
                 >
-                  {cleanMessageText(message.content)}
+                  {parseFormattedText(cleanMessageText(message.content)).map((span, sIdx) => (
+                    <Text
+                      key={sIdx}
+                      style={[
+                        span.bold && styles.messageTextBold,
+                        isUser ? styles.userMessageText : styles.assistantMessageText,
+                      ]}
+                    >
+                      {span.text}
+                    </Text>
+                  ))}
                 </Text>
               </View>
             );
@@ -344,6 +354,9 @@ const styles = StyleSheet.create({
   assistantMessageText: {
     color: colors.text,
     fontFamily: fontFamilies.semiBold,
+  },
+  messageTextBold: {
+    fontFamily: fontFamilies.black,
   },
   emptyContainer: {
     padding: 36,

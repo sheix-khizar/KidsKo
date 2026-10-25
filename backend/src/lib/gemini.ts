@@ -90,10 +90,8 @@ export function sanitizeChatResponse(text: string): string {
   // Defense-in-depth safety net 2: strip external URLs per COPPA & Store Family Policies
   cleaned = cleaned.replace(/https?:\/\/\S+|www\.\S+/gi, '');
 
-  // Defense-in-depth safety net 3: strip markdown syntax (**bold**, # headers, bullet lists) & question label tags
+  // Defense-in-depth safety net 3: clean unwanted headers, bullet markers, question labels while preserving **bold** emphasis
   cleaned = cleaned
-    .replace(/\*\*(.*?)\*\*/g, '$1')       // Strip **bold**
-    .replace(/\*(.*?)\*/g, '$1')           // Strip *italics*
     .replace(/^#+\s+/gm, '')              // Strip # headers
     .replace(/^[-*+]\s+/gm, '')           // Strip unordered list bullets
     .replace(/^\d+\.\s+/gm, '')           // Strip numbered list markers (1. 2.)
