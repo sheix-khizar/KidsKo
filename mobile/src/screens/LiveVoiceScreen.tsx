@@ -1,4 +1,4 @@
-import { fontFamilies, gradients } from '../theme';
+import { colors, fontFamilies, gradients } from '../theme';
 import { LinearGradient } from '../ui/LinearGradient';
 import { Pulse, WaveBars, LiveDot, PressScale } from '../ui/motion';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -169,6 +169,18 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
     };
   }, []);
 
+  // Category 1 Phase 3: Debounced Stop-Talking handler (~400ms debounce)
+  const lastInterruptTapRef = useRef<number>(0);
+  const handleInterrupt = () => {
+    const now = Date.now();
+    if (now - lastInterruptTapRef.current < 400) {
+      return; // ignore rapid double-taps
+    }
+    lastInterruptTapRef.current = now;
+    console.log('[LiveVoiceScreen] Stop talking pressed -> interrupting session');
+    sessionRef.current?.interrupt();
+  };
+
   const handleToggleVideo = async () => {
     console.log('[LiveVoiceScreen] handleToggleVideo tapped! Current isVideoActive:', isVideoActive, 'hasPermission:', hasPermission);
     if (isVideoActive) {
@@ -249,6 +261,18 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
                 <View style={styles.liveDot} />
                 <Text style={styles.liveVideoBadgeText}>LIVE VIDEO</Text>
               </View>
+
+              {/* Video mode state chip (Category 1 Phase 3) */}
+              <View style={styles.videoStateChip}>
+                {voiceState === 'speaking' ? (
+                  <Text style={styles.videoStateText}>🔊 Kidsko is talking</Text>
+                ) : voiceState === 'thinking' ? (
+                  <Text style={styles.videoStateText}>⏳ Thinking…</Text>
+                ) : (
+                  <Text style={styles.videoStateText}>🎙️ Listening…</Text>
+                )}
+              </View>
+
               <Pressable
                 style={styles.cameraOverlayToggle}
                 onPress={handleToggleVideo}
@@ -258,19 +282,45 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
               >
                 <Text style={styles.cameraOverlayToggleText}>✕ Turn Off</Text>
               </Pressable>
+
+              {/* Stop-talking button over camera view (Category 1 Phase 3) */}
+              {voiceState === 'speaking' && (
+                <PressScale
+                  style={styles.stopPillVideo}
+                  onPress={handleInterrupt}
+                  accessibilityRole="button"
+                  accessibilityLabel="Stop Kidsko talking"
+                >
+                  <Text style={styles.stopPillText}>✋ Stop</Text>
+                </PressScale>
+              )}
             </View>
           ) : (
             <>
               {voiceState === 'speaking' ? (
-                <Pressable
-                  style={[styles.avatarCircle, styles.avatarSpeaking]}
-                  onPress={() => sessionRef.current?.interrupt()}
-                >
-                  <Text style={styles.avatarEmoji}>🦉</Text>
-                  <View style={styles.speakingBadge}>
-                    <Text style={styles.speakingBadgeText}>Kidsko is talking… (Tap to speak)</Text>
-                  </View>
-                </Pressable>
+                <>
+                  <Pressable
+                    style={[styles.avatarCircle, styles.avatarSpeaking]}
+                    onPress={handleInterrupt}
+                    accessibilityRole="button"
+                    accessibilityLabel="Stop Kidsko talking"
+                  >
+                    <Text style={styles.avatarEmoji}>🦉</Text>
+                    <View style={styles.speakingBadge}>
+                      <Text style={styles.speakingBadgeText}>Kidsko is talking… (Tap to speak)</Text>
+                    </View>
+                  </Pressable>
+
+                  {/* Stop-talking button in voice mode (Category 1 Phase 3) */}
+                  <PressScale
+                    style={styles.stopPillVoice}
+                    onPress={handleInterrupt}
+                    accessibilityRole="button"
+                    accessibilityLabel="Stop Kidsko talking"
+                  >
+                    <Text style={styles.stopPillText}>✋ Stop</Text>
+                  </PressScale>
+                </>
               ) : voiceState === 'thinking' ? (
                 <View style={[styles.avatarCircle, styles.avatarThinking]}>
                   <ActivityIndicator size="large" color="#FFE66D" />
@@ -499,6 +549,64 @@ const styles = StyleSheet.create({
     color: '#FF8A80',
     fontSize: 11,
     fontFamily: fontFamilies.bold,
+  },
+  videoStateChip: {
+    position: 'absolute',
+    top: 12,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  videoStateText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontFamily: fontFamilies.bold,
+  },
+  stopPillVideo: {
+    position: 'absolute',
+    bottom: 14,
+    alignSelf: 'center',
+    backgroundColor: colors.coralStrong,
+    minHeight: 46,
+    paddingHorizontal: 26,
+    paddingVertical: 10,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.5,
+    shadowRadius: 6,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  stopPillVoice: {
+    backgroundColor: colors.coralStrong,
+    minHeight: 46,
+    paddingHorizontal: 26,
+    paddingVertical: 10,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+    elevation: 4,
+    shadowColor: colors.coralStrong,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  stopPillText: {
+    color: colors.white,
+    fontFamily: fontFamilies.black,
+    fontSize: 15,
+    letterSpacing: 0.5,
   },
   avatarCircle: {
     width: 110,
