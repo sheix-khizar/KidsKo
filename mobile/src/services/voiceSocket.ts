@@ -3,16 +3,49 @@ import { ExpoSpeechRecognitionModule } from 'expo-speech-recognition';
 import { getToken } from './api';
 import { getWsUrl } from './config';
 
+// ---------------------------------------------------------------------------
+// Audio diagnostics toggle. Set to true if low-level playback troubleshooting is needed.
+// ---------------------------------------------------------------------------
+const DIAG_AUDIO = false;
+let diagSegmentCounter = 0;
+
+function diagNextSegmentId(): number {
+  diagSegmentCounter += 1;
+  return diagSegmentCounter;
+}
+
+function diagLog(label: string, detail?: unknown) {
+  if (!DIAG_AUDIO) return;
+  console.log(`[DIAG] ${new Date().toISOString().slice(11, 23)} ${label}`, detail ?? '');
+}
+
+// Reads whatever the player object exposes, without assuming field names exist.
+function diagSnapshot(player: any): string {
+  const out: Record<string, unknown> = {};
+  for (const key of ['playing', 'isLoaded', 'isBuffering', 'muted', 'volume', 'currentTime', 'duration', 'playbackRate', 'paused']) {
+    try {
+      const value = player?.[key];
+      if (value !== undefined && typeof value !== 'function') out[key] = value;
+    } catch (err: any) {
+      out[key] = `<error ${err?.message || err}>`;
+    }
+  }
+  return JSON.stringify(out);
+}
+
 export async function forceLoudspeakerAudio(): Promise<void> {
+  const mode = {
+    playsInSilentMode: true,
+    shouldRouteThroughEarpiece: false,
+    interruptionMode: 'doNotMix',
+  } as const;
   try {
-    await setAudioModeAsync({
-      playsInSilentMode: true,
-      shouldRouteThroughEarpiece: false,
-      interruptionMode: 'doNotMix',
-    });
+    await setAudioModeAsync(mode);
     console.log('[Mobile Audio Mode]: Audio mode forced to loudspeaker & exclusive focus.');
+    diagLog('audio mode set OK', JSON.stringify(mode));
   } catch (err: any) {
     console.warn('[Mobile Audio Mode]: Could not set audio mode:', err?.message || err);
+    diagLog('audio mode FAILED', err?.message || String(err));
   }
 }
 
@@ -296,6 +329,7 @@ export class VoiceSession {
     if (this.activePlayer || this.preloadedNextPlayer || this.audioQueue.length > 0 || this.isPlayingQueue) {
       console.log('[Mobile Turn Interrupted]: Discarding queued audio and stopping active/preloaded players.');
     }
+    diagLog('stopAudioPlayback() called');
     this.audioQueue = [];
     this.accumulatedPcmBinary = '';
     this.hasStartedPlayback = false;
@@ -374,6 +408,7 @@ export class VoiceSession {
 
       const subStart = ExpoSpeechRecognitionModule.addListener('start', () => {
         console.log('[SpeechRec Lifecycle]: Started listening for spoken user turns...');
+        diagLog('speech recogniser START event');
         this.callbacks?.onStateChange?.('listening');
       });
 
@@ -412,6 +447,7 @@ export class VoiceSession {
 
       const subEnd = ExpoSpeechRecognitionModule.addListener('end', () => {
         console.log('[SpeechRec Lifecycle]: Recognition cycle ended natively.');
+        diagLog('speech recogniser END event');
         if (this.isSessionActive && this.ws?.readyState === WebSocket.OPEN) {
           if (this.isKidskoSpeaking()) {
             console.log('[SpeechRec Lifecycle]: Kidsko is speaking/thinking -> Deferring speech recognition restart until playback finishes.');
@@ -470,6 +506,7 @@ export class VoiceSession {
 
   private stopSpeechRecognition() {
     console.log('[SpeechRec Lifecycle]: Stopping speech recognition and cleaning listeners...');
+    diagLog('speech recogniser stop() called');
     this.clearSpeechSubscriptions();
     try {
       ExpoSpeechRecognitionModule.stop();
@@ -505,6 +542,7 @@ export class VoiceSession {
     if (this.isPlayingQueue) return;
     this.hasStartedPlayback = true;
     this.callbacks?.onStateChange?.('speaking');
+    diagLog(`startAudioQueuePlayback queued=${this.audioQueue.length}`);
     forceLoudspeakerAudio().catch(() => {});
     this.playNextAudioSegment();
   }
@@ -585,7 +623,15 @@ export class VoiceSession {
     const previousPlayer = this.activePlayer;
     this.activePlayer = playerToPlay;
 
+    const diagSeg = diagNextSegmentId();
+    diagLog(`seg#${diagSeg} created preloaded=${isPreloaded} queueLeft=${this.audioQueue.length}`, diagSnapshot(playerToPlay));
+
     playerToPlay.addListener('playbackStatusUpdate', (status: any) => {
+      if (DIAG_AUDIO) {
+        try {
+          diagLog(`seg#${diagSeg} status`, JSON.stringify(status));
+        } catch { }
+      }
       if (status.didJustFinish) {
         this.lastSegmentFinishTime = Date.now();
         const finishedPlayer = playerToPlay;
@@ -606,6 +652,12 @@ export class VoiceSession {
     });
 
     playerToPlay.play();
+
+    if (DIAG_AUDIO) {
+      diagLog(`seg#${diagSeg} play() called`, diagSnapshot(playerToPlay));
+      setTimeout(() => diagLog(`seg#${diagSeg} +400ms after play()`, diagSnapshot(playerToPlay)), 400);
+      setTimeout(() => diagLog(`seg#${diagSeg} +1500ms after play()`, diagSnapshot(playerToPlay)), 1500);
+    }
 
     // Clean up previous player asynchronously after new player has started playing
     if (previousPlayer && previousPlayer !== playerToPlay) {

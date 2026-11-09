@@ -64,7 +64,7 @@ const getLocalIp = (): string => {
   return 'localhost';
 };
 
-const httpServer = app.listen(PORT, '0.0.0.0', () => {
+const httpServer = app.listen(PORT, () => {
   const localIp = getLocalIp();
   console.log(`✅ Kidsko backend running on http://0.0.0.0:${PORT}`);
   console.log(`   Host Local:       http://localhost:${PORT}/health`);
