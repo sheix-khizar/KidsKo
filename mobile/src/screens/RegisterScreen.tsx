@@ -69,7 +69,7 @@ export default function RegisterScreen({ onRegistered, onGoToLogin }: Props) {
     setLoading(true);
     try {
       const result = await register(email.trim(), password);
-      await saveToken(result.session.access_token, result.userId);
+      await saveToken(result.session.access_token, result.userId, email.trim());
       onRegistered();
     } catch (err: any) {
       setErrorMsg(err.message || 'Registration failed. Please try again.');

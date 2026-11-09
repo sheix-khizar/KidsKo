@@ -53,7 +53,7 @@ export default function LoginScreen({ onLoggedIn, onGoToRegister }: Props) {
     setLoading(true);
     try {
       const result = await login(email.trim(), password);
-      await saveToken(result.session.access_token, result.userId);
+      await saveToken(result.session.access_token, result.userId, email.trim());
       onLoggedIn();
     } catch (err: any) {
       setErrorMsg(err.message || 'Login failed. Please check your credentials.');

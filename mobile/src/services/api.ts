@@ -5,14 +5,22 @@ import { configureBilling } from './billing';
 
 const TOKEN_KEY = 'kidsko_access_token';
 const USER_ID_KEY = 'kidsko_user_id';
+const EMAIL_KEY = 'kidsko_user_email';
 
 // ---- Token storage helpers ----
-export async function saveToken(token: string, userId?: string) {
+export async function saveToken(token: string, userId?: string, email?: string) {
   await SecureStore.setItemAsync(TOKEN_KEY, token);
   if (userId) {
     await SecureStore.setItemAsync(USER_ID_KEY, userId);
     configureBilling(userId);
   }
+  if (email) {
+    await SecureStore.setItemAsync(EMAIL_KEY, email);
+  }
+}
+
+export async function getCurrentUserEmail(): Promise<string | null> {
+  return SecureStore.getItemAsync(EMAIL_KEY);
 }
 
 export async function getSavedUserId(): Promise<string | null> {
@@ -26,6 +34,7 @@ export async function getToken(): Promise<string | null> {
 export async function clearToken() {
   await SecureStore.deleteItemAsync(TOKEN_KEY);
   await SecureStore.deleteItemAsync(USER_ID_KEY);
+  await SecureStore.deleteItemAsync(EMAIL_KEY);
 }
 
 // ---- Auth endpoints ----
@@ -137,3 +146,28 @@ export async function clearStudentMemory(studentId: string): Promise<{ success: 
   if (!res.ok) throw new Error(data.error || 'Could not clear student memory');
   return data as { success: boolean; studentId: string };
 }
+
+// Category 2 Phase 1: Delete child profile permanently
+export async function deleteStudent(studentId: string): Promise<{ success: boolean; deletedStudentId: string }> {
+  const token = await getToken();
+  const res = await fetch(`${getApiUrl()}/api/students/${studentId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Could not delete child profile');
+  return data as { success: boolean; deletedStudentId: string };
+}
+
+// Category 2 Phase 1: Delete parent account & all family records (App Store Guideline 5.1.1)
+export async function deleteAccount(): Promise<{ success: boolean; message: string }> {
+  const token = await getToken();
+  const res = await fetch(`${getApiUrl()}/api/auth/account`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Could not delete parent account');
+  return data as { success: boolean; message: string };
+}
+

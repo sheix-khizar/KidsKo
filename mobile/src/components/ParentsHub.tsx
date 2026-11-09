@@ -14,8 +14,12 @@ import {
   getStudentMemory,
   updateStudentMemory,
   createStudent,
+  deleteStudent,
+  deleteAccount,
+  clearToken,
   StudentMemoryData,
 } from '../services/api';
+import * as SecureStore from 'expo-secure-store';
 import { isPremiumActive } from '../services/billing';
 import { colors, radii, spacing, typography, fontFamilies, gradients, shadows } from '../theme';
 import { LinearGradient } from '../ui/LinearGradient';
@@ -56,6 +60,93 @@ export default function ParentsHub({
 
   // Plan state
   const [isPremium, setIsPremium] = useState(false);
+
+  // Granular Controls (Decision D8)
+  const [allowCamera, setAllowCamera] = useState<boolean>(true);
+  const [chatRetention, setChatRetention] = useState<'30' | '90' | 'forever'>('forever');
+
+  // Deletion States (Issue #7)
+  const [deletingChild, setDeletingChild] = useState<boolean>(false);
+  const [deletingAccount, setDeletingAccount] = useState<boolean>(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const cam = await SecureStore.getItemAsync('kidsko_parent_allow_camera');
+        if (cam !== null) setAllowCamera(cam === 'true');
+        const ret = await SecureStore.getItemAsync('kidsko_parent_chat_retention');
+        if (ret === '30' || ret === '90' || ret === 'forever') setChatRetention(ret);
+      } catch {}
+    })();
+  }, []);
+
+  const handleToggleCamera = async (val: boolean) => {
+    setAllowCamera(val);
+    try {
+      await SecureStore.setItemAsync('kidsko_parent_allow_camera', val ? 'true' : 'false');
+    } catch {}
+  };
+
+  const handleChangeRetention = async (val: '30' | '90' | 'forever') => {
+    setChatRetention(val);
+    try {
+      await SecureStore.setItemAsync('kidsko_parent_chat_retention', val);
+    } catch {}
+  };
+
+  // Delete Child Profile (Category 2 Phase 1)
+  const handleDeleteChild = () => {
+    if (!activeStudent) return;
+    Alert.alert(
+      `Delete ${activeStudent.student_name}'s Profile?`,
+      `Are you sure you want to permanently delete ${activeStudent.student_name}'s profile? All memories, chat conversations, and transcripts will be erased immediately.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Profile',
+          style: 'destructive',
+          onPress: async () => {
+            setDeletingChild(true);
+            try {
+              await deleteStudent(activeStudent.id);
+              await onRefreshStudents();
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'Failed to delete child profile');
+            } finally {
+              setDeletingChild(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // Delete Parent Account (Category 2 Phase 1 - App Store Guideline 5.1.1)
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Parent Account?',
+      'Are you sure you want to permanently delete your parent account and all associated child profiles? All data will be wiped immediately and cannot be recovered.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Permanently Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setDeletingAccount(true);
+            try {
+              await deleteAccount();
+              await clearToken();
+              onRequestLogout();
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'Failed to delete account');
+            } finally {
+              setDeletingAccount(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   useEffect(() => {
     (async () => {
@@ -479,7 +570,96 @@ export default function ParentsHub({
         </View>
       </PressScale>
 
-      {/* 5. Sign Out Button */}
+      {/* 5. Safety & Permissions (Decision D8) */}
+      <View style={styles.actionCard}>
+        <Text style={styles.cardHeaderTitle}>🛡️ Safety & Controls</Text>
+
+        {/* AI Vision Camera Toggle */}
+        <View style={styles.controlRow}>
+          <View style={{ flex: 1, paddingRight: 8 }}>
+            <Text style={styles.controlLabel}>AI Vision Camera</Text>
+            <Text style={styles.controlSub}>Allow Kidsko to see homework through the camera</Text>
+          </View>
+          <Switch
+            value={allowCamera}
+            onValueChange={handleToggleCamera}
+            trackColor={{ false: colors.disabledBg, true: colors.green }}
+            thumbColor={colors.white}
+          />
+        </View>
+
+        {/* Chat History Retention */}
+        <View style={[styles.controlRow, { borderBottomWidth: 0, paddingBottom: 0 }]}>
+          <View style={{ flex: 1, marginBottom: 8 }}>
+            <Text style={styles.controlLabel}>Chat History Retention</Text>
+            <Text style={styles.controlSub}>How long Kidsko keeps past conversations</Text>
+          </View>
+        </View>
+        <View style={styles.retentionPillRow}>
+          {(['30', '90', 'forever'] as const).map((opt) => (
+            <Pressable
+              key={opt}
+              style={[
+                styles.retentionPill,
+                chatRetention === opt && styles.retentionPillActive,
+              ]}
+              onPress={() => handleChangeRetention(opt)}
+            >
+              <Text
+                style={[
+                  styles.retentionPillText,
+                  chatRetention === opt && styles.retentionPillTextActive,
+                ]}
+              >
+                {opt === 'forever' ? 'Keep Forever' : `${opt} Days`}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+
+      {/* 6. Danger Zone (Issue #7: Profile & Account Deletion) */}
+      <View style={[styles.actionCard, styles.dangerCard]}>
+        <Text style={[styles.cardHeaderTitle, { color: colors.error }]}>⚠️ Account & Profile Management</Text>
+
+        {/* Delete Active Child Profile */}
+        {activeStudent && (
+          <PressScale
+            onPress={handleDeleteChild}
+            disabled={deletingChild}
+            style={{ width: '100%', marginBottom: 12 }}
+          >
+            <View style={styles.deleteProfileBtn}>
+              {deletingChild ? (
+                <ActivityIndicator color={colors.error} size="small" />
+              ) : (
+                <Text style={styles.deleteProfileBtnText}>
+                  🗑️ Delete {activeStudent.student_name}'s Profile
+                </Text>
+              )}
+            </View>
+          </PressScale>
+        )}
+
+        {/* Delete Parent Account Permanently (App Store Guideline 5.1.1) */}
+        <PressScale
+          onPress={handleDeleteAccount}
+          disabled={deletingAccount}
+          style={{ width: '100%' }}
+        >
+          <View style={styles.deleteAccountBtn}>
+            {deletingAccount ? (
+              <ActivityIndicator color="#FFFFFF" size="small" />
+            ) : (
+              <Text style={styles.deleteAccountBtnText}>
+                ⚠️ Permanently Delete Account
+              </Text>
+            )}
+          </View>
+        </PressScale>
+      </View>
+
+      {/* 7. Sign Out Button */}
       <PressScale
         onPress={onRequestLogout}
         style={styles.signOutScale}
@@ -896,5 +1076,95 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: fontFamilies.extraBold,
     color: colors.error,
+  },
+  cardHeaderTitle: {
+    fontSize: 16,
+    fontFamily: fontFamilies.black,
+    color: colors.text,
+    marginBottom: 14,
+  },
+  controlRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+  },
+  controlLabel: {
+    fontSize: 14,
+    fontFamily: fontFamilies.extraBold,
+    color: colors.text,
+  },
+  controlSub: {
+    fontSize: 12,
+    fontFamily: fontFamilies.semiBold,
+    color: colors.subtext,
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  retentionPillRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  retentionPill: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: radii.md,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.cardBgMuted,
+    alignItems: 'center',
+  },
+  retentionPillActive: {
+    borderColor: colors.coral,
+    backgroundColor: 'rgba(255, 107, 107, 0.1)',
+  },
+  retentionPillText: {
+    fontSize: 12,
+    fontFamily: fontFamilies.bold,
+    color: colors.subtext,
+  },
+  retentionPillTextActive: {
+    color: colors.coral,
+    fontFamily: fontFamilies.extraBold,
+  },
+  dangerCard: {
+    borderColor: 'rgba(217, 74, 74, 0.25)',
+    backgroundColor: '#FFF9F9',
+  },
+  deleteProfileBtn: {
+    width: '100%',
+    minHeight: 46,
+    borderRadius: radii.md,
+    borderWidth: 1.5,
+    borderColor: 'rgba(217, 74, 74, 0.4)',
+    backgroundColor: 'rgba(217, 74, 74, 0.06)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  deleteProfileBtnText: {
+    fontSize: 13,
+    fontFamily: fontFamilies.extraBold,
+    color: colors.error,
+  },
+  deleteAccountBtn: {
+    width: '100%',
+    minHeight: 46,
+    borderRadius: radii.md,
+    backgroundColor: colors.error,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    elevation: 2,
+  },
+  deleteAccountBtnText: {
+    fontSize: 13,
+    fontFamily: fontFamilies.black,
+    color: colors.white,
+    letterSpacing: 0.3,
   },
 });
