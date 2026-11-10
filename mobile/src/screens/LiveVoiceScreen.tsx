@@ -1,6 +1,7 @@
 import { colors, fontFamilies, gradients } from '../theme';
 import { LinearGradient } from '../ui/LinearGradient';
 import { Pulse, WaveBars, LiveDot, PressScale } from '../ui/motion';
+import { Mascot } from '../ui/Mascot';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, ActivityIndicator, AppState, AppStateStatus } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission, usePhotoOutput } from 'react-native-vision-camera';
@@ -10,6 +11,7 @@ import { VoiceSession } from '../services/voiceSocket';
 type Props = {
   studentId: string;
   studentName: string;
+  initialMode?: 'voice' | 'video';
   onBack: () => void;
   onLimitReached: () => void;
 };
@@ -33,7 +35,7 @@ const PHOTO_CONFIG = {
   targetResolution: { width: 640, height: 480 },
 };
 
-export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimitReached }: Props) {
+export default function LiveVoiceScreen({ studentId, studentName, initialMode = 'voice', onBack, onLimitReached }: Props) {
   const [status, setStatus] = useState<'connecting' | 'live' | 'ended'>('connecting');
   const [voiceState, setVoiceState] = useState<'listening' | 'thinking' | 'speaking'>('listening');
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
@@ -42,7 +44,7 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
   const [networkNotice, setNetworkNotice] = useState<string | null>(null);
 
   // Live Video State & Camera Hooks (Phase B2)
-  const [isVideoActive, setIsVideoActive] = useState(false);
+  const [isVideoActive, setIsVideoActive] = useState(initialMode === 'video');
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [isAppForeground, setIsAppForeground] = useState(true);
   const [cameraAllowedByParent, setCameraAllowedByParent] = useState(true);
@@ -310,12 +312,12 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
               {voiceState === 'speaking' ? (
                 <>
                   <Pressable
-                    style={[styles.avatarCircle, styles.avatarSpeaking]}
+                    style={[styles.avatarCircle, styles.avatarSpeaking, { overflow: 'visible', borderWidth: 0, backgroundColor: 'transparent' }]}
                     onPress={handleInterrupt}
                     accessibilityRole="button"
                     accessibilityLabel="Stop Kidsko talking"
                   >
-                    <Text style={styles.avatarEmoji}>🦉</Text>
+                    <Mascot size="l" shape="circle" />
                     <View style={styles.speakingBadge}>
                       <Text style={styles.speakingBadgeText}>Kidsko is talking… (Tap to speak)</Text>
                     </View>

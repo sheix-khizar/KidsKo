@@ -410,6 +410,117 @@ export default function ParentsHub({
         )}
       </LinearGradient>
 
+      {/* Visual Learning Analytics (Category 3 Phase 3 - Issue #2B) */}
+      {activeStudent && (
+        <View style={styles.analyticsSection}>
+          <Text style={styles.analyticsHeading}>📊 {activeStudent.student_name}'s Learning Activity</Text>
+
+          {/* 2x2 Metric Grid Cards */}
+          <View style={styles.metricGrid}>
+            <View style={styles.metricCard}>
+              <Text style={styles.metricEmoji}>💬</Text>
+              <Text style={[styles.metricValue, { color: colors.coral }]}>23</Text>
+              <Text style={styles.metricLabel}>Questions Today</Text>
+            </View>
+            <View style={styles.metricCard}>
+              <Text style={styles.metricEmoji}>🔥</Text>
+              <Text style={[styles.metricValue, { color: colors.orange }]}>7</Text>
+              <Text style={styles.metricLabel}>Day Streak</Text>
+            </View>
+            <View style={styles.metricCard}>
+              <Text style={styles.metricEmoji}>⏱️</Text>
+              <Text style={[styles.metricValue, { color: colors.sky }]}>34m</Text>
+              <Text style={styles.metricLabel}>Time Today</Text>
+            </View>
+            <View style={styles.metricCard}>
+              <Text style={styles.metricEmoji}>⭐</Text>
+              <Text style={[styles.metricValue, { color: colors.purple }]}>12</Text>
+              <Text style={styles.metricLabel}>Topics Explored</Text>
+            </View>
+          </View>
+
+          {/* Subject Mastery Progress Card */}
+          <View style={styles.analyticsCard}>
+            <Text style={styles.analyticsCardTitle}>📚 Topics This Week</Text>
+
+            {/* Science */}
+            <View style={styles.topicRow}>
+              <View style={styles.topicHeader}>
+                <View style={[styles.topicIconSquircle, { backgroundColor: '#FFF0F0' }]}>
+                  <Text style={styles.topicIconEmoji}>🔬</Text>
+                </View>
+                <Text style={styles.topicName}>Science</Text>
+                <Text style={styles.topicCount}>10 Qs</Text>
+              </View>
+              <View style={styles.progressBarTrack}>
+                <View style={[styles.progressBarFill, { width: '75%', backgroundColor: colors.coral }]} />
+              </View>
+            </View>
+
+            {/* Maths */}
+            <View style={styles.topicRow}>
+              <View style={styles.topicHeader}>
+                <View style={[styles.topicIconSquircle, { backgroundColor: '#F0F8FF' }]}>
+                  <Text style={styles.topicIconEmoji}>🔢</Text>
+                </View>
+                <Text style={styles.topicName}>Maths</Text>
+                <Text style={styles.topicCount}>8 Qs</Text>
+              </View>
+              <View style={styles.progressBarTrack}>
+                <View style={[styles.progressBarFill, { width: '55%', backgroundColor: colors.blue }]} />
+              </View>
+            </View>
+
+            {/* English */}
+            <View style={[styles.topicRow, { marginBottom: 0 }]}>
+              <View style={styles.topicHeader}>
+                <View style={[styles.topicIconSquircle, { backgroundColor: '#F0FFF4' }]}>
+                  <Text style={styles.topicIconEmoji}>📖</Text>
+                </View>
+                <Text style={styles.topicName}>English & Reading</Text>
+                <Text style={styles.topicCount}>5 Qs</Text>
+              </View>
+              <View style={styles.progressBarTrack}>
+                <View style={[styles.progressBarFill, { width: '40%', backgroundColor: colors.green }]} />
+              </View>
+            </View>
+          </View>
+
+          {/* Weekly Flexbox Activity Bar Chart */}
+          <View style={styles.analyticsCard}>
+            <Text style={styles.analyticsCardTitle}>📈 Questions This Week</Text>
+            <View style={styles.barChartContainer}>
+              {[
+                { day: 'Mon', height: '55%' },
+                { day: 'Tue', height: '75%' },
+                { day: 'Wed', height: '40%' },
+                { day: 'Thu', height: '90%', isPeak: true },
+                { day: 'Fri', height: '65%' },
+                { day: 'Sat', height: '80%' },
+                { day: 'Sun', height: '50%' },
+              ].map((item) => (
+                <View key={item.day} style={styles.barCol}>
+                  <View style={styles.barTrack}>
+                    <View
+                      style={[
+                        styles.barFill,
+                        {
+                          height: item.height as any,
+                          backgroundColor: item.isPeak ? colors.coral : 'rgba(78, 205, 196, 0.45)',
+                        },
+                      ]}
+                    />
+                  </View>
+                  <Text style={[styles.barDayText, item.isPeak && { color: colors.coral, fontFamily: fontFamilies.black }]}>
+                    {item.day}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        </View>
+      )}
+
       {/* 2. What Kidsko Remembers Section */}
       {activeStudent && (
         <View style={styles.sectionCard}>
@@ -1229,5 +1340,126 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.black,
     color: colors.white,
     letterSpacing: 0.3,
+  },
+  analyticsSection: {
+    gap: 12,
+  },
+  analyticsHeading: {
+    fontSize: 16,
+    fontFamily: fontFamilies.black,
+    color: colors.text,
+    marginLeft: 4,
+  },
+  metricGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  metricCard: {
+    width: '48%',
+    backgroundColor: colors.white,
+    borderRadius: 18,
+    padding: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.card,
+  },
+  metricEmoji: {
+    fontSize: 24,
+    marginBottom: 4,
+  },
+  metricValue: {
+    fontSize: 26,
+    fontFamily: fontFamilies.black,
+    lineHeight: 30,
+  },
+  metricLabel: {
+    fontSize: 11,
+    fontFamily: fontFamilies.bold,
+    color: colors.subtext,
+    marginTop: 2,
+  },
+  analyticsCard: {
+    backgroundColor: colors.white,
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.card,
+  },
+  analyticsCardTitle: {
+    fontSize: 14,
+    fontFamily: fontFamilies.black,
+    color: colors.text,
+    marginBottom: 14,
+  },
+  topicRow: {
+    marginBottom: 12,
+  },
+  topicHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  topicIconSquircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topicIconEmoji: {
+    fontSize: 14,
+  },
+  topicName: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: fontFamilies.bold,
+    color: colors.text,
+  },
+  topicCount: {
+    fontSize: 12,
+    fontFamily: fontFamilies.bold,
+    color: colors.subtext,
+  },
+  progressBarTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#F0F4F8',
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  barChartContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    height: 90,
+    gap: 8,
+    paddingTop: 10,
+  },
+  barCol: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 6,
+    height: '100%',
+    justifyContent: 'flex-end',
+  },
+  barTrack: {
+    width: '100%',
+    height: 60,
+    justifyContent: 'flex-end',
+  },
+  barFill: {
+    width: '100%',
+    borderRadius: 6,
+  },
+  barDayText: {
+    fontSize: 10,
+    fontFamily: fontFamilies.bold,
+    color: colors.subtext,
   },
 });

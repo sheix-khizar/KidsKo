@@ -29,7 +29,7 @@ type Props = {
   onLogout: () => void;
   onOpenPaywall: () => void;
   onOpenTranscript: (student: Student) => void;
-  onStartCall: (student: Student) => void;
+  onStartCall: (student: Student, initialMode?: 'voice' | 'video') => void;
   onLimitReached: () => void;
   billingVersion?: number;
 };
@@ -278,14 +278,7 @@ export default function MainShellScreen({
             >
               <View style={styles.callHeaderCenter}>
                 <Bounce>
-                  <LinearGradient
-                    colors={gradients.primary.colors}
-                    start={gradients.primary.start}
-                    end={gradients.primary.end}
-                    style={styles.callMascotBadge}
-                  >
-                    <Text style={styles.callMascotEmoji}>🦉</Text>
-                  </LinearGradient>
+                  <Mascot size="l" shape="squircle" style={{ marginBottom: 12 }} />
                 </Bounce>
                 <Text style={styles.callTitle}>Talk to Kidsko!</Text>
                 <Text style={styles.callSubtitle}>
@@ -295,7 +288,7 @@ export default function MainShellScreen({
                 </Text>
               </View>
 
-              {/* The Single "Start Call" Action Card */}
+              {/* Voice & Video Call Cards (Category 3 Phase 2 - Prototype Parity) */}
               {isCurfewActive() ? (
                 <View style={[styles.callActionCard, { opacity: 0.85, backgroundColor: 'rgba(30, 27, 75, 0.75)' }]}>
                   <View style={styles.callIconSquircle}>
@@ -309,35 +302,87 @@ export default function MainShellScreen({
                   </View>
                 </View>
               ) : (
-                <PressScale
-                  style={styles.callActionCardScale}
-                  onPress={() => {
-                    if (activeStudent) {
-                      onStartCall(activeStudent);
-                    }
-                  }}
-                  disabled={!activeStudent}
-                >
-                  <View style={styles.callActionCard}>
-                    <LinearGradient
-                      colors={gradients.primary.colors}
-                      start={gradients.primary.start}
-                      end={gradients.primary.end}
-                      style={styles.callIconSquircle}
-                    >
-                      <Text style={styles.callIconEmoji}>🎙️</Text>
-                    </LinearGradient>
-                    <View style={styles.callActionInfo}>
-                      <Text style={styles.callActionTitle}>Voice & Video Call</Text>
-                      <Text style={styles.callActionSub}>
-                        Talk & listen naturally, or show homework with camera 📷
-                      </Text>
+                <>
+                  {/* Card 1: Voice Call */}
+                  <PressScale
+                    style={styles.callActionCardScale}
+                    onPress={() => {
+                      if (activeStudent) {
+                        onStartCall(activeStudent, 'voice');
+                      }
+                    }}
+                    disabled={!activeStudent}
+                  >
+                    <View style={styles.callActionCard}>
+                      <LinearGradient
+                        colors={gradients.primary.colors}
+                        start={gradients.primary.start}
+                        end={gradients.primary.end}
+                        style={styles.callIconSquircle}
+                      >
+                        <Text style={styles.callIconEmoji}>🎤</Text>
+                      </LinearGradient>
+                      <View style={styles.callActionInfo}>
+                        <Text style={styles.callActionTitle}>Voice Call</Text>
+                        <Text style={styles.callActionSub}>
+                          Talk and listen to Kidsko like a phone call 📞
+                        </Text>
+                      </View>
+                      <View style={styles.callArrowCircle}>
+                        <Text style={styles.callArrowText}>›</Text>
+                      </View>
                     </View>
-                    <View style={styles.callArrowCircle}>
-                      <Text style={styles.callArrowText}>›</Text>
+                  </PressScale>
+
+                  {/* Card 2: AI Vision */}
+                  <PressScale
+                    style={[styles.callActionCardScale, { marginTop: 4 }]}
+                    onPress={() => {
+                      if (activeStudent) {
+                        onStartCall(activeStudent, 'video');
+                      }
+                    }}
+                    disabled={!activeStudent}
+                  >
+                    <View style={[styles.callActionCard, styles.callVisionCard]}>
+                      <LinearGradient
+                        colors={gradients.teal.colors}
+                        start={gradients.teal.start}
+                        end={gradients.teal.end}
+                        style={[styles.callIconSquircle, styles.callVisionIconSquircle]}
+                      >
+                        <Text style={styles.callIconEmoji}>👁️</Text>
+                      </LinearGradient>
+                      <View style={styles.callActionInfo}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                          <Text style={styles.callActionTitle}>AI Vision</Text>
+                          <LinearGradient
+                            colors={gradients.teal.colors}
+                            start={gradients.teal.start}
+                            end={gradients.teal.end}
+                            style={styles.newBadge}
+                          >
+                            <Text style={styles.newBadgeText}>NEW ✨</Text>
+                          </LinearGradient>
+                        </View>
+                        <Text style={styles.callActionSub}>
+                          Point camera at anything, Kidsko will explain it! 📷🔍
+                        </Text>
+                      </View>
+                      <View style={styles.callArrowCircle}>
+                        <Text style={styles.callArrowText}>›</Text>
+                      </View>
                     </View>
+                  </PressScale>
+
+                  {/* Pro-Tip Card */}
+                  <View style={styles.callTipCard}>
+                    <Text style={styles.callTipIcon}>💡</Text>
+                    <Text style={styles.callTipText}>
+                      Tip: Use <Text style={{ color: colors.sky, fontFamily: fontFamilies.bold }}>AI Vision</Text> to point at your homework and Kidsko will help you!
+                    </Text>
                   </View>
-                </PressScale>
+                </>
               )}
 
               {/* Plan usage pill from real billing state */}
@@ -629,6 +674,27 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: 'rgba(255, 255, 255, 0.15)',
     padding: 16,
+  },
+  callVisionCard: {
+    backgroundColor: 'rgba(78, 205, 196, 0.08)',
+    borderColor: 'rgba(78, 205, 196, 0.25)',
+  },
+  callVisionIconSquircle: {
+    shadowColor: '#4ECDC4',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  newBadge: {
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  newBadgeText: {
+    fontSize: 10,
+    fontFamily: fontFamilies.black,
+    color: colors.white,
   },
   callIconSquircle: {
     width: 52,

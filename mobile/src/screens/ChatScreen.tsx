@@ -19,6 +19,7 @@ import {
   Pulse,
   PressScale,
   FadeSlideIn,
+  Mascot,
 } from '../ui';
 import { sendMessage, Message } from '../services/chat';
 import { analyzeHomework } from '../services/homework';
@@ -385,7 +386,7 @@ export default function ChatScreen({
               end={gradients.primary.end}
               style={styles.heroCard}
             >
-              <Text style={styles.heroOwlEmoji}>🦉</Text>
+              <Mascot size="m" shape="squircle" style={{ marginBottom: 12 }} />
               <Text style={styles.heroTitle}>Hi {studentName}! 👋</Text>
               <Text style={styles.heroSubtitle}>
                 I'm Kidsko! What do you want to learn today?
@@ -437,12 +438,14 @@ export default function ChatScreen({
                 <View
                   style={[
                     styles.avatar,
-                    item.role === 'user' && styles.avatarUser,
+                    item.role === 'user' ? styles.avatarUser : { backgroundColor: 'transparent' },
                   ]}
                 >
-                  <Text style={styles.avatarEmoji}>
-                    {item.role === 'user' ? '👧' : '🦉'}
-                  </Text>
+                  {item.role === 'user' ? (
+                    <Text style={styles.avatarEmoji}>👧</Text>
+                  ) : (
+                    <Mascot size="xs" shape="circle" />
+                  )}
                 </View>
                 <View
                   style={[
@@ -503,7 +506,7 @@ export default function ChatScreen({
       {sending && (
         <View style={styles.typingRow}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarEmoji}>🦉</Text>
+            <Mascot size="xs" shape="circle" />
           </View>
           <View style={styles.typingBubble}>
             <TypingDots color={colors.coral} />

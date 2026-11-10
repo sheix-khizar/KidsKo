@@ -48,6 +48,7 @@ export default function App() {
   });
   const [screen, setScreen] = useState<Screen>('checking');
   const [activeStudent, setActiveStudent] = useState<Student | null>(null);
+  const [initialCallMode, setInitialCallMode] = useState<'voice' | 'video'>('voice');
   const [gateVisible, setGateVisible] = useState(false);
   // Bumped after a successful purchase so mounted screens re-check the plan.
   const [billingVersion, setBillingVersion] = useState(0);
@@ -200,8 +201,9 @@ export default function App() {
               setActiveStudent(student);
               setScreen('transcript');
             }}
-            onStartCall={(student) => {
+            onStartCall={(student, mode = 'voice') => {
               setActiveStudent(student);
+              setInitialCallMode(mode);
               setScreen('liveVoice');
             }}
             onLimitReached={handleLimitReached}
@@ -231,6 +233,7 @@ export default function App() {
           <LiveVoiceScreen
             studentId={activeStudent.id}
             studentName={activeStudent.student_name}
+            initialMode={initialCallMode}
             onBack={() => setScreen('main')}
             onLimitReached={handleLimitReached}
           />
