@@ -2,7 +2,14 @@ import React, { useState } from 'react';
 import { View, Image, StyleSheet, ViewStyle, ImageStyle } from 'react-native';
 import { radii, shadows, gradients } from '../theme';
 import { LinearGradient } from './LinearGradient';
-import { useVideoPlayer, VideoView } from 'expo-video';
+
+// Safe dynamic access to expo-video in case native module is not yet compiled into the dev client
+let expoVideo: { useVideoPlayer: any; VideoView: any } | null = null;
+try {
+  expoVideo = require('expo-video');
+} catch (e) {
+  expoVideo = null;
+}
 
 export type MascotSize = 'xs' | 's' | 'm' | 'l' | 'xl';
 export type MascotShape = 'squircle' | 'circle';
@@ -47,7 +54,12 @@ class VideoErrorBoundary extends React.Component<
 }
 
 function MascotVideo({ size, borderRadius }: { size: number; borderRadius: number }) {
-  const player = useVideoPlayer(MASCOT_VID, (p) => {
+  if (!expoVideo || !expoVideo.useVideoPlayer || !expoVideo.VideoView) {
+    return null;
+  }
+
+  const { useVideoPlayer, VideoView } = expoVideo;
+  const player = useVideoPlayer(MASCOT_VID, (p: any) => {
     p.loop = true;
     p.muted = true;
     p.play();
@@ -106,7 +118,7 @@ export function Mascot({ size = 'm', shape = 'squircle', animated = true, style,
           },
         ]}
       >
-        {animated && (size === 'm' || size === 'l' || size === 'xl') ? (
+        {animated && expoVideo && (size === 'm' || size === 'l' || size === 'xl') ? (
           <VideoErrorBoundary fallback={fallbackImage}>
             <MascotVideo size={innerSize} borderRadius={innerRadius} />
           </VideoErrorBoundary>
