@@ -15,6 +15,7 @@ import {
 import ChatScreen from './ChatScreen';
 import ParentalGate from '../components/ParentalGate';
 import ParentsHub from '../components/ParentsHub';
+import * as SecureStore from 'expo-secure-store';
 import { getStudents, createStudent, clearToken, getSavedUserId } from '../services/api';
 import { configureBilling, isPremiumActive } from '../services/billing';
 import { TabBar, TabKey } from '../ui/TabBar';
@@ -56,6 +57,7 @@ export default function MainShellScreen({
   // Parents tab gate state
   const [parentsUnlocked, setParentsUnlocked] = useState(false);
   const [logoutGateVisible, setLogoutGateVisible] = useState(false);
+  const [curfewEnabled, setCurfewEnabled] = useState(false);
 
   const loadStudentList = async () => {
     try {
@@ -123,8 +125,17 @@ export default function MainShellScreen({
     }
     if (nextTab === 'call') {
       isPremiumActive().then(setIsPremium).catch(() => {});
+      SecureStore.getItemAsync('kidsko_parent_curfew')
+        .then((val) => setCurfewEnabled(val === 'true'))
+        .catch(() => {});
     }
     setTab(nextTab);
+  };
+
+  const isCurfewActive = () => {
+    if (!curfewEnabled) return false;
+    const hour = new Date().getHours();
+    return hour >= 20 || hour < 7;
   };
 
   // First-run ungated child creation
@@ -285,35 +296,49 @@ export default function MainShellScreen({
               </View>
 
               {/* The Single "Start Call" Action Card */}
-              <PressScale
-                style={styles.callActionCardScale}
-                onPress={() => {
-                  if (activeStudent) {
-                    onStartCall(activeStudent);
-                  }
-                }}
-                disabled={!activeStudent}
-              >
-                <View style={styles.callActionCard}>
-                  <LinearGradient
-                    colors={gradients.primary.colors}
-                    start={gradients.primary.start}
-                    end={gradients.primary.end}
-                    style={styles.callIconSquircle}
-                  >
-                    <Text style={styles.callIconEmoji}>🎙️</Text>
-                  </LinearGradient>
+              {isCurfewActive() ? (
+                <View style={[styles.callActionCard, { opacity: 0.85, backgroundColor: 'rgba(30, 27, 75, 0.75)' }]}>
+                  <View style={styles.callIconSquircle}>
+                    <Text style={styles.callIconEmoji}>🌙</Text>
+                  </View>
                   <View style={styles.callActionInfo}>
-                    <Text style={styles.callActionTitle}>Voice & Video Call</Text>
+                    <Text style={styles.callActionTitle}>Kidsko is Sleeping</Text>
                     <Text style={styles.callActionSub}>
-                      Talk & listen naturally, or show homework with camera 📷
+                      Bedtime curfew is active (8:00 PM – 7:00 AM). Call hours resume in the morning! 💤
                     </Text>
                   </View>
-                  <View style={styles.callArrowCircle}>
-                    <Text style={styles.callArrowText}>›</Text>
-                  </View>
                 </View>
-              </PressScale>
+              ) : (
+                <PressScale
+                  style={styles.callActionCardScale}
+                  onPress={() => {
+                    if (activeStudent) {
+                      onStartCall(activeStudent);
+                    }
+                  }}
+                  disabled={!activeStudent}
+                >
+                  <View style={styles.callActionCard}>
+                    <LinearGradient
+                      colors={gradients.primary.colors}
+                      start={gradients.primary.start}
+                      end={gradients.primary.end}
+                      style={styles.callIconSquircle}
+                    >
+                      <Text style={styles.callIconEmoji}>🎙️</Text>
+                    </LinearGradient>
+                    <View style={styles.callActionInfo}>
+                      <Text style={styles.callActionTitle}>Voice & Video Call</Text>
+                      <Text style={styles.callActionSub}>
+                        Talk & listen naturally, or show homework with camera 📷
+                      </Text>
+                    </View>
+                    <View style={styles.callArrowCircle}>
+                      <Text style={styles.callArrowText}>›</Text>
+                    </View>
+                  </View>
+                </PressScale>
+              )}
 
               {/* Plan usage pill from real billing state */}
               <View style={styles.callPillContainer}>

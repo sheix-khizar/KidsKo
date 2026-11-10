@@ -4,6 +4,7 @@ import { Pulse, WaveBars, LiveDot, PressScale } from '../ui/motion';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, ActivityIndicator, AppState, AppStateStatus } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission, usePhotoOutput } from 'react-native-vision-camera';
+import * as SecureStore from 'expo-secure-store';
 import { VoiceSession } from '../services/voiceSocket';
 
 type Props = {
@@ -44,6 +45,7 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
   const [isVideoActive, setIsVideoActive] = useState(false);
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [isAppForeground, setIsAppForeground] = useState(true);
+  const [cameraAllowedByParent, setCameraAllowedByParent] = useState(true);
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('back');
   const photoOutput = usePhotoOutput(PHOTO_CONFIG);
@@ -58,6 +60,10 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
 
   // AppState listener for lifecycle safety (Ticket B2.4)
   useEffect(() => {
+    SecureStore.getItemAsync('kidsko_parent_allow_camera').then((val) => {
+      if (val !== null) setCameraAllowedByParent(val === 'true');
+    }).catch(() => {});
+
     const subscription = AppState.addEventListener('change', (nextState: AppStateStatus) => {
       setIsAppForeground(nextState === 'active');
     });
@@ -182,6 +188,10 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
   };
 
   const handleToggleVideo = async () => {
+    if (!cameraAllowedByParent) {
+      setErrorReason('Camera access is disabled in Parental Controls.');
+      return;
+    }
     console.log('[LiveVoiceScreen] handleToggleVideo tapped! Current isVideoActive:', isVideoActive, 'hasPermission:', hasPermission);
     if (isVideoActive) {
       setIsCameraReady(false);
@@ -357,16 +367,24 @@ export default function LiveVoiceScreen({ studentId, studentName, onBack, onLimi
       {/* Live Video Toggle Action */}
       {status === 'live' && (
         <View style={styles.actionRow}>
-          <Pressable
-            style={[styles.videoToggleButton, isVideoActive && styles.videoToggleButtonActive]}
-            onPress={handleToggleVideo}
-            accessibilityRole="button"
-            accessibilityLabel={isVideoActive ? 'Turn off live video' : 'Start live video'}
-          >
-            <Text style={styles.videoToggleButtonText}>
-              {isVideoActive ? '📹 Turn Off Video' : '📹 Start Live Video'}
-            </Text>
-          </Pressable>
+          {cameraAllowedByParent ? (
+            <Pressable
+              style={[styles.videoToggleButton, isVideoActive && styles.videoToggleButtonActive]}
+              onPress={handleToggleVideo}
+              accessibilityRole="button"
+              accessibilityLabel={isVideoActive ? 'Turn off live video' : 'Start live video'}
+            >
+              <Text style={styles.videoToggleButtonText}>
+                {isVideoActive ? '📹 Turn Off Video' : '📹 Start Live Video'}
+              </Text>
+            </Pressable>
+          ) : (
+            <View
+              style={[styles.videoToggleButton, { opacity: 0.6, backgroundColor: 'rgba(255,255,255,0.08)' }]}
+            >
+              <Text style={styles.videoToggleButtonText}>📷 Camera disabled by parent</Text>
+            </View>
+          )}
         </View>
       )}
 

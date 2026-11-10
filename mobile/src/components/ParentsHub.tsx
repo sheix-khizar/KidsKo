@@ -24,6 +24,7 @@ import { isPremiumActive } from '../services/billing';
 import { colors, radii, spacing, typography, fontFamilies, gradients, shadows } from '../theme';
 import { LinearGradient } from '../ui/LinearGradient';
 import { PressScale, FadeSlideIn } from '../ui/motion';
+import ParentalGate from './ParentalGate';
 
 type Props = {
   students: Student[];
@@ -61,13 +62,16 @@ export default function ParentsHub({
   // Plan state
   const [isPremium, setIsPremium] = useState(false);
 
-  // Granular Controls (Decision D8)
+  // Granular Controls (Decision D8 & Phase 4)
   const [allowCamera, setAllowCamera] = useState<boolean>(true);
   const [chatRetention, setChatRetention] = useState<'30' | '90' | 'forever'>('forever');
+  const [curfewEnabled, setCurfewEnabled] = useState<boolean>(false);
 
-  // Deletion States (Issue #7)
+  // Deletion States & PIN Gate (Issue #7 - Phase 2 & 3)
   const [deletingChild, setDeletingChild] = useState<boolean>(false);
   const [deletingAccount, setDeletingAccount] = useState<boolean>(false);
+  const [deleteGateVisible, setDeleteGateVisible] = useState<boolean>(false);
+  const [pendingDeleteType, setPendingDeleteType] = useState<'child' | 'account' | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -76,6 +80,8 @@ export default function ParentsHub({
         if (cam !== null) setAllowCamera(cam === 'true');
         const ret = await SecureStore.getItemAsync('kidsko_parent_chat_retention');
         if (ret === '30' || ret === '90' || ret === 'forever') setChatRetention(ret);
+        const cur = await SecureStore.getItemAsync('kidsko_parent_curfew');
+        if (cur !== null) setCurfewEnabled(cur === 'true');
       } catch {}
     })();
   }, []);
@@ -87,6 +93,13 @@ export default function ParentsHub({
     } catch {}
   };
 
+  const handleToggleCurfew = async (val: boolean) => {
+    setCurfewEnabled(val);
+    try {
+      await SecureStore.setItemAsync('kidsko_parent_curfew', val ? 'true' : 'false');
+    } catch {}
+  };
+
   const handleChangeRetention = async (val: '30' | '90' | 'forever') => {
     setChatRetention(val);
     try {
@@ -94,58 +107,74 @@ export default function ParentsHub({
     } catch {}
   };
 
-  // Delete Child Profile (Category 2 Phase 1)
+  // Delete Child Profile (Category 2 Phase 2: Safety Prompt + PIN Confirmation)
   const handleDeleteChild = () => {
     if (!activeStudent) return;
     Alert.alert(
       `Delete ${activeStudent.student_name}'s Profile?`,
-      `Are you sure you want to permanently delete ${activeStudent.student_name}'s profile? All memories, chat conversations, and transcripts will be erased immediately.`,
+      `Are you sure you want to permanently delete ${activeStudent.student_name}'s profile? All memories, chat conversations, and transcripts will be erased immediately.\n\nParent PIN verification required.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete Profile',
+          text: 'Continue with PIN',
           style: 'destructive',
-          onPress: async () => {
-            setDeletingChild(true);
-            try {
-              await deleteStudent(activeStudent.id);
-              await onRefreshStudents();
-            } catch (err: any) {
-              Alert.alert('Error', err.message || 'Failed to delete child profile');
-            } finally {
-              setDeletingChild(false);
-            }
+          onPress: () => {
+            setPendingDeleteType('child');
+            setDeleteGateVisible(true);
           },
         },
       ]
     );
   };
 
-  // Delete Parent Account (Category 2 Phase 1 - App Store Guideline 5.1.1)
+  // Delete Parent Account (Category 2 Phase 3 - App Store Guideline 5.1.1 + PIN Confirmation)
   const handleDeleteAccount = () => {
     Alert.alert(
       'Delete Parent Account?',
-      'Are you sure you want to permanently delete your parent account and all associated child profiles? All data will be wiped immediately and cannot be recovered.',
+      'Are you sure you want to permanently delete your parent account and all associated child profiles? All data will be wiped immediately and cannot be recovered.\n\nParent PIN verification required.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Permanently Delete',
+          text: 'Continue with PIN',
           style: 'destructive',
-          onPress: async () => {
-            setDeletingAccount(true);
-            try {
-              await deleteAccount();
-              await clearToken();
-              onRequestLogout();
-            } catch (err: any) {
-              Alert.alert('Error', err.message || 'Failed to delete account');
-            } finally {
-              setDeletingAccount(false);
-            }
+          onPress: () => {
+            setPendingDeleteType('account');
+            setDeleteGateVisible(true);
           },
         },
       ]
     );
+  };
+
+  const handlePinConfirmedDeletion = async () => {
+    setDeleteGateVisible(false);
+    if (pendingDeleteType === 'child') {
+      if (!activeStudent) return;
+      const childName = activeStudent.student_name;
+      setDeletingChild(true);
+      try {
+        await deleteStudent(activeStudent.id);
+        await onRefreshStudents();
+        Alert.alert('Profile Deleted', `${childName}'s profile and data have been permanently erased.`);
+      } catch (err: any) {
+        Alert.alert('Error', err.message || 'Failed to delete child profile');
+      } finally {
+        setDeletingChild(false);
+        setPendingDeleteType(null);
+      }
+    } else if (pendingDeleteType === 'account') {
+      setDeletingAccount(true);
+      try {
+        await deleteAccount();
+        await clearToken();
+        onRequestLogout();
+      } catch (err: any) {
+        Alert.alert('Error', err.message || 'Failed to delete account');
+      } finally {
+        setDeletingAccount(false);
+        setPendingDeleteType(null);
+      }
+    }
   };
 
   useEffect(() => {
@@ -523,6 +552,16 @@ export default function ParentsHub({
         </PressScale>
       )}
 
+      {/* Empty State when no child profiles remain */}
+      {!activeStudent && (
+        <View style={styles.actionCard}>
+          <Text style={styles.cardHeaderTitle}>👶 No Child Profiles</Text>
+          <Text style={styles.controlSub}>
+            Tap the '+' button at the top right to add your child and personalize their learning experience.
+          </Text>
+        </View>
+      )}
+
       {/* 4. Subscription & Plan Action Card */}
       <PressScale
         onPress={onOpenPaywall}
@@ -583,6 +622,20 @@ export default function ParentsHub({
           <Switch
             value={allowCamera}
             onValueChange={handleToggleCamera}
+            trackColor={{ false: colors.disabledBg, true: colors.green }}
+            thumbColor={colors.white}
+          />
+        </View>
+
+        {/* Bedtime Curfew Toggle (Phase 4) */}
+        <View style={styles.controlRow}>
+          <View style={{ flex: 1, paddingRight: 8 }}>
+            <Text style={styles.controlLabel}>🌙 Bedtime Curfew</Text>
+            <Text style={styles.controlSub}>Lock calls during night hours (8:00 PM – 7:00 AM)</Text>
+          </View>
+          <Switch
+            value={curfewEnabled}
+            onValueChange={handleToggleCurfew}
             trackColor={{ false: colors.disabledBg, true: colors.green }}
             thumbColor={colors.white}
           />
@@ -670,6 +723,16 @@ export default function ParentsHub({
           <Text style={styles.signOutText}>🚪 Sign Out</Text>
         </View>
       </PressScale>
+
+      {/* PIN Confirmation Gate for Profile & Account Deletion (Category 2 Phase 2 & 3) */}
+      <ParentalGate
+        visible={deleteGateVisible}
+        onSuccess={handlePinConfirmedDeletion}
+        onCancel={() => {
+          setDeleteGateVisible(false);
+          setPendingDeleteType(null);
+        }}
+      />
     </View>
   );
 }
