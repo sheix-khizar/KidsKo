@@ -35,6 +35,9 @@ export async function clearToken() {
   await SecureStore.deleteItemAsync(TOKEN_KEY);
   await SecureStore.deleteItemAsync(USER_ID_KEY);
   await SecureStore.deleteItemAsync(EMAIL_KEY);
+  try {
+    await SecureStore.deleteItemAsync('kidsko_custom_api_url');
+  } catch {}
 }
 
 // ---- Auth endpoints ----

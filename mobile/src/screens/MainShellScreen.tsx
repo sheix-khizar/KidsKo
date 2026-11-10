@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   BackHandler,
   ScrollView,
+  TouchableOpacity,
 } from 'react-native';
 import ChatScreen from './ChatScreen';
 import ParentalGate from '../components/ParentalGate';
@@ -221,6 +222,17 @@ export default function MainShellScreen({
                   variant="primary"
                   style={{ marginTop: 8 }}
                 />
+                <TouchableOpacity
+                  style={{ marginTop: 14, alignItems: 'center', padding: 6 }}
+                  onPress={async () => {
+                    await clearToken();
+                    onLogout();
+                  }}
+                >
+                  <Text style={{ color: colors.subtext, fontFamily: fontFamilies.bold, fontSize: 13, textDecorationLine: 'underline' }}>
+                    Sign Out / Switch Account
+                  </Text>
+                </TouchableOpacity>
               </Card>
             </ScrollView>
           ) : activeStudent ? (
