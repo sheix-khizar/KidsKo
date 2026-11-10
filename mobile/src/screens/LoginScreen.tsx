@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
+  Image,
   TextInput,
   Pressable,
   StyleSheet,
@@ -84,12 +85,11 @@ export default function LoginScreen({ onLoggedIn, onGoToRegister }: Props) {
         <FadeSlideIn delay={0}>
           <View style={styles.headerTopRow}>
             <View style={styles.brandRow}>
-              <View style={styles.mascotBadge}>
-                <Text style={styles.mascotEmoji}>🦉</Text>
-              </View>
-              <Text style={styles.brandTitle}>
-                Kidsko<Text style={styles.brandDot}>.ai</Text>
-              </Text>
+              <Image
+                source={require('../../assets/header-logo.png')}
+                style={{ width: 110, height: 44, borderRadius: 12 }}
+                resizeMode="contain"
+              />
             </View>
 
             {/* Server settings button */}

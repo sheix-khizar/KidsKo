@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
+  Image,
   TextInput,
   Pressable,
   StyleSheet,
@@ -181,7 +182,11 @@ export default function MainShellScreen({
       {tab !== 'chat' && (
       <View style={[styles.shellHeader, { paddingTop: spacing.sm }]}>
         <View style={styles.brandRow}>
-          <Text style={styles.brandText}>Kidsko.ai 🦉</Text>
+          <Image
+            source={require('../../assets/header-logo.png')}
+            style={styles.headerLogoImage}
+            resizeMode="contain"
+          />
         </View>
 
         {activeStudent && (
@@ -209,7 +214,7 @@ export default function MainShellScreen({
             // Ungated first-run empty state
             <ScrollView contentContainerStyle={styles.firstRunContent}>
               <Mascot size="l" style={styles.firstRunMascot} />
-              <Text style={styles.firstRunTitle}>Welcome to Kidsko! 🦉</Text>
+              <Text style={styles.firstRunTitle}>Welcome to Kidsko!</Text>
               <Text style={styles.firstRunSub}>
                 Add your child's name to get started with friendly homework help and chats.
               </Text>
@@ -527,6 +532,11 @@ const styles = StyleSheet.create({
   brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  headerLogoImage: {
+    width: 96,
+    height: 38,
+    borderRadius: 10,
   },
   brandText: {
     ...typography.subheading,
