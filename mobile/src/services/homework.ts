@@ -1,9 +1,8 @@
-import { getToken } from './api';
-import { getApiUrl } from './config';
+import { getToken, apiFetch } from './api';
 
 export async function analyzeHomework(studentId: string, imageBase64: string, threadId?: string, prompt?: string) {
   const token = await getToken();
-  const res = await fetch(`${getApiUrl()}/api/homework/analyze`, {
+  const res = await apiFetch('/api/homework/analyze', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

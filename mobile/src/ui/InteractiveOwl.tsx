@@ -1,10 +1,19 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { View, StyleSheet, Animated, Easing, ViewStyle, Image } from 'react-native';
+import { View, StyleSheet, Animated, Easing, ViewStyle, Image, UIManager } from 'react-native';
 import LottieView from 'lottie-react-native';
 import { colors, radii, shadows, gradients } from '../theme';
 import { LinearGradient } from './LinearGradient';
+import { owlIdle, owlListening, owlThinking, owlSpeaking } from './mascotAnimations';
 
 export type OwlMascotState = 'idle' | 'listening' | 'thinking' | 'speaking';
+
+// Safe check: verify if native Lottie ViewManager is compiled into this APK binary
+const isLottieNativeAvailable: boolean = Boolean(
+  (UIManager as any)?.getViewManagerConfig?.('LottieAnimationView') ||
+  (UIManager as any)?.getViewManagerConfig?.('RCTLottieAnimationView') ||
+  (UIManager as any)?.hasViewManagerConfig?.('LottieAnimationView') ||
+  (UIManager as any)?.hasViewManagerConfig?.('RCTLottieAnimationView')
+);
 
 type Props = {
   state?: OwlMascotState;
@@ -14,11 +23,11 @@ type Props = {
   interactive?: boolean;
 };
 
-const ANIMATIONS = {
-  idle: require('../../assets/animations/owl_idle.json'),
-  listening: require('../../assets/animations/owl_listening.json'),
-  thinking: require('../../assets/animations/owl_thinking.json'),
-  speaking: require('../../assets/animations/owl_speaking.json'),
+const ANIMATIONS: Record<OwlMascotState, any> = {
+  idle: owlIdle,
+  listening: owlListening,
+  thinking: owlThinking,
+  speaking: owlSpeaking,
 };
 
 const STATIC_MASCOT = require('../../assets/App-Icon.jpeg');
@@ -153,7 +162,7 @@ export function InteractiveOwl({
           },
         ]}
       >
-        {!lottieFailed ? (
+        {!lottieFailed && isLottieNativeAvailable ? (
           <LottieView
             ref={lottieRef}
             source={ANIMATIONS[state] || ANIMATIONS.idle}
