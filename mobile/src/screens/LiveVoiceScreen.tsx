@@ -2,6 +2,7 @@ import { colors, fontFamilies, gradients } from '../theme';
 import { LinearGradient } from '../ui/LinearGradient';
 import { Pulse, WaveBars, LiveDot, PressScale } from '../ui/motion';
 import { Mascot } from '../ui/Mascot';
+import { InteractiveOwl } from '../ui/InteractiveOwl';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, ActivityIndicator, AppState, AppStateStatus } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission, usePhotoOutput } from 'react-native-vision-camera';
@@ -309,42 +310,43 @@ export default function LiveVoiceScreen({ studentId, studentName, initialMode = 
             </View>
           ) : (
             <>
-              {voiceState === 'speaking' ? (
-                <>
-                  <Pressable
-                    style={[styles.avatarCircle, styles.avatarSpeaking, { overflow: 'visible', borderWidth: 0, backgroundColor: 'transparent' }]}
-                    onPress={handleInterrupt}
-                    accessibilityRole="button"
-                    accessibilityLabel="Stop Kidsko talking"
-                  >
-                    <Mascot size="l" shape="circle" />
-                    <View style={styles.speakingBadge}>
-                      <Text style={styles.speakingBadgeText}>Kidsko is talking… (Tap to speak)</Text>
-                    </View>
-                  </Pressable>
+              <Pressable
+                style={[styles.avatarCircle, { overflow: 'visible', borderWidth: 0, backgroundColor: 'transparent' }]}
+                onPress={handleInterrupt}
+                accessibilityRole="button"
+                accessibilityLabel="Interactive Kidsko Mascot"
+              >
+                <InteractiveOwl state={voiceState} size={124} shape="circle" />
+                <View
+                  style={[
+                    styles.speakingBadge,
+                    voiceState === 'listening'
+                      ? styles.listeningBadgeBg
+                      : voiceState === 'thinking'
+                      ? styles.thinkingBadgeBg
+                      : styles.speakingBadgeBg,
+                  ]}
+                >
+                  <Text style={styles.speakingBadgeText}>
+                    {voiceState === 'speaking'
+                      ? 'Kidsko is talking… (Tap to speak)'
+                      : voiceState === 'thinking'
+                      ? 'Thinking…'
+                      : 'Listening…'}
+                  </Text>
+                </View>
+              </Pressable>
 
-                  {/* Stop-talking button in voice mode (Category 1 Phase 3) */}
-                  <PressScale
-                    style={styles.stopPillVoice}
-                    onPress={handleInterrupt}
-                    accessibilityRole="button"
-                    accessibilityLabel="Stop Kidsko talking"
-                  >
-                    <Text style={styles.stopPillText}>✋ Stop</Text>
-                  </PressScale>
-                </>
-              ) : voiceState === 'thinking' ? (
-                <View style={[styles.avatarCircle, styles.avatarThinking]}>
-                  <ActivityIndicator size="large" color="#FFE66D" />
-                  <Text style={styles.thinkingText}>Thinking…</Text>
-                </View>
-              ) : (
-                <View style={[styles.avatarCircle, styles.avatarListening]}>
-                  <Text style={styles.avatarEmoji}>🎙️</Text>
-                  <View style={styles.listeningBadge}>
-                    <Text style={styles.listeningBadgeText}>Listening…</Text>
-                  </View>
-                </View>
+              {/* Stop-talking button in voice mode */}
+              {voiceState === 'speaking' && (
+                <PressScale
+                  style={styles.stopPillVoice}
+                  onPress={handleInterrupt}
+                  accessibilityRole="button"
+                  accessibilityLabel="Stop Kidsko talking"
+                >
+                  <Text style={styles.stopPillText}>✋ Stop</Text>
+                </PressScale>
               )}
             </>
           )}
@@ -674,6 +676,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   speakingBadgeText: { color: '#FFFFFF', fontSize: 11, fontFamily: fontFamilies.extraBold },
+  listeningBadgeBg: { backgroundColor: '#00B894' },
+  thinkingBadgeBg: { backgroundColor: '#FFE66D' },
+  speakingBadgeBg: { backgroundColor: '#FF9F43' },
 
   transcriptBox: {
     backgroundColor: 'rgba(0,0,0,0.3)',

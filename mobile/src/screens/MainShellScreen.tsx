@@ -3,7 +3,6 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  Image,
   TextInput,
   Pressable,
   StyleSheet,
@@ -21,7 +20,7 @@ import { getStudents, createStudent, clearToken, getSavedUserId } from '../servi
 import { configureBilling, isPremiumActive } from '../services/billing';
 import { TabBar, TabKey } from '../ui/TabBar';
 import { LinearGradient } from '../ui/LinearGradient';
-import { Screen, Mascot, Button, Card, Pill, FadeSlideIn, Bounce, PressScale } from '../ui';
+import { Screen, Mascot, InteractiveOwl, Button, Card, Pill, FadeSlideIn, Bounce, PressScale } from '../ui';
 import { colors, radii, typography, spacing, gradients } from '../theme';
 
 export type Student = { id: string; student_name: string };
@@ -182,11 +181,7 @@ export default function MainShellScreen({
       {tab !== 'chat' && (
       <View style={[styles.shellHeader, { paddingTop: spacing.sm }]}>
         <View style={styles.brandRow}>
-          <Image
-            source={require('../../assets/header-logo.png')}
-            style={styles.headerLogoImage}
-            resizeMode="contain"
-          />
+          <Text style={styles.brandText}>Kidsko.ai 🦉</Text>
         </View>
 
         {activeStudent && (
@@ -283,7 +278,7 @@ export default function MainShellScreen({
             >
               <View style={styles.callHeaderCenter}>
                 <Bounce>
-                  <Mascot size="l" shape="squircle" style={{ marginBottom: 12 }} />
+                  <InteractiveOwl state="idle" size={118} shape="squircle" style={{ marginBottom: 12 }} />
                 </Bounce>
                 <Text style={styles.callTitle}>Talk to Kidsko!</Text>
                 <Text style={styles.callSubtitle}>
@@ -532,11 +527,6 @@ const styles = StyleSheet.create({
   brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  headerLogoImage: {
-    width: 96,
-    height: 38,
-    borderRadius: 10,
   },
   brandText: {
     ...typography.subheading,
