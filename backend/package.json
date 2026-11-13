@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "reset-limits": "ts-node src/scripts/resetVoiceLimits.ts"
   },
   "dependencies": {
     "@google/genai": "^2.13.0",
