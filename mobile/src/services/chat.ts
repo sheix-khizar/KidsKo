@@ -1,4 +1,5 @@
-import { getToken, apiFetch } from './api';
+import { getToken } from './api';
+import { getApiUrl } from './config';
 
 export type Message = {
   role: 'user' | 'assistant';
@@ -14,7 +15,7 @@ export type ChatResponse = {
 
 export async function sendMessage(studentId: string, message: string, threadId?: string): Promise<ChatResponse> {
   const token = await getToken();
-  const res = await apiFetch('/api/chat', {
+  const res = await fetch(`${getApiUrl()}/api/chat`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

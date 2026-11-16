@@ -20,7 +20,7 @@ import { getStudents, createStudent, clearToken, getSavedUserId } from '../servi
 import { configureBilling, isPremiumActive } from '../services/billing';
 import { TabBar, TabKey } from '../ui/TabBar';
 import { LinearGradient } from '../ui/LinearGradient';
-import { Screen, Mascot, InteractiveOwl, Button, Card, Pill, FadeSlideIn, Bounce, PressScale } from '../ui';
+import { Screen, Mascot, Button, Card, Pill, FadeSlideIn, Bounce, PressScale } from '../ui';
 import { colors, radii, typography, spacing, gradients } from '../theme';
 
 export type Student = { id: string; student_name: string };
@@ -278,7 +278,7 @@ export default function MainShellScreen({
             >
               <View style={styles.callHeaderCenter}>
                 <Bounce>
-                  <InteractiveOwl state="idle" size={118} shape="squircle" style={{ marginBottom: 12 }} />
+                  <Mascot size="l" shape="squircle" style={{ marginBottom: 12 }} />
                 </Bounce>
                 <Text style={styles.callTitle}>Talk to Kidsko!</Text>
                 <Text style={styles.callSubtitle}>

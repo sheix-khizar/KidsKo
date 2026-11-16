@@ -9,4 +9,3 @@ export * from './TabBar';
 export * from './LinearGradient';
 export * from './motion';
 export * from './safeArea';
-export * from './InteractiveOwl';
