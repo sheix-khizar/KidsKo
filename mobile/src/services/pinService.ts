@@ -167,9 +167,16 @@ export async function verifyPin(
     await SecureStore.setItemAsync(FAIL_COUNT_KEY, currentFails.toString());
   } catch {}
 
-  // Lockout after 5 failed attempts: 30s base, 60s for subsequent multiples
+  // Lockout escalation: 30s for 1st block (5 fails), 5m (300s) for 2nd block, 15m (900s) for 3rd+ block
   if (currentFails >= 5) {
-    const lockoutDurationSec = currentFails >= 10 ? 120 : currentFails >= 7 ? 60 : 30;
+    let lockoutDurationSec = 30;
+    if (currentFails >= 8) {
+      lockoutDurationSec = 900; // 15 minutes
+    } else if (currentFails >= 6) {
+      lockoutDurationSec = 300; // 5 minutes
+    } else {
+      lockoutDurationSec = 30; // 30 seconds
+    }
     const lockoutUntil = Date.now() + lockoutDurationSec * 1000;
     await SecureStore.setItemAsync(LOCKOUT_UNTIL_KEY, lockoutUntil.toString());
     return { success: false, isLocked: true, secondsRemaining: lockoutDurationSec, failCount: currentFails };
@@ -186,6 +193,7 @@ export async function removePin(): Promise<void> {
   await SecureStore.deleteItemAsync(LOCKOUT_UNTIL_KEY);
   await SecureStore.deleteItemAsync(UNLOCK_TIMESTAMP_KEY);
 }
+export const clearPin = removePin;
 
 /** Record session unlock timestamp */
 export async function recordUnlockSession(): Promise<void> {

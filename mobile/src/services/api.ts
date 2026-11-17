@@ -1,5 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 import { getApiUrl } from './config';
+import { clearPin } from './pinService';
 
 import { configureBilling } from './billing';
 
@@ -20,7 +21,24 @@ export async function saveToken(token: string, userId?: string, email?: string) 
 }
 
 export async function getCurrentUserEmail(): Promise<string | null> {
-  return SecureStore.getItemAsync(EMAIL_KEY);
+  const cached = await SecureStore.getItemAsync(EMAIL_KEY);
+  if (cached && cached.trim()) return cached.trim();
+  // Fallback: Query backend /api/auth/me to fetch email if signed in before email tracking
+  try {
+    const token = await getToken();
+    if (!token) return null;
+    const res = await fetchWithTimeout(`${getApiUrl()}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }, 4000);
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.email) {
+        await SecureStore.setItemAsync(EMAIL_KEY, data.email);
+        return data.email;
+      }
+    }
+  } catch {}
+  return null;
 }
 
 export async function getSavedUserId(): Promise<string | null> {
@@ -37,6 +55,9 @@ export async function clearToken() {
   await SecureStore.deleteItemAsync(EMAIL_KEY);
   try {
     await SecureStore.deleteItemAsync('kidsko_custom_api_url');
+  } catch {}
+  try {
+    await clearPin();
   } catch {}
 }
 
@@ -179,12 +200,53 @@ export async function deleteStudent(studentId: string): Promise<{ success: boole
   return data as { success: boolean; deletedStudentId: string };
 }
 
-// Category 2 Phase 1: Delete parent account & all family records (App Store Guideline 5.1.1)
-export async function deleteAccount(): Promise<{ success: boolean; message: string }> {
+// Real Learning Activity endpoints
+export type StudentActivityData = {
+  studentId: string;
+  studentName: string;
+  questionsToday: number;
+  questionsThisWeek: number;
+  topicsExplored: number;
+  streak: number;
+  dailyCounts: Record<string, number>;
+};
+
+export async function getStudentActivity(studentId: string): Promise<StudentActivityData> {
+  const token = await getToken();
+  const res = await fetchWithTimeout(`${getApiUrl()}/api/students/${studentId}/activity`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Could not load student activity');
+  return data as StudentActivityData;
+}
+
+// Enforce Chat Retention pruning
+export async function pruneChatRetention(retentionDays: number): Promise<{ success: boolean; prunedCount: number }> {
+  const token = await getToken();
+  const res = await fetchWithTimeout(`${getApiUrl()}/api/chat/retention/prune`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ retentionDays }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Could not prune chat history');
+  return data as { success: boolean; prunedCount: number };
+}
+
+// Category 2: Delete parent account & all family records (App Store Guideline 5.1.1 compliant)
+export async function deleteAccount(password: string): Promise<{ success: boolean; message: string }> {
   const token = await getToken();
   const res = await fetchWithTimeout(`${getApiUrl()}/api/auth/account`, {
     method: 'DELETE',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ password }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Could not delete parent account');

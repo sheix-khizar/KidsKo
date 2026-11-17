@@ -28,8 +28,8 @@ export function isPersonalMessage(message: string): boolean {
 
 function cacheKey(question: string, gradeBand: string = 'general'): string {
   const normalized = question.trim().toLowerCase().replace(/[^\w\s]/g, '');
-  const hash = crypto.createHash('sha256').update(`v2:${gradeBand}:${normalized}`).digest('hex');
-  return `qa:v2:${gradeBand}:${hash}`;
+  const hash = crypto.createHash('sha256').update(`v3:${gradeBand}:${normalized}`).digest('hex');
+  return `qa:v3:${gradeBand}:${hash}`;
 }
 
 export async function getCachedAnswer(question: string, gradeBand: string = 'general'): Promise<string | null> {

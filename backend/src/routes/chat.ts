@@ -479,4 +479,64 @@ router.post('/', requireAuth, userRateLimit, async (req: Request, res: Response)
   }
 });
 
+// POST /api/chat/retention/prune (Enforce Chat History Retention - 30 or 90 days)
+router.post('/retention/prune', requireAuth, async (req: Request, res: Response) => {
+  const { retentionDays } = req.body || {};
+  if (!retentionDays || (retentionDays !== 30 && retentionDays !== 90)) {
+    return res.status(400).json({ error: 'retentionDays must be 30 or 90' });
+  }
+
+  const parentId = req.user!.id;
+  const cutoffDate = new Date(Date.now() - Number(retentionDays) * 24 * 60 * 60 * 1000).toISOString();
+
+  try {
+    // 1. Get all students of this parent
+    const { data: students } = await req.supabase!
+      .from('students')
+      .select('id')
+      .eq('parent_id', parentId);
+
+    const studentIds = (students || []).map((s: any) => s.id);
+    if (studentIds.length === 0) {
+      return res.status(200).json({ success: true, prunedCount: 0 });
+    }
+
+    // 2. Get thread IDs for these students
+    const { data: threads } = await req.supabase!
+      .from('chat_threads')
+      .select('id')
+      .in('student_id', studentIds);
+
+    const threadIds = (threads || []).map((t: any) => t.id);
+    if (threadIds.length === 0) {
+      return res.status(200).json({ success: true, prunedCount: 0 });
+    }
+
+    // 3. Delete messages older than cutoffDate
+    const { data: deleted, error } = await req.supabase!
+      .from('messages')
+      .delete()
+      .in('thread_id', threadIds)
+      .lt('created_at', cutoffDate)
+      .select('id');
+
+    if (error) {
+      console.error('[Chat Retention Error]:', error.message);
+      return res.status(500).json({ error: 'Failed to prune older chat history' });
+    }
+
+    const prunedCount = deleted?.length || 0;
+    console.log(`[Chat Retention Pruned]: ParentId=${parentId}, Retention=${retentionDays}d, Cutoff=${cutoffDate}, Count=${prunedCount}`);
+    return res.status(200).json({
+      success: true,
+      prunedCount,
+      cutoffDate,
+      retentionDays,
+    });
+  } catch (err: any) {
+    console.error('[Chat Retention Exception]:', err?.message || err);
+    return res.status(500).json({ error: 'Failed to prune chat history' });
+  }
+});
+
 export default router;

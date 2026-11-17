@@ -8,6 +8,8 @@ import {
   Switch,
   ActivityIndicator,
   Alert,
+  Modal,
+  TouchableOpacity,
 } from 'react-native';
 import { Student } from '../screens/MainShellScreen';
 import {
@@ -18,6 +20,9 @@ import {
   deleteAccount,
   clearToken,
   StudentMemoryData,
+  getStudentActivity,
+  StudentActivityData,
+  pruneChatRetention,
 } from '../services/api';
 import * as SecureStore from 'expo-secure-store';
 import { isPremiumActive } from '../services/billing';
@@ -34,6 +39,7 @@ type Props = {
   onOpenTranscript: (student: Student) => void;
   onOpenPaywall: () => void;
   onRequestLogout: () => void;
+  onAccountDeleted?: () => void;
   billingVersion?: number;
 };
 
@@ -45,6 +51,7 @@ export default function ParentsHub({
   onOpenTranscript,
   onOpenPaywall,
   onRequestLogout,
+  onAccountDeleted,
   billingVersion = 0,
 }: Props) {
   // Add child state
@@ -72,6 +79,33 @@ export default function ParentsHub({
   const [deletingAccount, setDeletingAccount] = useState<boolean>(false);
   const [deleteGateVisible, setDeleteGateVisible] = useState<boolean>(false);
   const [pendingDeleteType, setPendingDeleteType] = useState<'child' | 'account' | null>(null);
+  const [accountDeleteModalVisible, setAccountDeleteModalVisible] = useState<boolean>(false);
+  const [accountDeletePassword, setAccountDeletePassword] = useState<string>('');
+  const [accountDeleteError, setAccountDeleteError] = useState<string | null>(null);
+
+  // Real Learning Activity State (Category 3 Phase 3)
+  const [activity, setActivity] = useState<StudentActivityData | null>(null);
+  const [loadingActivity, setLoadingActivity] = useState<boolean>(false);
+
+  const fetchActivity = async (studentId: string) => {
+    setLoadingActivity(true);
+    try {
+      const act = await getStudentActivity(studentId);
+      setActivity(act);
+    } catch {
+      setActivity(null);
+    } finally {
+      setLoadingActivity(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeStudent) {
+      fetchActivity(activeStudent.id);
+    } else {
+      setActivity(null);
+    }
+  }, [activeStudent?.id]);
 
   useEffect(() => {
     (async () => {
@@ -104,6 +138,10 @@ export default function ParentsHub({
     setChatRetention(val);
     try {
       await SecureStore.setItemAsync('kidsko_parent_chat_retention', val);
+      if (val === '30' || val === '90') {
+        const days = parseInt(val, 10);
+        await pruneChatRetention(days);
+      }
     } catch {}
   };
 
@@ -127,7 +165,7 @@ export default function ParentsHub({
     );
   };
 
-  // Delete Parent Account (Category 2 Phase 3 - App Store Guideline 5.1.1 + PIN Confirmation)
+  // Delete Parent Account (Category 2 Phase 3 - App Store Guideline 5.1.1 + PIN + Password Confirmation)
   const handleDeleteAccount = () => {
     Alert.alert(
       'Delete Parent Account?',
@@ -163,17 +201,34 @@ export default function ParentsHub({
         setPendingDeleteType(null);
       }
     } else if (pendingDeleteType === 'account') {
-      setDeletingAccount(true);
-      try {
-        await deleteAccount();
-        await clearToken();
+      // Step 2: Prompt for account password for server-side verification
+      setPendingDeleteType(null);
+      setAccountDeletePassword('');
+      setAccountDeleteError(null);
+      setAccountDeleteModalVisible(true);
+    }
+  };
+
+  const handleConfirmAccountDeletion = async () => {
+    if (!accountDeletePassword.trim()) {
+      setAccountDeleteError('Please enter your account password.');
+      return;
+    }
+    setDeletingAccount(true);
+    setAccountDeleteError(null);
+    try {
+      await deleteAccount(accountDeletePassword.trim());
+      await clearToken();
+      setAccountDeleteModalVisible(false);
+      if (onAccountDeleted) {
+        onAccountDeleted();
+      } else {
         onRequestLogout();
-      } catch (err: any) {
-        Alert.alert('Error', err.message || 'Failed to delete account');
-      } finally {
-        setDeletingAccount(false);
-        setPendingDeleteType(null);
       }
+    } catch (err: any) {
+      setAccountDeleteError(err?.message || 'Failed to delete account. Please check your password.');
+    } finally {
+      setDeletingAccount(false);
     }
   };
 
@@ -410,114 +465,85 @@ export default function ParentsHub({
         )}
       </LinearGradient>
 
-      {/* Visual Learning Analytics (Category 3 Phase 3 - Issue #2B) */}
+      {/* Visual Learning Analytics (Category 3 Phase 3 - Real Data from DB) */}
       {activeStudent && (
         <View style={styles.analyticsSection}>
           <Text style={styles.analyticsHeading}>📊 {activeStudent.student_name}'s Learning Activity</Text>
 
-          {/* 2x2 Metric Grid Cards */}
-          <View style={styles.metricGrid}>
-            <View style={styles.metricCard}>
-              <Text style={styles.metricEmoji}>💬</Text>
-              <Text style={[styles.metricValue, { color: colors.coral }]}>23</Text>
-              <Text style={styles.metricLabel}>Questions Today</Text>
-            </View>
-            <View style={styles.metricCard}>
-              <Text style={styles.metricEmoji}>🔥</Text>
-              <Text style={[styles.metricValue, { color: colors.orange }]}>7</Text>
-              <Text style={styles.metricLabel}>Day Streak</Text>
-            </View>
-            <View style={styles.metricCard}>
-              <Text style={styles.metricEmoji}>⏱️</Text>
-              <Text style={[styles.metricValue, { color: colors.sky }]}>34m</Text>
-              <Text style={styles.metricLabel}>Time Today</Text>
-            </View>
-            <View style={styles.metricCard}>
-              <Text style={styles.metricEmoji}>⭐</Text>
-              <Text style={[styles.metricValue, { color: colors.purple }]}>12</Text>
-              <Text style={styles.metricLabel}>Topics Explored</Text>
-            </View>
-          </View>
-
-          {/* Subject Mastery Progress Card */}
-          <View style={styles.analyticsCard}>
-            <Text style={styles.analyticsCardTitle}>📚 Topics This Week</Text>
-
-            {/* Science */}
-            <View style={styles.topicRow}>
-              <View style={styles.topicHeader}>
-                <View style={[styles.topicIconSquircle, { backgroundColor: '#FFF0F0' }]}>
-                  <Text style={styles.topicIconEmoji}>🔬</Text>
-                </View>
-                <Text style={styles.topicName}>Science</Text>
-                <Text style={styles.topicCount}>10 Qs</Text>
-              </View>
-              <View style={styles.progressBarTrack}>
-                <View style={[styles.progressBarFill, { width: '75%', backgroundColor: colors.coral }]} />
-              </View>
-            </View>
-
-            {/* Maths */}
-            <View style={styles.topicRow}>
-              <View style={styles.topicHeader}>
-                <View style={[styles.topicIconSquircle, { backgroundColor: '#F0F8FF' }]}>
-                  <Text style={styles.topicIconEmoji}>🔢</Text>
-                </View>
-                <Text style={styles.topicName}>Maths</Text>
-                <Text style={styles.topicCount}>8 Qs</Text>
-              </View>
-              <View style={styles.progressBarTrack}>
-                <View style={[styles.progressBarFill, { width: '55%', backgroundColor: colors.blue }]} />
-              </View>
-            </View>
-
-            {/* English */}
-            <View style={[styles.topicRow, { marginBottom: 0 }]}>
-              <View style={styles.topicHeader}>
-                <View style={[styles.topicIconSquircle, { backgroundColor: '#F0FFF4' }]}>
-                  <Text style={styles.topicIconEmoji}>📖</Text>
-                </View>
-                <Text style={styles.topicName}>English & Reading</Text>
-                <Text style={styles.topicCount}>5 Qs</Text>
-              </View>
-              <View style={styles.progressBarTrack}>
-                <View style={[styles.progressBarFill, { width: '40%', backgroundColor: colors.green }]} />
-              </View>
-            </View>
-          </View>
-
-          {/* Weekly Flexbox Activity Bar Chart */}
-          <View style={styles.analyticsCard}>
-            <Text style={styles.analyticsCardTitle}>📈 Questions This Week</Text>
-            <View style={styles.barChartContainer}>
-              {[
-                { day: 'Mon', height: '55%' },
-                { day: 'Tue', height: '75%' },
-                { day: 'Wed', height: '40%' },
-                { day: 'Thu', height: '90%', isPeak: true },
-                { day: 'Fri', height: '65%' },
-                { day: 'Sat', height: '80%' },
-                { day: 'Sun', height: '50%' },
-              ].map((item) => (
-                <View key={item.day} style={styles.barCol}>
-                  <View style={styles.barTrack}>
-                    <View
-                      style={[
-                        styles.barFill,
-                        {
-                          height: item.height as any,
-                          backgroundColor: item.isPeak ? colors.coral : 'rgba(78, 205, 196, 0.45)',
-                        },
-                      ]}
-                    />
-                  </View>
-                  <Text style={[styles.barDayText, item.isPeak && { color: colors.coral, fontFamily: fontFamilies.black }]}>
-                    {item.day}
+          {loadingActivity ? (
+            <ActivityIndicator style={{ marginVertical: 20 }} color={colors.coralStrong} />
+          ) : (
+            <>
+              {/* 2x2 Metric Grid Cards */}
+              <View style={styles.metricGrid}>
+                <View style={styles.metricCard}>
+                  <Text style={styles.metricEmoji}>💬</Text>
+                  <Text style={[styles.metricValue, { color: colors.coral }]}>
+                    {activity?.questionsToday ?? 0}
                   </Text>
+                  <Text style={styles.metricLabel}>Questions Today</Text>
                 </View>
-              ))}
-            </View>
-          </View>
+                <View style={styles.metricCard}>
+                  <Text style={styles.metricEmoji}>🔥</Text>
+                  <Text style={[styles.metricValue, { color: colors.orange }]}>
+                    {activity?.streak ?? 0}
+                  </Text>
+                  <Text style={styles.metricLabel}>Day Streak</Text>
+                </View>
+                <View style={styles.metricCard}>
+                  <Text style={styles.metricEmoji}>📈</Text>
+                  <Text style={[styles.metricValue, { color: colors.sky }]}>
+                    {activity?.questionsThisWeek ?? 0}
+                  </Text>
+                  <Text style={styles.metricLabel}>This Week</Text>
+                </View>
+                <View style={styles.metricCard}>
+                  <Text style={styles.metricEmoji}>⭐</Text>
+                  <Text style={[styles.metricValue, { color: colors.purple }]}>
+                    {activity?.topicsExplored ?? 0}
+                  </Text>
+                  <Text style={styles.metricLabel}>Topics Explored</Text>
+                </View>
+              </View>
+
+              {/* Weekly Real Activity Bar Chart */}
+              <View style={styles.analyticsCard}>
+                <Text style={styles.analyticsCardTitle}>📈 Questions This Week</Text>
+                {activity && activity.questionsThisWeek > 0 ? (
+                  <View style={styles.barChartContainer}>
+                    {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => {
+                      const count = activity.dailyCounts?.[day] || 0;
+                      const maxDaily = Math.max(1, ...Object.values(activity.dailyCounts || {}));
+                      const pct = Math.max(8, Math.round((count / maxDaily) * 100));
+                      const isPeak = count > 0 && count === maxDaily;
+                      return (
+                        <View key={day} style={styles.barCol}>
+                          <View style={styles.barTrack}>
+                            <View
+                              style={[
+                                styles.barFill,
+                                {
+                                  height: `${pct}%` as any,
+                                  backgroundColor: isPeak ? colors.coral : 'rgba(78, 205, 196, 0.45)',
+                                },
+                              ]}
+                            />
+                          </View>
+                          <Text style={[styles.barDayText, isPeak && { color: colors.coral, fontFamily: fontFamilies.black }]}>
+                            {day}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                ) : (
+                  <Text style={styles.noFactsText}>
+                    No questions asked yet this week. As {activeStudent.student_name} chats with Kidsko, real learning progress will appear here!
+                  </Text>
+                )}
+              </View>
+            </>
+          )}
         </View>
       )}
 
@@ -844,6 +870,79 @@ export default function ParentsHub({
           setPendingDeleteType(null);
         }}
       />
+
+      {/* Password Confirmation Modal for Account Deletion (App Store 5.1.1 & Server Verification) */}
+      <Modal
+        visible={accountDeleteModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!deletingAccount) {
+            setAccountDeleteModalVisible(false);
+            setAccountDeletePassword('');
+            setAccountDeleteError(null);
+          }
+        }}
+      >
+        <View style={styles.deleteModalBackdrop}>
+          <View style={styles.deleteModalCard}>
+            <Text style={styles.deleteModalTitle}>⚠️ Confirm Password</Text>
+            <Text style={styles.deleteModalSub}>
+              This will permanently delete your account, your children's profiles, learning history, and memory. This action cannot be undone.
+            </Text>
+            <Text style={styles.deleteModalSub}>
+              Please enter your Kidsko password to confirm:
+            </Text>
+
+            <TextInput
+              style={styles.deleteModalInput}
+              value={accountDeletePassword}
+              onChangeText={(t) => {
+                setAccountDeletePassword(t);
+                if (accountDeleteError) setAccountDeleteError(null);
+              }}
+              placeholder="Your Account Password"
+              placeholderTextColor={colors.subtext}
+              secureTextEntry
+              autoCapitalize="none"
+              editable={!deletingAccount}
+            />
+
+            {accountDeleteError ? (
+              <Text style={styles.deleteModalError}>{accountDeleteError}</Text>
+            ) : null}
+
+            <View style={styles.deleteModalActions}>
+              <TouchableOpacity
+                style={styles.deleteModalCancelBtn}
+                onPress={() => {
+                  setAccountDeleteModalVisible(false);
+                  setAccountDeletePassword('');
+                  setAccountDeleteError(null);
+                }}
+                disabled={deletingAccount}
+              >
+                <Text style={styles.deleteModalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.deleteModalConfirmBtn,
+                  deletingAccount && { opacity: 0.6 },
+                ]}
+                onPress={handleConfirmAccountDeletion}
+                disabled={deletingAccount}
+              >
+                {deletingAccount ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={styles.deleteModalConfirmText}>Permanently Delete</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1461,5 +1560,81 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontFamily: fontFamilies.bold,
     color: colors.subtext,
+  },
+  deleteModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  deleteModalCard: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: colors.white,
+    borderRadius: radii.xl,
+    padding: spacing.xl,
+    ...shadows.card,
+  },
+  deleteModalTitle: {
+    fontSize: 20,
+    fontFamily: fontFamilies.black,
+    color: colors.error,
+    marginBottom: 8,
+  },
+  deleteModalSub: {
+    fontSize: 13,
+    fontFamily: fontFamilies.regular,
+    color: colors.subtext,
+    lineHeight: 18,
+    marginBottom: 10,
+  },
+  deleteModalInput: {
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: radii.md,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 15,
+    fontFamily: fontFamilies.regular,
+    color: colors.text,
+    marginTop: 6,
+    marginBottom: 8,
+  },
+  deleteModalError: {
+    fontSize: 12,
+    fontFamily: fontFamilies.bold,
+    color: colors.error,
+    marginBottom: 10,
+  },
+  deleteModalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+    marginTop: 14,
+  },
+  deleteModalCancelBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: radii.pill,
+    backgroundColor: '#F1F5F9',
+  },
+  deleteModalCancelText: {
+    fontSize: 14,
+    fontFamily: fontFamilies.bold,
+    color: colors.subtext,
+  },
+  deleteModalConfirmBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: radii.pill,
+    backgroundColor: colors.error,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteModalConfirmText: {
+    fontSize: 14,
+    fontFamily: fontFamilies.black,
+    color: colors.white,
   },
 });

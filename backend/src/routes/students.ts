@@ -61,6 +61,96 @@ router.get('/:id/memory', requireAuth, async (req: Request, res: Response) => {
   });
 });
 
+// GET /api/students/:id/activity (Real Learning Analytics per child)
+router.get('/:id/activity', requireAuth, async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  // 1. Verify parent ownership
+  const { data: student, error: studentError } = await req.supabase!
+    .from('students')
+    .select('id, student_name')
+    .eq('id', id)
+    .eq('parent_id', req.user!.id)
+    .maybeSingle();
+
+  if (studentError || !student) {
+    return res.status(404).json({ error: 'Student not found' });
+  }
+
+  // 2. Fetch threads and user messages count
+  const { data: threads } = await req.supabase!
+    .from('chat_threads')
+    .select('id, created_at')
+    .eq('student_id', id);
+
+  const threadIds = (threads || []).map((t: any) => t.id);
+
+  let userMessages: { created_at: string }[] = [];
+  if (threadIds.length > 0) {
+    const { data: msgs } = await req.supabase!
+      .from('messages')
+      .select('created_at')
+      .in('thread_id', threadIds)
+      .eq('role', 'user');
+    userMessages = msgs || [];
+  }
+
+  // 3. Calculate real metrics
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const sevenDaysAgo = now.getTime() - 7 * 24 * 60 * 60 * 1000;
+
+  const questionsToday = userMessages.filter(
+    (m) => new Date(m.created_at).getTime() >= startOfToday
+  ).length;
+
+  const questionsThisWeek = userMessages.filter(
+    (m) => new Date(m.created_at).getTime() >= sevenDaysAgo
+  ).length;
+
+  const topicsExplored = threadIds.length;
+
+  // Day of week counts (Mon..Sun)
+  const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const dailyCounts: Record<string, number> = {
+    Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0, Sun: 0,
+  };
+
+  userMessages.forEach((m) => {
+    const d = new Date(m.created_at);
+    if (d.getTime() >= sevenDaysAgo) {
+      const dayName = daysOfWeek[d.getDay()];
+      dailyCounts[dayName] = (dailyCounts[dayName] || 0) + 1;
+    }
+  });
+
+  // Calculate real day streak
+  let streak = 0;
+  for (let i = 0; i < 30; i++) {
+    const dayStart = startOfToday - i * 24 * 60 * 60 * 1000;
+    const dayEnd = dayStart + 24 * 60 * 60 * 1000;
+    const hasActivity = userMessages.some((m) => {
+      const t = new Date(m.created_at).getTime();
+      return t >= dayStart && t < dayEnd;
+    });
+    if (hasActivity) {
+      streak++;
+    } else if (i > 0) {
+      break;
+    }
+  }
+
+  return res.status(200).json({
+    studentId: id,
+    studentName: student.student_name,
+    questionsToday,
+    questionsThisWeek,
+    topicsExplored,
+    streak,
+    dailyCounts,
+  });
+});
+
 // PUT /api/students/:id/memory (Step 9.5 / 4.5)
 router.put('/:id/memory', requireAuth, async (req: Request, res: Response) => {
   const { id } = req.params;

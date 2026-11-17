@@ -134,7 +134,7 @@ export async function generateChatReply(
   let response;
   try {
     response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash-lite',
+      model: 'gemini-2.0-flash',
       contents,
       config: {
         systemInstruction,
@@ -145,9 +145,9 @@ export async function generateChatReply(
   } catch (err: any) {
     const is503 = err?.message?.includes('503') || err?.message?.includes('high demand') || err?.status === 503;
     if (is503) {
-      console.warn('[Gemini] gemini-3.5-flash-lite 503 spike, falling back to gemini-3.8-flash...');
+      console.warn('[Gemini] gemini-2.0-flash 503 spike, falling back to gemini-1.5-flash...');
       response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-1.5-flash',
         contents,
         config: {
           systemInstruction,
@@ -179,7 +179,7 @@ export async function generateHomeworkExplanation(
     : SYSTEM_PROMPT;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-3.5-flash-lite',
+    model: 'gemini-2.0-flash',
     contents: [
       {
         role: 'user',
