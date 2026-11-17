@@ -29,13 +29,16 @@ export let WS_URL = currentWsUrl;
 export async function loadSavedApiUrl(): Promise<string> {
   try {
     const saved = await SecureStore.getItemAsync(STORAGE_KEY);
-    if (saved && saved.trim()) {
+    // Purge outdated stale IPs (192.168.18.68)
+    if (saved && saved.trim() && !saved.includes('192.168.18.68')) {
       currentApiUrl = saved.trim().replace(/\/+$/, '');
       currentWsUrl = currentApiUrl.replace(/^http/, 'ws');
       API_URL = currentApiUrl;
       WS_URL = currentWsUrl;
       console.log('[CONFIG] Loaded saved API_URL from storage:', currentApiUrl);
       return currentApiUrl;
+    } else if (saved && saved.includes('192.168.18.68')) {
+      await SecureStore.deleteItemAsync(STORAGE_KEY);
     }
   } catch (err) {
     console.warn('[CONFIG] Could not load saved API_URL:', err);
@@ -68,7 +71,7 @@ export async function setCustomApiUrl(newUrl: string): Promise<string> {
 export async function resetApiUrlToDefault(): Promise<string> {
   try {
     await SecureStore.deleteItemAsync(STORAGE_KEY);
-  } catch {}
+  } catch { }
   currentApiUrl = process.env.EXPO_PUBLIC_API_URL || getDefaultDevApiUrl();
   currentWsUrl = currentApiUrl.replace(/^http/, 'ws');
   API_URL = currentApiUrl;

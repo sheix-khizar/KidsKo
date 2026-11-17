@@ -40,9 +40,26 @@ export async function clearToken() {
   } catch {}
 }
 
+// Helper: fetch with 8s timeout to prevent infinite UI freezing on dead/stale IPs
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 8000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    return res;
+  } catch (err: any) {
+    if (err?.name === 'AbortError' || err?.message?.includes('aborted')) {
+      throw new Error(`Connection timed out (${Math.round(timeoutMs / 1000)}s). Please check server IP.`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ---- Auth endpoints ----
 export async function register(email: string, password: string) {
-  const res = await fetch(`${getApiUrl()}/api/auth/register`, {
+  const res = await fetchWithTimeout(`${getApiUrl()}/api/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
@@ -53,7 +70,7 @@ export async function register(email: string, password: string) {
 }
 
 export async function login(email: string, password: string) {
-  const res = await fetch(`${getApiUrl()}/api/auth/login`, {
+  const res = await fetchWithTimeout(`${getApiUrl()}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
@@ -66,7 +83,7 @@ export async function login(email: string, password: string) {
 // ---- Student endpoints (require a token) ----
 export async function createStudent(studentName: string) {
   const token = await getToken();
-  const res = await fetch(`${getApiUrl()}/api/students`, {
+  const res = await fetchWithTimeout(`${getApiUrl()}/api/students`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -81,7 +98,7 @@ export async function createStudent(studentName: string) {
 
 export async function getStudents() {
   const token = await getToken();
-  const res = await fetch(`${getApiUrl()}/api/students`, {
+  const res = await fetchWithTimeout(`${getApiUrl()}/api/students`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   const data = await res.json();
@@ -91,7 +108,7 @@ export async function getStudents() {
 
 export async function getTranscript(studentId: string) {
   const token = await getToken();
-  const res = await fetch(`${getApiUrl()}/api/transcript/${studentId}`, {
+  const res = await fetchWithTimeout(`${getApiUrl()}/api/transcript/${studentId}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   const data = await res.json();
@@ -113,7 +130,7 @@ export type StudentMemoryData = {
 
 export async function getStudentMemory(studentId: string): Promise<StudentMemoryData> {
   const token = await getToken();
-  const res = await fetch(`${getApiUrl()}/api/students/${studentId}/memory`, {
+  const res = await fetchWithTimeout(`${getApiUrl()}/api/students/${studentId}/memory`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   const data = await res.json();
@@ -126,7 +143,7 @@ export async function updateStudentMemory(
   updates: { enabled?: boolean; preferredName?: string | null; facts?: string[] }
 ): Promise<StudentMemoryData> {
   const token = await getToken();
-  const res = await fetch(`${getApiUrl()}/api/students/${studentId}/memory`, {
+  const res = await fetchWithTimeout(`${getApiUrl()}/api/students/${studentId}/memory`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -141,7 +158,7 @@ export async function updateStudentMemory(
 
 export async function clearStudentMemory(studentId: string): Promise<{ success: boolean; studentId: string }> {
   const token = await getToken();
-  const res = await fetch(`${getApiUrl()}/api/students/${studentId}/memory`, {
+  const res = await fetchWithTimeout(`${getApiUrl()}/api/students/${studentId}/memory`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -153,7 +170,7 @@ export async function clearStudentMemory(studentId: string): Promise<{ success: 
 // Category 2 Phase 1: Delete child profile permanently
 export async function deleteStudent(studentId: string): Promise<{ success: boolean; deletedStudentId: string }> {
   const token = await getToken();
-  const res = await fetch(`${getApiUrl()}/api/students/${studentId}`, {
+  const res = await fetchWithTimeout(`${getApiUrl()}/api/students/${studentId}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -165,7 +182,7 @@ export async function deleteStudent(studentId: string): Promise<{ success: boole
 // Category 2 Phase 1: Delete parent account & all family records (App Store Guideline 5.1.1)
 export async function deleteAccount(): Promise<{ success: boolean; message: string }> {
   const token = await getToken();
-  const res = await fetch(`${getApiUrl()}/api/auth/account`, {
+  const res = await fetchWithTimeout(`${getApiUrl()}/api/auth/account`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${token}` },
   });
