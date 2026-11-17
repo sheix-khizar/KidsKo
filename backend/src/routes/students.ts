@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/auth';
 import { getMemory, filterFact, filterPreferredName } from '../lib/studentMemory';
+import { supabaseAdmin } from '../lib/supabase';
 
 const router = Router();
 
@@ -258,10 +259,11 @@ router.delete('/:id/memory', requireAuth, async (req: Request, res: Response) =>
 // DELETE /api/students/:id (Category 2 Phase 1: Child Profile Deletion with Cascade Cleanup)
 router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
   const { id } = req.params;
+  const db = supabaseAdmin || req.supabase!;
 
   try {
-    // 1. Ownership verification
-    const { data: student, error: studentError } = await req.supabase!
+    // 1. Ownership verification (must belong to authenticated parent)
+    const { data: student, error: studentError } = await db
       .from('students')
       .select('id, student_name')
       .eq('id', id)
@@ -274,7 +276,7 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
 
     // 2. Cascade cleanup of student_memory (ignoring missing table warnings)
     try {
-      await req.supabase!
+      await db
         .from('student_memory')
         .delete()
         .eq('student_id', id);
@@ -284,7 +286,7 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
 
     // 3. Cascade cleanup of usage_events associated with student
     try {
-      await req.supabase!
+      await db
         .from('usage_events')
         .delete()
         .eq('student_id', id);
@@ -294,7 +296,7 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
 
     // 4. Cascade cleanup of chat threads, messages & thread images
     try {
-      const { data: threads } = await req.supabase!
+      const { data: threads } = await db
         .from('chat_threads')
         .select('id')
         .eq('student_id', id);
@@ -302,19 +304,19 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
       if (threads && threads.length > 0) {
         const threadIds = threads.map((t: any) => t.id);
         try {
-          await req.supabase!
+          await db
             .from('thread_images')
             .delete()
             .in('thread_id', threadIds);
         } catch {}
         try {
-          await req.supabase!
+          await db
             .from('messages')
             .delete()
             .in('thread_id', threadIds);
         } catch {}
         try {
-          await req.supabase!
+          await db
             .from('chat_threads')
             .delete()
             .eq('student_id', id);
@@ -324,19 +326,20 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
       console.warn('[DELETE /students/:id Threads Warning]:', thErr?.message);
     }
 
-    // 5. Delete student record
-    const { error: deleteErr } = await req.supabase!
+    // 5. Delete student record with select('id') to guarantee permanent removal
+    const { data: deletedRows, error: deleteErr } = await db
       .from('students')
       .delete()
       .eq('id', id)
-      .eq('parent_id', req.user!.id);
+      .eq('parent_id', req.user!.id)
+      .select('id');
 
     if (deleteErr) {
       console.error('[DELETE /students/:id Error]:', deleteErr.message);
       return res.status(500).json({ error: 'Failed to delete child profile: ' + deleteErr.message });
     }
 
-    console.log(`[Child Profile Deleted]: StudentId=${id}, Name=${student.student_name}, ParentId=${req.user!.id}`);
+    console.log(`[Child Profile Deleted]: StudentId=${id}, Name=${student.student_name}, DeletedRows=${deletedRows?.length || 0}`);
     return res.status(200).json({
       success: true,
       deletedStudentId: id,

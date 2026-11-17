@@ -1307,7 +1307,11 @@ export default function ParentsHub({
 
             {editingStudent && (
               <TouchableOpacity
-                onPress={() => handleRequestDeleteChild(editingStudent)}
+                onPress={() => {
+                  const toDelete = editingStudent;
+                  setEditingStudent(null);
+                  handleRequestDeleteChild(toDelete);
+                }}
                 style={styles.modalDangerBtn}
                 disabled={updatingChild}
               >

@@ -43,7 +43,7 @@ export async function loadSavedApiUrl(): Promise<string> {
   } catch (err) {
     console.warn('[CONFIG] Could not load saved API_URL:', err);
   }
-  currentApiUrl = process.env.EXPO_PUBLIC_API_URL || getDefaultDevApiUrl();
+  currentApiUrl = getDefaultDevApiUrl();
   currentWsUrl = currentApiUrl.replace(/^http/, 'ws');
   API_URL = currentApiUrl;
   WS_URL = currentWsUrl;

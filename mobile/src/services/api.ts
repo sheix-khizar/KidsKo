@@ -1,4 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 import { getApiUrl } from './config';
 import { clearPin } from './pinService';
 
@@ -61,7 +62,7 @@ export async function clearToken() {
   } catch {}
 }
 
-// Helper: fetch with 8s timeout to prevent infinite UI freezing on dead/stale IPs
+// Helper: fetch with 8s timeout to prevent infinite UI freezing on dead/stale IPs with auto-fallback to Android emulator host
 async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 8000): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -69,6 +70,15 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutM
     const res = await fetch(url, { ...options, signal: controller.signal });
     return res;
   } catch (err: any) {
+    if (Platform.OS === 'android' && !url.includes('10.0.2.2')) {
+      const fallbackUrl = url.replace(/http:\/\/[0-9.]+(:3003.*)/, 'http://10.0.2.2$1');
+      if (fallbackUrl !== url) {
+        try {
+          const fallbackRes = await fetch(fallbackUrl, options);
+          return fallbackRes;
+        } catch {}
+      }
+    }
     if (err?.name === 'AbortError' || err?.message?.includes('aborted')) {
       throw new Error(`Connection timed out (${Math.round(timeoutMs / 1000)}s). Please check server IP.`);
     }

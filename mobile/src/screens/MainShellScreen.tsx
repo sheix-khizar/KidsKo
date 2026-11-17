@@ -62,7 +62,7 @@ export default function MainShellScreen({
   const loadStudentList = async (): Promise<Student[]> => {
     try {
       const list = await getStudents();
-      setStudents(list);
+      setStudents([...list]);
       if (list.length > 0) {
         // Auto-select first child if none selected or if active was removed
         setActiveStudent((prev) => {
