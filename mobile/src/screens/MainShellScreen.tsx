@@ -432,6 +432,7 @@ export default function MainShellScreen({
                   onOpenTranscript={onOpenTranscript}
                   onOpenPaywall={onOpenPaywall}
                   onRequestLogout={() => setLogoutGateVisible(true)}
+                  onRequestClose={() => setTab('chat')}
                   onAccountDeleted={() => onLogout()}
                   billingVersion={billingVersion}
                 />

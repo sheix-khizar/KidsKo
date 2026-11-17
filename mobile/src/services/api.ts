@@ -117,6 +117,21 @@ export async function createStudent(studentName: string) {
   return data.student;
 }
 
+export async function updateStudent(studentId: string, studentName: string) {
+  const token = await getToken();
+  const res = await fetchWithTimeout(`${getApiUrl()}/api/students/${studentId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ student_name: studentName }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Could not update student');
+  return data.student as { id: string; student_name: string };
+}
+
 export async function getStudents() {
   const token = await getToken();
   const res = await fetchWithTimeout(`${getApiUrl()}/api/students`, {
@@ -138,6 +153,23 @@ export async function getTranscript(studentId: string) {
     studentName: string;
     messages: { role: string; content: string; message_type: string; created_at: string }[];
   };
+}
+
+export type ChatThreadSummary = {
+  id: string;
+  title: string;
+  updatedAt: string;
+  message_count?: number;
+};
+
+export async function getChatThreads(studentId: string): Promise<ChatThreadSummary[]> {
+  const token = await getToken();
+  const res = await fetchWithTimeout(`${getApiUrl()}/api/chat/threads?studentId=${studentId}&limit=30`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Could not load threads');
+  return (data.threads || []) as ChatThreadSummary[];
 }
 
 // ---- Student Memory endpoints (Stage 10 / Step 4.5 mobile half) ----

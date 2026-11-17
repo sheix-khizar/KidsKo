@@ -348,4 +348,27 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
+// PATCH /api/students/:id - Update child profile name
+router.patch('/:id', requireAuth, async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { student_name } = req.body;
+  if (!student_name || !student_name.trim()) {
+    return res.status(400).json({ error: 'student_name is required' });
+  }
+
+  const { data, error } = await req.supabase!
+    .from('students')
+    .update({ student_name: student_name.trim() })
+    .eq('id', id)
+    .eq('parent_id', req.user!.id)
+    .select()
+    .single();
+
+  if (error) {
+    return res.status(500).json({ error: error.message });
+  }
+
+  return res.status(200).json({ student: data });
+});
+
 export default router;

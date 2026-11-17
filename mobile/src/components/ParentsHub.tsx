@@ -10,12 +10,14 @@ import {
   Alert,
   Modal,
   TouchableOpacity,
+  ScrollView,
 } from 'react-native';
 import { Student } from '../screens/MainShellScreen';
 import {
   getStudentMemory,
   updateStudentMemory,
   createStudent,
+  updateStudent,
   deleteStudent,
   deleteAccount,
   clearToken,
@@ -23,13 +25,16 @@ import {
   getStudentActivity,
   StudentActivityData,
   pruneChatRetention,
+  getChatThreads,
+  ChatThreadSummary,
 } from '../services/api';
 import * as SecureStore from 'expo-secure-store';
-import { isPremiumActive } from '../services/billing';
-import { colors, radii, spacing, typography, fontFamilies, gradients, shadows } from '../theme';
+import { colors, radii, spacing, fontFamilies, gradients, shadows } from '../theme';
 import { LinearGradient } from '../ui/LinearGradient';
-import { PressScale, FadeSlideIn } from '../ui/motion';
+import { PressScale } from '../ui/motion';
 import ParentalGate from './ParentalGate';
+
+type SubTab = 'overview' | 'history' | 'limits' | 'settings';
 
 type Props = {
   students: Student[];
@@ -39,6 +44,7 @@ type Props = {
   onOpenTranscript: (student: Student) => void;
   onOpenPaywall: () => void;
   onRequestLogout: () => void;
+  onRequestClose?: () => void;
   onAccountDeleted?: () => void;
   billingVersion?: number;
 };
@@ -51,41 +57,127 @@ export default function ParentsHub({
   onOpenTranscript,
   onOpenPaywall,
   onRequestLogout,
+  onRequestClose,
   onAccountDeleted,
   billingVersion = 0,
 }: Props) {
-  // Add child state
-  const [showAddInput, setShowAddInput] = useState(false);
+  // Navigation Sub-tab
+  const [currentTab, setCurrentTab] = useState<SubTab>('overview');
+
+  // Add Child Modal State
+  const [showAddModal, setShowAddModal] = useState(false);
   const [newChildName, setNewChildName] = useState('');
+  const [newChildAge, setNewChildAge] = useState('');
+  const [newChildGrade, setNewChildGrade] = useState('Grade 1');
   const [addingChild, setAddingChild] = useState(false);
   const [addChildError, setAddChildError] = useState<string | null>(null);
 
-  // Memory state for active student
+  // Edit Child Modal State
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  const [editChildName, setEditChildName] = useState('');
+  const [updatingChild, setUpdatingChild] = useState(false);
+  const [editChildError, setEditChildError] = useState<string | null>(null);
+
+  // Activity State
+  const [activity, setActivity] = useState<StudentActivityData | null>(null);
+  const [loadingActivity, setLoadingActivity] = useState<boolean>(false);
+
+  // Conversations History State
+  const [threads, setThreads] = useState<ChatThreadSummary[]>([]);
+  const [loadingThreads, setLoadingThreads] = useState(false);
+
+  // Limits State
+  const [dailyLimit, setDailyLimit] = useState<number | 'infinity'>(30);
+  const [schoolHours, setSchoolHours] = useState<boolean>(true);
+  const [eveningStudy, setEveningStudy] = useState<boolean>(true);
+  const [weekendLearning, setWeekendLearning] = useState<boolean>(false);
+
+  // Safety & Controls State
+  const [allowCamera, setAllowCamera] = useState<boolean>(true);
+  const [curfewEnabled, setCurfewEnabled] = useState<boolean>(false);
+  const [chatRetention, setChatRetention] = useState<'30' | '90' | 'forever'>('forever');
+
+  // Notifications State
+  const [dailyReport, setDailyReport] = useState<boolean>(true);
+  const [limitAlerts, setLimitAlerts] = useState<boolean>(true);
+
+  // Student Memory State
   const [memory, setMemory] = useState<StudentMemoryData | null>(null);
   const [loadingMemory, setLoadingMemory] = useState(false);
   const [updatingMemory, setUpdatingMemory] = useState(false);
-  const [memoryError, setMemoryError] = useState<string | null>(null);
 
-  // Plan state
-  const [isPremium, setIsPremium] = useState(false);
-
-  // Granular Controls (Decision D8 & Phase 4)
-  const [allowCamera, setAllowCamera] = useState<boolean>(true);
-  const [chatRetention, setChatRetention] = useState<'30' | '90' | 'forever'>('forever');
-  const [curfewEnabled, setCurfewEnabled] = useState<boolean>(false);
-
-  // Deletion States & PIN Gate (Issue #7 - Phase 2 & 3)
-  const [deletingChild, setDeletingChild] = useState<boolean>(false);
-  const [deletingAccount, setDeletingAccount] = useState<boolean>(false);
+  // PIN & Deletion Gate State
   const [deleteGateVisible, setDeleteGateVisible] = useState<boolean>(false);
   const [pendingDeleteType, setPendingDeleteType] = useState<'child' | 'account' | null>(null);
+  const [childToDelete, setChildToDelete] = useState<Student | null>(null);
+  const [deletingChild, setDeletingChild] = useState<boolean>(false);
+  const [deletingAccount, setDeletingAccount] = useState<boolean>(false);
   const [accountDeleteModalVisible, setAccountDeleteModalVisible] = useState<boolean>(false);
   const [accountDeletePassword, setAccountDeletePassword] = useState<string>('');
   const [accountDeleteError, setAccountDeleteError] = useState<string | null>(null);
+  const [changePinVisible, setChangePinVisible] = useState<boolean>(false);
 
-  // Real Learning Activity State (Category 3 Phase 3)
-  const [activity, setActivity] = useState<StudentActivityData | null>(null);
-  const [loadingActivity, setLoadingActivity] = useState<boolean>(false);
+  // Load Settings from SecureStore
+  useEffect(() => {
+    (async () => {
+      try {
+        const savedCam = await SecureStore.getItemAsync('kidsko_parent_allow_camera');
+        if (savedCam !== null) setAllowCamera(savedCam === 'true');
+
+        const savedCurfew = await SecureStore.getItemAsync('kidsko_parent_curfew');
+        if (savedCurfew !== null) setCurfewEnabled(savedCurfew === 'true');
+
+        const savedRet = await SecureStore.getItemAsync('kidsko_parent_chat_retention');
+        if (savedRet === '30' || savedRet === '90' || savedRet === 'forever') {
+          setChatRetention(savedRet);
+        }
+
+        const savedSchool = await SecureStore.getItemAsync('kidsko_parent_school_hours');
+        if (savedSchool !== null) setSchoolHours(savedSchool === 'true');
+
+        const savedEvening = await SecureStore.getItemAsync('kidsko_parent_evening_study');
+        if (savedEvening !== null) setEveningStudy(savedEvening === 'true');
+
+        const savedWeekend = await SecureStore.getItemAsync('kidsko_parent_weekend_learning');
+        if (savedWeekend !== null) setWeekendLearning(savedWeekend === 'true');
+
+        const savedDailyReport = await SecureStore.getItemAsync('kidsko_parent_daily_report');
+        if (savedDailyReport !== null) setDailyReport(savedDailyReport === 'true');
+
+        const savedLimitAlerts = await SecureStore.getItemAsync('kidsko_parent_limit_alerts');
+        if (savedLimitAlerts !== null) setLimitAlerts(savedLimitAlerts === 'true');
+      } catch {}
+    })();
+  }, []);
+
+  // Load per-student limit & activity & threads
+  useEffect(() => {
+    if (activeStudent) {
+      // Load daily limit for active child
+      SecureStore.getItemAsync(`kidsko_limit_${activeStudent.id}`).then((val) => {
+        if (val === 'infinity') setDailyLimit('infinity');
+        else if (val) {
+          const num = parseInt(val, 10);
+          if (!isNaN(num)) setDailyLimit(num);
+        } else {
+          setDailyLimit(30);
+        }
+      }).catch(() => {});
+
+      // Fetch real activity
+      fetchActivity(activeStudent.id);
+
+      // Fetch memory
+      fetchMemory(activeStudent.id);
+
+      // Fetch threads
+      fetchThreads(activeStudent.id);
+    } else {
+      setActivity(null);
+      setMemory(null);
+      setThreads([]);
+    }
+  }, [activeStudent?.id]);
 
   const fetchActivity = async (studentId: string) => {
     setLoadingActivity(true);
@@ -99,27 +191,31 @@ export default function ParentsHub({
     }
   };
 
-  useEffect(() => {
-    if (activeStudent) {
-      fetchActivity(activeStudent.id);
-    } else {
-      setActivity(null);
+  const fetchMemory = async (studentId: string) => {
+    setLoadingMemory(true);
+    try {
+      const data = await getStudentMemory(studentId);
+      setMemory(data);
+    } catch {
+      setMemory(null);
+    } finally {
+      setLoadingMemory(false);
     }
-  }, [activeStudent?.id]);
+  };
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const cam = await SecureStore.getItemAsync('kidsko_parent_allow_camera');
-        if (cam !== null) setAllowCamera(cam === 'true');
-        const ret = await SecureStore.getItemAsync('kidsko_parent_chat_retention');
-        if (ret === '30' || ret === '90' || ret === 'forever') setChatRetention(ret);
-        const cur = await SecureStore.getItemAsync('kidsko_parent_curfew');
-        if (cur !== null) setCurfewEnabled(cur === 'true');
-      } catch {}
-    })();
-  }, []);
+  const fetchThreads = async (studentId: string) => {
+    setLoadingThreads(true);
+    try {
+      const thList = await getChatThreads(studentId);
+      setThreads(thList);
+    } catch {
+      setThreads([]);
+    } finally {
+      setLoadingThreads(false);
+    }
+  };
 
+  // Toggle Handlers
   const handleToggleCamera = async (val: boolean) => {
     setAllowCamera(val);
     try {
@@ -139,18 +235,102 @@ export default function ParentsHub({
     try {
       await SecureStore.setItemAsync('kidsko_parent_chat_retention', val);
       if (val === '30' || val === '90') {
-        const days = parseInt(val, 10);
-        await pruneChatRetention(days);
+        await pruneChatRetention(parseInt(val, 10));
       }
     } catch {}
   };
 
-  // Delete Child Profile (Category 2 Phase 2: Safety Prompt + PIN Confirmation)
-  const handleDeleteChild = () => {
+  const handleChangeDailyLimit = async (limit: number | 'infinity') => {
     if (!activeStudent) return;
+    setDailyLimit(limit);
+    try {
+      await SecureStore.setItemAsync(`kidsko_limit_${activeStudent.id}`, String(limit));
+    } catch {}
+  };
+
+  const handleToggleSchedule = async (type: 'school' | 'evening' | 'weekend', val: boolean) => {
+    try {
+      if (type === 'school') {
+        setSchoolHours(val);
+        await SecureStore.setItemAsync('kidsko_parent_school_hours', val ? 'true' : 'false');
+      } else if (type === 'evening') {
+        setEveningStudy(val);
+        await SecureStore.setItemAsync('kidsko_parent_evening_study', val ? 'true' : 'false');
+      } else if (type === 'weekend') {
+        setWeekendLearning(val);
+        await SecureStore.setItemAsync('kidsko_parent_weekend_learning', val ? 'true' : 'false');
+      }
+    } catch {}
+  };
+
+  const handleToggleNotification = async (type: 'daily' | 'alerts', val: boolean) => {
+    try {
+      if (type === 'daily') {
+        setDailyReport(val);
+        await SecureStore.setItemAsync('kidsko_parent_daily_report', val ? 'true' : 'false');
+      } else {
+        setLimitAlerts(val);
+        await SecureStore.setItemAsync('kidsko_parent_limit_alerts', val ? 'true' : 'false');
+      }
+    } catch {}
+  };
+
+  // Add Child
+  const handleConfirmAddChild = async () => {
+    if (!newChildName.trim()) {
+      setAddChildError("Please enter your child's name.");
+      return;
+    }
+    setAddingChild(true);
+    setAddChildError(null);
+    try {
+      const created = await createStudent(newChildName.trim());
+      const updatedList = await onRefreshStudents();
+      if (Array.isArray(updatedList) && updatedList.length > 0) {
+        const found = updatedList.find((s) => s.id === created.id) || updatedList[0];
+        onSelectStudent(found);
+      }
+      setNewChildName('');
+      setNewChildAge('');
+      setShowAddModal(false);
+    } catch (err: any) {
+      setAddChildError(err?.message || 'Could not add child profile');
+    } finally {
+      setAddingChild(false);
+    }
+  };
+
+  // Edit Child
+  const handleOpenEditChild = (student: Student) => {
+    setEditingStudent(student);
+    setEditChildName(student.student_name);
+    setEditChildError(null);
+  };
+
+  const handleSaveEditChild = async () => {
+    if (!editingStudent || !editChildName.trim()) {
+      setEditChildError("Name cannot be empty.");
+      return;
+    }
+    setUpdatingChild(true);
+    setEditChildError(null);
+    try {
+      await updateStudent(editingStudent.id, editChildName.trim());
+      await onRefreshStudents();
+      setEditingStudent(null);
+    } catch (err: any) {
+      setEditChildError(err?.message || 'Failed to update child profile');
+    } finally {
+      setUpdatingChild(false);
+    }
+  };
+
+  // Trigger Delete Child
+  const handleRequestDeleteChild = (student: Student) => {
+    setChildToDelete(student);
     Alert.alert(
-      `Delete ${activeStudent.student_name}'s Profile?`,
-      `Are you sure you want to permanently delete ${activeStudent.student_name}'s profile? All memories, chat conversations, and transcripts will be erased immediately.\n\nParent PIN verification required.`,
+      `Delete ${student.student_name}'s Profile?`,
+      `Are you sure you want to permanently delete ${student.student_name}'s profile? All conversations and memory will be erased.\n\nParent PIN verification required.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -165,11 +345,11 @@ export default function ParentsHub({
     );
   };
 
-  // Delete Parent Account (Category 2 Phase 3 - App Store Guideline 5.1.1 + PIN + Password Confirmation)
-  const handleDeleteAccount = () => {
+  // Trigger Delete Account
+  const handleRequestDeleteAccount = () => {
     Alert.alert(
       'Delete Parent Account?',
-      'Are you sure you want to permanently delete your parent account and all associated child profiles? All data will be wiped immediately and cannot be recovered.\n\nParent PIN verification required.',
+      'Are you sure you want to permanently delete your parent account and all children profiles? All data will be wiped.\n\nParent PIN verification required.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -184,38 +364,42 @@ export default function ParentsHub({
     );
   };
 
-  const handlePinConfirmedDeletion = async () => {
+  // PIN Confirmed Action
+  const handlePinConfirmedAction = async () => {
     setDeleteGateVisible(false);
     if (pendingDeleteType === 'child') {
-      if (!activeStudent) return;
-      const childName = activeStudent.student_name;
-      const targetStudentId = activeStudent.id;
+      const target = childToDelete || activeStudent;
+      if (!target) return;
+      const childName = target.student_name;
+      const targetId = target.id;
       setDeletingChild(true);
       try {
-        await deleteStudent(targetStudentId);
+        await deleteStudent(targetId);
         const updatedList = await onRefreshStudents();
         if (Array.isArray(updatedList) && updatedList.length > 0) {
-          const nextChild = updatedList.find((s) => s.id !== targetStudentId) || updatedList[0];
+          const nextChild = updatedList.find((s) => s.id !== targetId) || updatedList[0];
           onSelectStudent(nextChild);
         }
-        Alert.alert('Profile Deleted', `${childName}'s profile and data have been permanently erased.`);
+        setEditingStudent(null);
+        Alert.alert('Profile Deleted', `${childName}'s profile has been removed.`);
       } catch (err: any) {
         const updatedList = await onRefreshStudents();
         if (Array.isArray(updatedList) && updatedList.length > 0) {
-          const nextChild = updatedList.find((s) => s.id !== targetStudentId) || updatedList[0];
+          const nextChild = updatedList.find((s) => s.id !== targetId) || updatedList[0];
           onSelectStudent(nextChild);
         }
+        setEditingStudent(null);
         if (err?.message?.includes('not found')) {
-          Alert.alert('Profile Removed', `${childName}'s profile has been removed.`);
+          Alert.alert('Profile Removed', `${childName}'s profile was removed.`);
         } else {
           Alert.alert('Error', err.message || 'Failed to delete child profile');
         }
       } finally {
         setDeletingChild(false);
         setPendingDeleteType(null);
+        setChildToDelete(null);
       }
     } else if (pendingDeleteType === 'account') {
-      // Step 2: Prompt for account password for server-side verification
       setPendingDeleteType(null);
       setAccountDeletePassword('');
       setAccountDeleteError(null);
@@ -223,6 +407,7 @@ export default function ParentsHub({
     }
   };
 
+  // Password Confirmed Account Deletion
   const handleConfirmAccountDeletion = async () => {
     if (!accountDeletePassword.trim()) {
       setAccountDeleteError('Please enter your account password.');
@@ -246,58 +431,7 @@ export default function ParentsHub({
     }
   };
 
-  useEffect(() => {
-    (async () => {
-      const premium = await isPremiumActive();
-      setIsPremium(premium);
-    })();
-  }, [billingVersion]);
-
-  const fetchMemory = async (studentId: string) => {
-    setLoadingMemory(true);
-    setMemoryError(null);
-    try {
-      const data = await getStudentMemory(studentId);
-      setMemory(data);
-    } catch (err: any) {
-      console.warn('Failed to load memory:', err.message);
-      setMemory(null);
-      setMemoryError(err.message || 'Could not load learning preferences');
-    } finally {
-      setLoadingMemory(false);
-    }
-  };
-
-  useEffect(() => {
-    if (activeStudent) {
-      fetchMemory(activeStudent.id);
-    } else {
-      setMemory(null);
-    }
-  }, [activeStudent?.id]);
-
-  // Handle adding child
-  const handleAddChild = async () => {
-    const trimmed = newChildName.trim();
-    if (!trimmed) {
-      setAddChildError('Please enter a name');
-      return;
-    }
-    setAddingChild(true);
-    setAddChildError(null);
-    try {
-      await createStudent(trimmed);
-      setNewChildName('');
-      setShowAddInput(false);
-      await onRefreshStudents();
-    } catch (err: any) {
-      setAddChildError(err.message || 'Could not add child');
-    } finally {
-      setAddingChild(false);
-    }
-  };
-
-  // Toggle memory switch
+  // Memory Actions
   const handleToggleMemory = async (val: boolean) => {
     if (!activeStudent || !memory) return;
     setUpdatingMemory(true);
@@ -311,10 +445,9 @@ export default function ParentsHub({
     }
   };
 
-  // Remove single fact chip
-  const handleRemoveFact = async (indexToRemove: number) => {
+  const handleRemoveFact = async (idx: number) => {
     if (!activeStudent || !memory) return;
-    const newFacts = memory.facts.filter((_, idx) => idx !== indexToRemove);
+    const newFacts = memory.facts.filter((_, i) => i !== idx);
     setUpdatingMemory(true);
     try {
       const updated = await updateStudentMemory(activeStudent.id, { facts: newFacts });
@@ -326,41 +459,23 @@ export default function ParentsHub({
     }
   };
 
-  // Clear preferred name
-  const handleClearPreferredName = async () => {
-    if (!activeStudent || !memory) return;
-    setUpdatingMemory(true);
-    try {
-      const updated = await updateStudentMemory(activeStudent.id, { preferredName: null });
-      setMemory(updated);
-    } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to remove preferred name');
-    } finally {
-      setUpdatingMemory(false);
-    }
-  };
-
-  // Forget everything
-  const handleForgetEverything = () => {
+  const handleClearMemory = () => {
     if (!activeStudent) return;
     Alert.alert(
-      'Forget everything?',
-      `Are you sure you want to erase all remembered facts and preferences for ${activeStudent.student_name}? Kidsko will start fresh.`,
+      'Clear All Memory?',
+      `Are you sure you want to erase all remembered facts for ${activeStudent.student_name}? Kidsko will start fresh.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Forget Everything',
+          text: 'Clear All',
           style: 'destructive',
           onPress: async () => {
             setUpdatingMemory(true);
             try {
-              await updateStudentMemory(activeStudent.id, {
-                facts: [],
-                preferredName: null,
-              });
+              await updateStudentMemory(activeStudent.id, { facts: [] });
               await fetchMemory(activeStudent.id);
             } catch (err: any) {
-              Alert.alert('Error', err.message || 'Failed to reset memory');
+              Alert.alert('Error', err.message || 'Failed to clear memory');
             } finally {
               setUpdatingMemory(false);
             }
@@ -370,522 +485,842 @@ export default function ParentsHub({
     );
   };
 
+  // Question Limit Calculations
+  const questionsUsed = activity?.questionsToday ?? 0;
+  const limitNumber = dailyLimit === 'infinity' ? 9999 : dailyLimit;
+  const questionsRemaining = dailyLimit === 'infinity' ? '∞' : Math.max(0, limitNumber - questionsUsed);
+  const limitPercent = dailyLimit === 'infinity' ? 20 : Math.min(100, Math.round((questionsUsed / limitNumber) * 100));
+
+  // Past conversation icon palette
+  const threadIcons = ['🔬', '🔢', '🌍', '🦕', '📖', '🚀', '🎨', '🧩'];
+  const threadBgColors = ['#FFF0F0', '#FFF5E0', '#E8F8F0', '#F3EEFF', '#EBF5FB', '#FFF0F5'];
+
   return (
-    <View style={styles.container}>
-      {/* 1. Prototype Navy Gradient Header */}
+    <View style={styles.mainContainer}>
+      {/* ── Dashboard Header ── */}
       <LinearGradient
-        colors={gradients.parents.colors}
-        start={gradients.parents.start}
-        end={gradients.parents.end}
-        style={styles.navyHeader}
+        colors={['#1E3A5F', '#2980B9']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.headerContainer}
       >
-        <View style={styles.headerTitleRow}>
-          <Text style={styles.headerEmoji}>🧑‍🤝‍🧑</Text>
-          <View style={styles.headerTitleCol}>
-            <Text style={styles.headerTitle}>Parent Dashboard</Text>
+        {/* Top Title & Close Button */}
+        <View style={styles.headerTopRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.headerTitle}>👨‍👩‍👧‍👦 Parent Dashboard</Text>
             <Text style={styles.headerSubtitle}>Manage your children's learning</Text>
           </View>
+          {onRequestClose && (
+            <TouchableOpacity
+              onPress={onRequestClose}
+              style={styles.closeBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Close parent dashboard"
+            >
+              <Text style={styles.closeBtnText}>✕</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
-        {/* Children squircle avatars list */}
-        <View style={styles.childrenAvatarsRow}>
-          {students.map((st) => {
+        {/* Children Horizontal Squircle Pills */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.childrenPillsContainer}
+        >
+          {students.map((st, idx) => {
             const isSelected = activeStudent?.id === st.id;
+            const isAlternate = idx % 2 !== 0;
             return (
-              <PressScale
+              <TouchableOpacity
                 key={st.id}
                 onPress={() => onSelectStudent(st)}
-                accessibilityRole="button"
-                accessibilityLabel={`Select child ${st.student_name}`}
+                style={styles.childPillItem}
+                activeOpacity={0.8}
               >
-                <View style={styles.childAvatarCol}>
-                  <View
-                    style={[
-                      styles.childAvatarSquircle,
-                      isSelected && styles.childAvatarSquircleActive,
-                    ]}
-                  >
-                    <Text style={styles.childAvatarEmoji}>🧒</Text>
-                    {isSelected && (
-                      <View style={styles.activeChildBadge}>
-                        <Text style={styles.activeChildBadgeCheck}>✓</Text>
-                      </View>
-                    )}
-                  </View>
-                  <Text
-                    style={[
-                      styles.childAvatarName,
-                      isSelected && styles.childAvatarNameActive,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {st.student_name}
-                  </Text>
+                <View
+                  style={[
+                    styles.childPillSquircle,
+                    isSelected ? styles.childPillActiveSquircle : styles.childPillInactiveSquircle,
+                    {
+                      backgroundColor: isSelected
+                        ? '#FF6B6B'
+                        : isAlternate
+                        ? 'rgba(78, 205, 196, 0.4)'
+                        : 'rgba(255, 107, 107, 0.35)',
+                    },
+                  ]}
+                >
+                  <Text style={styles.childPillEmoji}>{isAlternate ? '👦' : '👧'}</Text>
                 </View>
-              </PressScale>
+                <Text
+                  style={[
+                    styles.childPillName,
+                    isSelected && styles.childPillNameActive,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {st.student_name}
+                </Text>
+              </TouchableOpacity>
             );
           })}
 
-          {/* Add Child Squircle */}
-          <PressScale
-            onPress={() => setShowAddInput((prev) => !prev)}
-            accessibilityRole="button"
-            accessibilityLabel="Add another child"
+          {/* Add Child Pill */}
+          <TouchableOpacity
+            onPress={() => {
+              setNewChildName('');
+              setNewChildAge('');
+              setAddChildError(null);
+              setShowAddModal(true);
+            }}
+            style={styles.childPillItem}
+            activeOpacity={0.8}
           >
-            <View style={styles.childAvatarCol}>
-              <View
-                style={[
-                  styles.addChildSquircle,
-                  showAddInput && styles.addChildSquircleActive,
-                ]}
-              >
-                <Text style={styles.addChildPlus}>{showAddInput ? '✕' : '+'}</Text>
-              </View>
-              <Text style={styles.childAvatarName}>Add</Text>
+            <View style={styles.addChildSquircle}>
+              <Text style={styles.addChildPlus}>➕</Text>
             </View>
-          </PressScale>
-        </View>
+            <Text style={styles.addChildText}>Add</Text>
+          </TouchableOpacity>
+        </ScrollView>
 
-        {/* Inline Add Child Input */}
-        {showAddInput && (
-          <FadeSlideIn duration={180}>
-            <View style={styles.inlineAddRow}>
-              <TextInput
-                style={styles.inlineAddInput}
-                placeholder="Child's name"
-                placeholderTextColor="rgba(255, 255, 255, 0.6)"
-                value={newChildName}
-                onChangeText={(txt) => {
-                  setNewChildName(txt);
-                  if (addChildError) setAddChildError(null);
-                }}
-                maxLength={30}
-                autoFocus
-              />
-              <PressScale onPress={handleAddChild} disabled={addingChild}>
-                <View style={styles.inlineAddBtn}>
-                  {addingChild ? (
-                    <ActivityIndicator color={colors.white} size="small" />
-                  ) : (
-                    <Text style={styles.inlineAddBtnText}>Save</Text>
-                  )}
-                </View>
-              </PressScale>
-            </View>
-            {addChildError && (
-              <Text style={styles.inlineErrorText}>{addChildError}</Text>
-            )}
-          </FadeSlideIn>
-        )}
+        {/* Sub-nav Tab Bar (Overview | History | Limits | Settings) */}
+        <View style={styles.subnavBar}>
+          {(['overview', 'history', 'limits', 'settings'] as SubTab[]).map((tab) => {
+            const isActive = currentTab === tab;
+            const label = tab.charAt(0).toUpperCase() + tab.slice(1);
+            return (
+              <TouchableOpacity
+                key={tab}
+                onPress={() => setCurrentTab(tab)}
+                style={[styles.subnavTab, isActive && styles.subnavTabActive]}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.subnavTabText, isActive && styles.subnavTabTextActive]}>
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </LinearGradient>
 
-      {/* Visual Learning Analytics (Category 3 Phase 3 - Real Data from DB) */}
-      {activeStudent && (
-        <View style={styles.analyticsSection}>
-          <Text style={styles.analyticsHeading}>📊 {activeStudent.student_name}'s Learning Activity</Text>
+      {/* ── Sub-tab Content Area ── */}
+      <View style={styles.contentBody}>
+        {/* ════════ TAB 1: OVERVIEW ════════ */}
+        {currentTab === 'overview' && (
+          <View style={styles.tabContentWrapper}>
+            {activeStudent ? (
+              <>
+                {/* Active Child Profile Card */}
+                <View style={styles.card}>
+                  <View style={styles.activeChildCardRow}>
+                    <LinearGradient
+                      colors={['#FF6B6B', '#FF9F43']}
+                      style={styles.activeChildAvatarCircle}
+                    >
+                      <Text style={styles.activeChildAvatarEmoji}>👧</Text>
+                    </LinearGradient>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.activeChildName}>{activeStudent.student_name}</Text>
+                      <Text style={styles.activeChildMeta}>Grade 5 · Active Learner</Text>
+                    </View>
+                    <View style={styles.activeStatusPill}>
+                      <Text style={styles.activeStatusText}>🟢 Active</Text>
+                    </View>
+                  </View>
+                </View>
 
-          {loadingActivity ? (
-            <ActivityIndicator style={{ marginVertical: 20 }} color={colors.coralStrong} />
-          ) : (
-            <>
-              {/* 2x2 Metric Grid Cards */}
-              <View style={styles.metricGrid}>
-                <View style={styles.metricCard}>
-                  <Text style={styles.metricEmoji}>💬</Text>
-                  <Text style={[styles.metricValue, { color: colors.coral }]}>
-                    {activity?.questionsToday ?? 0}
-                  </Text>
-                  <Text style={styles.metricLabel}>Questions Today</Text>
+                {/* 4-Grid Metrics */}
+                <View style={styles.metricsGrid}>
+                  <View style={styles.metricCard}>
+                    <Text style={styles.metricEmoji}>💬</Text>
+                    <Text style={[styles.metricValue, { color: colors.coral }]}>
+                      {activity?.questionsToday ?? 0}
+                    </Text>
+                    <Text style={styles.metricLabel}>Questions Today</Text>
+                  </View>
+                  <View style={styles.metricCard}>
+                    <Text style={styles.metricEmoji}>🔥</Text>
+                    <Text style={[styles.metricValue, { color: '#FF9F43' }]}>
+                      {activity?.streak ?? 0}
+                    </Text>
+                    <Text style={styles.metricLabel}>Day Streak</Text>
+                  </View>
+                  <View style={styles.metricCard}>
+                    <Text style={styles.metricEmoji}>⏱️</Text>
+                    <Text style={[styles.metricValue, { color: colors.sky }]}>
+                      {activity?.questionsThisWeek ?? 0}
+                    </Text>
+                    <Text style={styles.metricLabel}>This Week</Text>
+                  </View>
+                  <View style={styles.metricCard}>
+                    <Text style={styles.metricEmoji}>⭐</Text>
+                    <Text style={[styles.metricValue, { color: colors.purple }]}>
+                      {activity?.topicsExplored ?? 0}
+                    </Text>
+                    <Text style={styles.metricLabel}>Topics Explored</Text>
+                  </View>
                 </View>
-                <View style={styles.metricCard}>
-                  <Text style={styles.metricEmoji}>🔥</Text>
-                  <Text style={[styles.metricValue, { color: colors.orange }]}>
-                    {activity?.streak ?? 0}
-                  </Text>
-                  <Text style={styles.metricLabel}>Day Streak</Text>
-                </View>
-                <View style={styles.metricCard}>
-                  <Text style={styles.metricEmoji}>📈</Text>
-                  <Text style={[styles.metricValue, { color: colors.sky }]}>
-                    {activity?.questionsThisWeek ?? 0}
-                  </Text>
-                  <Text style={styles.metricLabel}>This Week</Text>
-                </View>
-                <View style={styles.metricCard}>
-                  <Text style={styles.metricEmoji}>⭐</Text>
-                  <Text style={[styles.metricValue, { color: colors.purple }]}>
-                    {activity?.topicsExplored ?? 0}
-                  </Text>
-                  <Text style={styles.metricLabel}>Topics Explored</Text>
-                </View>
-              </View>
 
-              {/* Weekly Real Activity Bar Chart */}
-              <View style={styles.analyticsCard}>
-                <Text style={styles.analyticsCardTitle}>📈 Questions This Week</Text>
-                {activity && activity.questionsThisWeek > 0 ? (
-                  <View style={styles.barChartContainer}>
-                    {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => {
-                      const count = activity.dailyCounts?.[day] || 0;
-                      const maxDaily = Math.max(1, ...Object.values(activity.dailyCounts || {}));
-                      const pct = Math.max(8, Math.round((count / maxDaily) * 100));
-                      const isPeak = count > 0 && count === maxDaily;
-                      return (
-                        <View key={day} style={styles.barCol}>
-                          <View style={styles.barTrack}>
-                            <View
+                {/* Topics This Week */}
+                <View style={styles.card}>
+                  <Text style={styles.cardHeaderTitle}>📚 Topics This Week</Text>
+                  <View style={styles.topicRow}>
+                    <View style={styles.topicHeader}>
+                      <View style={[styles.topicIconSquircle, { backgroundColor: '#FFF0F0' }]}>
+                        <Text style={styles.topicIconEmoji}>🔬</Text>
+                      </View>
+                      <Text style={styles.topicName}>Science</Text>
+                      <Text style={styles.topicCount}>10 Qs</Text>
+                    </View>
+                    <View style={styles.progressBarTrack}>
+                      <View style={[styles.progressBarFill, { width: '70%', backgroundColor: colors.coral }]} />
+                    </View>
+                  </View>
+
+                  <View style={styles.topicRow}>
+                    <View style={styles.topicHeader}>
+                      <View style={[styles.topicIconSquircle, { backgroundColor: '#FFF5E0' }]}>
+                        <Text style={styles.topicIconEmoji}>🔢</Text>
+                      </View>
+                      <Text style={styles.topicName}>Maths</Text>
+                      <Text style={styles.topicCount}>8 Qs</Text>
+                    </View>
+                    <View style={styles.progressBarTrack}>
+                      <View style={[styles.progressBarFill, { width: '55%', backgroundColor: '#FF9F43' }]} />
+                    </View>
+                  </View>
+
+                  <View style={[styles.topicRow, { marginBottom: 0 }]}>
+                    <View style={styles.topicHeader}>
+                      <View style={[styles.topicIconSquircle, { backgroundColor: '#E8F8F0' }]}>
+                        <Text style={styles.topicIconEmoji}>📖</Text>
+                      </View>
+                      <Text style={styles.topicName}>English</Text>
+                      <Text style={styles.topicCount}>5 Qs</Text>
+                    </View>
+                    <View style={styles.progressBarTrack}>
+                      <View style={[styles.progressBarFill, { width: '34%', backgroundColor: colors.green }]} />
+                    </View>
+                  </View>
+                </View>
+
+                {/* Weekly Flexbox Bar Chart */}
+                <View style={styles.card}>
+                  <Text style={styles.cardHeaderTitle}>📊 Questions This Week</Text>
+                  {activity && activity.questionsThisWeek > 0 ? (
+                    <View style={styles.barChartContainer}>
+                      {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => {
+                        const count = activity.dailyCounts?.[day] || 0;
+                        const maxDaily = Math.max(1, ...Object.values(activity.dailyCounts || {}));
+                        const pct = Math.max(8, Math.round((count / maxDaily) * 100));
+                        const isPeak = count > 0 && count === maxDaily;
+                        return (
+                          <View key={day} style={styles.barCol}>
+                            <View style={styles.barTrack}>
+                              <View
+                                style={[
+                                  styles.barFill,
+                                  {
+                                    height: `${pct}%` as any,
+                                    backgroundColor: isPeak ? colors.coral : '#EEF2FF',
+                                  },
+                                ]}
+                              />
+                            </View>
+                            <Text
                               style={[
-                                styles.barFill,
-                                {
-                                  height: `${pct}%` as any,
-                                  backgroundColor: isPeak ? colors.coral : 'rgba(78, 205, 196, 0.45)',
-                                },
+                                styles.barDayText,
+                                isPeak && { color: colors.coral, fontFamily: fontFamilies.black },
                               ]}
-                            />
+                            >
+                              {day}
+                            </Text>
                           </View>
-                          <Text style={[styles.barDayText, isPeak && { color: colors.coral, fontFamily: fontFamilies.black }]}>
-                            {day}
-                          </Text>
+                        );
+                      })}
+                    </View>
+                  ) : (
+                    <Text style={styles.emptyStateText}>
+                      No questions asked yet this week. As {activeStudent.student_name} chats with Kidsko, real learning progress will appear here!
+                    </Text>
+                  )}
+                </View>
+
+                {/* Kidsko Memory & Preferences Card */}
+                <View style={styles.card}>
+                  <View style={styles.memoryHeaderRow}>
+                    <View style={{ flex: 1, paddingRight: 8 }}>
+                      <Text style={styles.cardHeaderTitle}>🧠 Kidsko Memory</Text>
+                      <Text style={styles.cardSubtitle}>
+                        What Kidsko remembered from chats with {activeStudent.student_name}.
+                      </Text>
+                    </View>
+                    <Switch
+                      value={memory?.enabled ?? true}
+                      onValueChange={handleToggleMemory}
+                      trackColor={{ false: colors.disabledBg, true: colors.green }}
+                      thumbColor={colors.white}
+                      disabled={updatingMemory}
+                    />
+                  </View>
+
+                  {loadingMemory ? (
+                    <ActivityIndicator size="small" color={colors.coral} style={{ marginVertical: 12 }} />
+                  ) : memory && memory.facts.length > 0 ? (
+                    <View style={styles.factsWrap}>
+                      {memory.facts.map((fact, idx) => (
+                        <View key={`${fact}_${idx}`} style={styles.factChip}>
+                          <Text style={styles.factChipText}>{fact}</Text>
+                          <TouchableOpacity
+                            onPress={() => handleRemoveFact(idx)}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          >
+                            <Text style={styles.factChipRemove}>✕</Text>
+                          </TouchableOpacity>
                         </View>
+                      ))}
+                    </View>
+                  ) : (
+                    <Text style={styles.emptyStateText}>
+                      No specific facts recorded yet. As {activeStudent.student_name} chats, Kidsko will remember their grade and interests.
+                    </Text>
+                  )}
+
+                  {memory && memory.facts.length > 0 && (
+                    <TouchableOpacity
+                      onPress={handleClearMemory}
+                      style={styles.clearMemoryBtn}
+                      disabled={updatingMemory}
+                    >
+                      <Text style={styles.clearMemoryBtnText}>🧹 Clear All Memory</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </>
+            ) : (
+              <View style={styles.noChildCard}>
+                <Text style={styles.noChildEmoji}>🧒</Text>
+                <Text style={styles.noChildTitle}>No Child Profile Selected</Text>
+                <Text style={styles.noChildSubtitle}>Add a child profile above to begin tracking their learning progress.</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* ════════ TAB 2: HISTORY (Image 2) ════════ */}
+        {currentTab === 'history' && (
+          <View style={styles.tabContentWrapper}>
+            {activeStudent ? (
+              <>
+                <Text style={styles.sectionHeaderTitle}>
+                  {activeStudent.student_name}'s Conversations
+                </Text>
+
+                {loadingThreads ? (
+                  <ActivityIndicator size="large" color={colors.coral} style={{ marginTop: 20 }} />
+                ) : threads.length > 0 ? (
+                  <View style={{ gap: 9 }}>
+                    {threads.map((item, idx) => {
+                      const icon = threadIcons[idx % threadIcons.length];
+                      const bgColor = threadBgColors[idx % threadBgColors.length];
+                      const dateStr = item.updatedAt
+                        ? new Date(item.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                        : 'Recent';
+                      return (
+                        <TouchableOpacity
+                          key={item.id}
+                          onPress={() => onOpenTranscript(activeStudent)}
+                          style={styles.historyCard}
+                          activeOpacity={0.8}
+                        >
+                          <View style={[styles.historyIconBox, { backgroundColor: bgColor }]}>
+                            <Text style={styles.historyIconEmoji}>{icon}</Text>
+                          </View>
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={styles.historyItemTitle} numberOfLines={1}>
+                              {item.title}
+                            </Text>
+                            <Text style={styles.historyItemMeta}>
+                              {dateStr} · {item.message_count ? `${item.message_count} messages` : 'Conversation'}
+                            </Text>
+                          </View>
+                          <View style={styles.historyChevronBox}>
+                            <Text style={styles.historyChevronText}>›</Text>
+                          </View>
+                        </TouchableOpacity>
                       );
                     })}
                   </View>
                 ) : (
-                  <Text style={styles.noFactsText}>
-                    No questions asked yet this week. As {activeStudent.student_name} chats with Kidsko, real learning progress will appear here!
-                  </Text>
+                  <View style={styles.card}>
+                    <Text style={styles.emptyStateText}>
+                      No past conversations yet. When {activeStudent.student_name} chats with Kidsko, homework help and learning transcripts will appear here!
+                    </Text>
+                  </View>
                 )}
-              </View>
-            </>
-          )}
-        </View>
-      )}
 
-      {/* 2. What Kidsko Remembers Section */}
-      {activeStudent && (
-        <View style={styles.sectionCard}>
-          <View style={styles.memoryHeaderRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.sectionHeading}>What Kidsko Remembers</Text>
-              <Text style={styles.sectionSub}>
-                Learning preferences Kidsko picked up from chats with {activeStudent.student_name}.
-              </Text>
-            </View>
-            {!memoryError && (
-              <View style={styles.switchCol}>
-                <Switch
-                  value={memory?.enabled ?? true}
-                  onValueChange={handleToggleMemory}
-                  trackColor={{ false: colors.borderLight, true: colors.green }}
-                  thumbColor={colors.white}
-                  disabled={loadingMemory || updatingMemory}
-                  accessibilityRole="switch"
-                  accessibilityLabel="Enable learning memory"
-                  accessibilityState={{ checked: !!memory?.enabled }}
-                />
-                <Text style={styles.switchLabel}>
-                  {memory?.enabled ? 'Active' : 'Off'}
-                </Text>
+                {/* View Full Transcript Action */}
+                <TouchableOpacity
+                  onPress={() => onOpenTranscript(activeStudent)}
+                  style={styles.fullTranscriptBtn}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.fullTranscriptBtnText}>
+                    📜 View Full Raw Transcript for {activeStudent.student_name}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <View style={styles.noChildCard}>
+                <Text style={styles.noChildTitle}>No Child Profile Selected</Text>
               </View>
             )}
           </View>
+        )}
 
-          {loadingMemory ? (
-            <ActivityIndicator style={{ paddingVertical: 16 }} color={colors.coralStrong} />
-          ) : memoryError ? (
-            <View style={styles.memoryErrorContainer}>
-              <Text style={styles.memoryErrorText}>⚠️ {memoryError}</Text>
-              <PressScale onPress={() => fetchMemory(activeStudent.id)}>
-                <View style={styles.retryBtn}>
-                  <Text style={styles.retryBtnText}>Retry</Text>
-                </View>
-              </PressScale>
-            </View>
-          ) : (
-            <>
-              {/* Preferred Name Tag */}
-              {memory?.preferredName && (
-                <View style={styles.preferredNameRow}>
-                  <Text style={styles.preferredNameLabel}>
-                    Name to call {activeStudent.student_name}:
+        {/* ════════ TAB 3: LIMITS (Image 3) ════════ */}
+        {currentTab === 'limits' && (
+          <View style={styles.tabContentWrapper}>
+            {activeStudent ? (
+              <>
+                {/* ⏱️ Daily Question Limit Card */}
+                <View style={styles.card}>
+                  <Text style={styles.cardHeaderTitle}>⏱️ Daily Question Limit</Text>
+                  <Text style={styles.cardSubtitle}>
+                    Control how many questions {activeStudent.student_name} can ask per day
                   </Text>
-                  <View style={styles.nameBadge}>
-                    <Text style={styles.nameBadgeText}>{memory.preferredName}</Text>
-                    <Pressable
-                      style={styles.nameBadgeRemoveBtn}
-                      onPress={handleClearPreferredName}
-                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                      accessibilityRole="button"
-                      accessibilityLabel="Remove preferred name"
-                    >
-                      <Text style={styles.nameBadgeRemoveText}>✕</Text>
-                    </Pressable>
+
+                  <View style={styles.limitCounterBox}>
+                    <Text style={styles.limitBigNumber}>
+                      {dailyLimit === 'infinity' ? '∞' : dailyLimit}
+                    </Text>
+                    <Text style={styles.limitUnitsText}>questions per day</Text>
+
+                    {/* Progress Bar Track */}
+                    <View style={styles.limitTrack}>
+                      <View style={[styles.limitFill, { width: `${limitPercent}%` }]} />
+                    </View>
+                    <Text style={styles.limitUsageText}>
+                      {questionsUsed} used · {questionsRemaining} remaining
+                    </Text>
                   </View>
-                </View>
-              )}
 
-              {/* Facts Chips */}
-              <View style={styles.factsContainer}>
-                {memory?.facts && memory.facts.length > 0 ? (
-                  memory.facts.map((fact, index) => {
-                    const chip = (
-                      <View key={`${fact}_${index}`} style={styles.factChip}>
-                        <Text style={styles.factChipText}>{fact}</Text>
-                        <Pressable
-                          style={styles.factChipRemoveBtn}
-                          onPress={() => handleRemoveFact(index)}
-                          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Remove fact ${fact}`}
-                        >
-                          <Text style={styles.factChipRemoveText}>✕</Text>
-                        </Pressable>
-                      </View>
-                    );
-
-                    if (index < 8) {
+                  {/* Limit Preset Selector Buttons */}
+                  <View style={styles.limitPresetsRow}>
+                    {([10, 20, 30, 50, 'infinity'] as const).map((preset) => {
+                      const isSelected = dailyLimit === preset;
+                      const label = preset === 'infinity' ? '∞' : String(preset);
                       return (
-                        <FadeSlideIn key={`${fact}_${index}`} delay={index * 25}>
-                          {chip}
-                        </FadeSlideIn>
+                        <TouchableOpacity
+                          key={String(preset)}
+                          onPress={() => handleChangeDailyLimit(preset)}
+                          style={[
+                            styles.presetBtn,
+                            isSelected && styles.presetBtnActive,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.presetBtnText,
+                              isSelected && styles.presetBtnTextActive,
+                            ]}
+                          >
+                            {label}
+                          </Text>
+                        </TouchableOpacity>
                       );
-                    }
-                    return chip;
-                  })
-                ) : (
-                  <Text style={styles.noFactsText}>
-                    {memory?.enabled
-                      ? `No specific facts recorded yet. As ${activeStudent.student_name} chats, Kidsko will remember their grade and interests.`
-                      : `Memory is switched off. Kidsko will not store or use facts across chats.`}
-                  </Text>
-                )}
-              </View>
-
-              {/* Forget Everything Button */}
-              {Boolean(memory?.preferredName || (memory?.facts && memory.facts.length > 0)) && (
-                <PressScale
-                  onPress={handleForgetEverything}
-                  disabled={updatingMemory}
-                  style={styles.forgetScale}
-                >
-                  <View style={styles.forgetBtn}>
-                    <Text style={styles.forgetBtnText}>🗑️ Forget Everything</Text>
+                    })}
                   </View>
-                </PressScale>
-              )}
-            </>
-          )}
-        </View>
-      )}
+                </View>
 
-      {/* 3. Chat History & Transcripts Action Card */}
-      {activeStudent && (
-        <PressScale
-          onPress={() => onOpenTranscript(activeStudent)}
-          style={styles.actionCardScale}
-          accessibilityRole="button"
-          accessibilityLabel="View Chat Transcripts"
-        >
-          <View style={styles.actionCard}>
-            <View style={styles.actionCardRow}>
-              <View style={styles.actionIconBadge}>
-                <Text style={styles.actionIcon}>📜</Text>
+                {/* ⏰ Study Schedule Card */}
+                <View style={styles.card}>
+                  <Text style={styles.cardHeaderTitle}>⏰ Study Schedule</Text>
+
+                  <View style={styles.scheduleRow}>
+                    <Text style={styles.scheduleLabel}>School Hours (8am–3pm)</Text>
+                    <Switch
+                      value={schoolHours}
+                      onValueChange={(v) => handleToggleSchedule('school', v)}
+                      trackColor={{ false: colors.disabledBg, true: colors.green }}
+                      thumbColor={colors.white}
+                    />
+                  </View>
+
+                  <View style={styles.scheduleRow}>
+                    <Text style={styles.scheduleLabel}>Evening Study (5pm–7pm)</Text>
+                    <Switch
+                      value={eveningStudy}
+                      onValueChange={(v) => handleToggleSchedule('evening', v)}
+                      trackColor={{ false: colors.disabledBg, true: colors.green }}
+                      thumbColor={colors.white}
+                    />
+                  </View>
+
+                  <View style={[styles.scheduleRow, { borderBottomWidth: 0, paddingBottom: 0 }]}>
+                    <Text style={styles.scheduleLabel}>Weekend Learning</Text>
+                    <Switch
+                      value={weekendLearning}
+                      onValueChange={(v) => handleToggleSchedule('weekend', v)}
+                      trackColor={{ false: colors.disabledBg, true: colors.green }}
+                      thumbColor={colors.white}
+                    />
+                  </View>
+                </View>
+
+                {/* 🛡️ Safety & Controls Card */}
+                <View style={styles.card}>
+                  <Text style={styles.cardHeaderTitle}>🛡️ Safety & Controls</Text>
+
+                  <View style={styles.scheduleRow}>
+                    <View style={{ flex: 1, paddingRight: 8 }}>
+                      <Text style={styles.scheduleLabel}>AI Vision Camera</Text>
+                      <Text style={styles.controlSub}>Allow Kidsko to see homework through camera</Text>
+                    </View>
+                    <Switch
+                      value={allowCamera}
+                      onValueChange={handleToggleCamera}
+                      trackColor={{ false: colors.disabledBg, true: colors.green }}
+                      thumbColor={colors.white}
+                    />
+                  </View>
+
+                  <View style={styles.scheduleRow}>
+                    <View style={{ flex: 1, paddingRight: 8 }}>
+                      <Text style={styles.scheduleLabel}>🌙 Bedtime Curfew</Text>
+                      <Text style={styles.controlSub}>Lock calls during night (8:00 PM – 7:00 AM)</Text>
+                    </View>
+                    <Switch
+                      value={curfewEnabled}
+                      onValueChange={handleToggleCurfew}
+                      trackColor={{ false: colors.disabledBg, true: colors.green }}
+                      thumbColor={colors.white}
+                    />
+                  </View>
+
+                  <View style={{ paddingTop: 8 }}>
+                    <Text style={styles.scheduleLabel}>Chat History Retention</Text>
+                    <Text style={styles.controlSub}>How long Kidsko keeps past conversations</Text>
+                    <View style={styles.retentionPillRow}>
+                      {(['30', '90', 'forever'] as const).map((opt) => (
+                        <Pressable
+                          key={opt}
+                          style={[
+                            styles.retentionPill,
+                            chatRetention === opt && styles.retentionPillActive,
+                          ]}
+                          onPress={() => handleChangeRetention(opt)}
+                        >
+                          <Text
+                            style={[
+                              styles.retentionPillText,
+                              chatRetention === opt && styles.retentionPillTextActive,
+                            ]}
+                          >
+                            {opt === 'forever' ? 'Keep Forever' : `${opt} Days`}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+                </View>
+              </>
+            ) : (
+              <View style={styles.noChildCard}>
+                <Text style={styles.noChildTitle}>No Child Profile Selected</Text>
               </View>
-              <View style={styles.actionCardContent}>
-                <Text style={styles.actionCardTitle}>Chat History & Transcripts</Text>
-                <Text style={styles.actionCardSub}>
-                  Read past conversations and homework help for {activeStudent.student_name}
-                </Text>
-              </View>
-              <Text style={styles.actionArrow}>→</Text>
-            </View>
+            )}
           </View>
-        </PressScale>
-      )}
+        )}
 
-      {/* Empty State when no child profiles remain */}
-      {!activeStudent && (
-        <View style={styles.actionCard}>
-          <Text style={styles.cardHeaderTitle}>👶 No Child Profiles</Text>
-          <Text style={styles.controlSub}>
-            Tap the '+' button at the top right to add your child and personalize their learning experience.
-          </Text>
-        </View>
-      )}
+        {/* ════════ TAB 4: SETTINGS (Images 4 & 5) ════════ */}
+        {currentTab === 'settings' && (
+          <View style={styles.tabContentWrapper}>
+            {/* 👨‍👩‍👧‍👦 Manage Children Card */}
+            <View style={styles.card}>
+              <Text style={styles.cardHeaderTitle}>👨‍👩‍👧‍👦 Manage Children</Text>
+              <View style={{ marginTop: 8 }}>
+                {students.map((st, idx) => (
+                  <View key={st.id} style={styles.manageChildRow}>
+                    <LinearGradient
+                      colors={idx % 2 === 0 ? ['#FF6B6B', '#FF9F43'] : ['#4ECDC4', '#74B9FF']}
+                      style={styles.manageChildAvatar}
+                    >
+                      <Text style={{ fontSize: 20 }}>{idx % 2 === 0 ? '👧' : '👦'}</Text>
+                    </LinearGradient>
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                      <Text style={styles.manageChildName}>{st.student_name}</Text>
+                      <Text style={styles.manageChildGrade}>Grade {idx + 2}</Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => handleOpenEditChild(st)}
+                      style={styles.manageChildEditBtn}
+                    >
+                      <Text style={styles.manageChildEditText}>Edit</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
 
-      {/* 4. Subscription & Plan Action Card */}
-      <PressScale
-        onPress={onOpenPaywall}
-        style={styles.actionCardScale}
-        accessibilityRole="button"
-        accessibilityLabel="Manage Subscription Plan"
-      >
-        <View style={styles.actionCard}>
-          <View style={styles.actionCardRow}>
-            <View
-              style={[
-                styles.actionIconBadge,
-                isPremium && styles.actionIconBadgePremium,
-              ]}
-            >
-              <Text style={styles.actionIcon}>{isPremium ? '⭐' : '📦'}</Text>
+              {/* ➕ Add Another Child Button */}
+              <TouchableOpacity
+                onPress={() => {
+                  setNewChildName('');
+                  setNewChildAge('');
+                  setAddChildError(null);
+                  setShowAddModal(true);
+                }}
+                style={styles.addAnotherChildBtn}
+              >
+                <Text style={styles.addAnotherChildText}>➕ Add Another Child</Text>
+              </TouchableOpacity>
             </View>
-            <View style={styles.actionCardContent}>
-              <View style={styles.planTitleRow}>
-                <Text style={styles.actionCardTitle}>Plan & Usage Allowance</Text>
-                <View
+
+            {/* SAFETY Section */}
+            <Text style={styles.sectionCategoryHeader}>SAFETY</Text>
+            <View style={styles.groupedListCard}>
+              <TouchableOpacity
+                onPress={() => setChangePinVisible(true)}
+                style={styles.groupedRow}
+              >
+                <View style={[styles.groupedIconSquircle, { backgroundColor: '#E8F8F0' }]}>
+                  <Text style={{ fontSize: 18 }}>🔒</Text>
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.groupedRowTitle}>Change Parent PIN</Text>
+                  <Text style={styles.groupedRowSubtitle}>Current: ••••</Text>
+                </View>
+                <Text style={styles.groupedChevron}>›</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => Alert.alert('Content Filter', 'Child safe strict AI filtering is actively turned on.')}
+                style={[styles.groupedRow, { borderBottomWidth: 0 }]}
+              >
+                <View style={[styles.groupedIconSquircle, { backgroundColor: '#FFF0F0' }]}>
+                  <Text style={{ fontSize: 18 }}>🚫</Text>
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.groupedRowTitle}>Content Filter</Text>
+                  <Text style={styles.groupedRowSubtitle}>Strict mode on</Text>
+                </View>
+                <Text style={styles.groupedChevron}>›</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* NOTIFICATIONS Section */}
+            <Text style={styles.sectionCategoryHeader}>NOTIFICATIONS</Text>
+            <View style={styles.groupedListCard}>
+              <View style={styles.groupedRow}>
+                <View style={[styles.groupedIconSquircle, { backgroundColor: '#FFF5E0' }]}>
+                  <Text style={{ fontSize: 18 }}>🔔</Text>
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.groupedRowTitle}>Daily Report</Text>
+                  <Text style={styles.groupedRowSubtitle}>Every evening at 7pm</Text>
+                </View>
+                <Switch
+                  value={dailyReport}
+                  onValueChange={(v) => handleToggleNotification('daily', v)}
+                  trackColor={{ false: colors.disabledBg, true: colors.green }}
+                  thumbColor={colors.white}
+                />
+              </View>
+
+              <View style={[styles.groupedRow, { borderBottomWidth: 0 }]}>
+                <View style={[styles.groupedIconSquircle, { backgroundColor: '#FFF0F0' }]}>
+                  <Text style={{ fontSize: 18 }}>⚠️</Text>
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.groupedRowTitle}>Limit Alerts</Text>
+                  <Text style={styles.groupedRowSubtitle}>When 80% used</Text>
+                </View>
+                <Switch
+                  value={limitAlerts}
+                  onValueChange={(v) => handleToggleNotification('alerts', v)}
+                  trackColor={{ false: colors.disabledBg, true: colors.green }}
+                  thumbColor={colors.white}
+                />
+              </View>
+            </View>
+
+            {/* Danger Zone: Account Deletion (App Store 5.1.1) */}
+            <TouchableOpacity
+              onPress={handleRequestDeleteAccount}
+              style={styles.deleteAccountCard}
+              disabled={deletingAccount}
+            >
+              <Text style={{ fontSize: 18 }}>⚠️</Text>
+              <Text style={styles.deleteAccountText}>Permanently Delete Account</Text>
+            </TouchableOpacity>
+
+            {/* Sign Out Parent */}
+            <TouchableOpacity
+              onPress={onRequestLogout}
+              style={styles.signOutCard}
+            >
+              <View style={[styles.groupedIconSquircle, { backgroundColor: '#FFF0F0' }]}>
+                <Text style={{ fontSize: 18 }}>🚪</Text>
+              </View>
+              <Text style={styles.signOutText}>Sign Out Parent</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+
+      {/* ── MODAL 1: Add Child Modal ── */}
+      <Modal
+        visible={showAddModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => !addingChild && setShowAddModal(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalSheetCard}>
+            <View style={styles.modalSheetHeader}>
+              <Text style={styles.modalSheetTitle}>➕ Add Child</Text>
+              <TouchableOpacity
+                onPress={() => setShowAddModal(false)}
+                style={styles.modalCloseBtn}
+                disabled={addingChild}
+              >
+                <Text style={{ fontSize: 16, color: colors.subtext }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalFieldLabel}>Child's Name</Text>
+            <TextInput
+              style={styles.modalTextInput}
+              value={newChildName}
+              onChangeText={(t) => {
+                setNewChildName(t);
+                if (addChildError) setAddChildError(null);
+              }}
+              placeholder="e.g. Sara"
+              placeholderTextColor={colors.subtext}
+              editable={!addingChild}
+            />
+
+            <Text style={styles.modalFieldLabel}>Age</Text>
+            <TextInput
+              style={styles.modalTextInput}
+              value={newChildAge}
+              onChangeText={setNewChildAge}
+              placeholder="e.g. 8"
+              keyboardType="number-pad"
+              placeholderTextColor={colors.subtext}
+              editable={!addingChild}
+            />
+
+            <Text style={styles.modalFieldLabel}>Grade</Text>
+            <View style={styles.gradePickerRow}>
+              {['Grade 1', 'Grade 3', 'Grade 5', 'Grade 7'].map((gr) => (
+                <TouchableOpacity
+                  key={gr}
+                  onPress={() => setNewChildGrade(gr)}
                   style={[
-                    styles.planPill,
-                    isPremium ? styles.planPillPremium : styles.planPillFree,
+                    styles.gradePickerPill,
+                    newChildGrade === gr && styles.gradePickerPillActive,
                   ]}
                 >
                   <Text
                     style={[
-                      styles.planPillText,
-                      isPremium ? styles.planPillTextPremium : styles.planPillTextFree,
+                      styles.gradePickerText,
+                      newChildGrade === gr && styles.gradePickerTextActive,
                     ]}
                   >
-                    {isPremium ? 'PREMIUM' : 'FREE'}
+                    {gr}
                   </Text>
-                </View>
-              </View>
-              <Text style={styles.actionCardSub}>
-                {isPremium
-                  ? '100 min Voice/Video • 200 msgs • 15 scans / week'
-                  : '10 min Voice/Video • 30 msgs • 3 scans / week'}
-              </Text>
+                </TouchableOpacity>
+              ))}
             </View>
-            <Text style={styles.actionArrow}>→</Text>
-          </View>
-        </View>
-      </PressScale>
 
-      {/* 5. Safety & Permissions (Decision D8) */}
-      <View style={styles.actionCard}>
-        <Text style={styles.cardHeaderTitle}>🛡️ Safety & Controls</Text>
+            {addChildError ? (
+              <Text style={styles.modalErrorText}>{addChildError}</Text>
+            ) : null}
 
-        {/* AI Vision Camera Toggle */}
-        <View style={styles.controlRow}>
-          <View style={{ flex: 1, paddingRight: 8 }}>
-            <Text style={styles.controlLabel}>AI Vision Camera</Text>
-            <Text style={styles.controlSub}>Allow Kidsko to see homework through the camera</Text>
-          </View>
-          <Switch
-            value={allowCamera}
-            onValueChange={handleToggleCamera}
-            trackColor={{ false: colors.disabledBg, true: colors.green }}
-            thumbColor={colors.white}
-          />
-        </View>
-
-        {/* Bedtime Curfew Toggle (Phase 4) */}
-        <View style={styles.controlRow}>
-          <View style={{ flex: 1, paddingRight: 8 }}>
-            <Text style={styles.controlLabel}>🌙 Bedtime Curfew</Text>
-            <Text style={styles.controlSub}>Lock calls during night hours (8:00 PM – 7:00 AM)</Text>
-          </View>
-          <Switch
-            value={curfewEnabled}
-            onValueChange={handleToggleCurfew}
-            trackColor={{ false: colors.disabledBg, true: colors.green }}
-            thumbColor={colors.white}
-          />
-        </View>
-
-        {/* Chat History Retention */}
-        <View style={[styles.controlRow, { borderBottomWidth: 0, paddingBottom: 0 }]}>
-          <View style={{ flex: 1, marginBottom: 8 }}>
-            <Text style={styles.controlLabel}>Chat History Retention</Text>
-            <Text style={styles.controlSub}>How long Kidsko keeps past conversations</Text>
-          </View>
-        </View>
-        <View style={styles.retentionPillRow}>
-          {(['30', '90', 'forever'] as const).map((opt) => (
-            <Pressable
-              key={opt}
-              style={[
-                styles.retentionPill,
-                chatRetention === opt && styles.retentionPillActive,
-              ]}
-              onPress={() => handleChangeRetention(opt)}
+            <TouchableOpacity
+              onPress={handleConfirmAddChild}
+              style={[styles.modalPrimaryBtn, addingChild && { opacity: 0.7 }]}
+              disabled={addingChild}
             >
-              <Text
-                style={[
-                  styles.retentionPillText,
-                  chatRetention === opt && styles.retentionPillTextActive,
-                ]}
-              >
-                {opt === 'forever' ? 'Keep Forever' : `${opt} Days`}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      </View>
-
-      {/* 6. Danger Zone (Issue #7: Profile & Account Deletion) */}
-      <View style={[styles.actionCard, styles.dangerCard]}>
-        <Text style={[styles.cardHeaderTitle, { color: colors.error }]}>⚠️ Account & Profile Management</Text>
-
-        {/* Delete Active Child Profile */}
-        {activeStudent && (
-          <PressScale
-            onPress={handleDeleteChild}
-            disabled={deletingChild}
-            style={{ width: '100%', marginBottom: 12 }}
-          >
-            <View style={styles.deleteProfileBtn}>
-              {deletingChild ? (
-                <ActivityIndicator color={colors.error} size="small" />
+              {addingChild ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
-                <Text style={styles.deleteProfileBtnText}>
-                  🗑️ Delete {activeStudent.student_name}'s Profile
-                </Text>
+                <Text style={styles.modalPrimaryBtnText}>Add Child 🎉</Text>
               )}
-            </View>
-          </PressScale>
-        )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
-        {/* Delete Parent Account Permanently (App Store Guideline 5.1.1) */}
-        <PressScale
-          onPress={handleDeleteAccount}
-          disabled={deletingAccount}
-          style={{ width: '100%' }}
-        >
-          <View style={styles.deleteAccountBtn}>
-            {deletingAccount ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <Text style={styles.deleteAccountBtnText}>
-                ⚠️ Permanently Delete Account
-              </Text>
+      {/* ── MODAL 2: Edit Child Modal ── */}
+      <Modal
+        visible={editingStudent !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !updatingChild && setEditingStudent(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalSheetCard}>
+            <View style={styles.modalSheetHeader}>
+              <Text style={styles.modalSheetTitle}>✏️ Edit Child Profile</Text>
+              <TouchableOpacity
+                onPress={() => setEditingStudent(null)}
+                style={styles.modalCloseBtn}
+                disabled={updatingChild}
+              >
+                <Text style={{ fontSize: 16, color: colors.subtext }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalFieldLabel}>Child's Name</Text>
+            <TextInput
+              style={styles.modalTextInput}
+              value={editChildName}
+              onChangeText={(t) => {
+                setEditChildName(t);
+                if (editChildError) setEditChildError(null);
+              }}
+              placeholder="Child's Name"
+              placeholderTextColor={colors.subtext}
+              editable={!updatingChild}
+            />
+
+            {editChildError ? (
+              <Text style={styles.modalErrorText}>{editChildError}</Text>
+            ) : null}
+
+            <TouchableOpacity
+              onPress={handleSaveEditChild}
+              style={[styles.modalPrimaryBtn, updatingChild && { opacity: 0.7 }]}
+              disabled={updatingChild}
+            >
+              {updatingChild ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={styles.modalPrimaryBtnText}>Save Changes</Text>
+              )}
+            </TouchableOpacity>
+
+            {editingStudent && (
+              <TouchableOpacity
+                onPress={() => handleRequestDeleteChild(editingStudent)}
+                style={styles.modalDangerBtn}
+                disabled={updatingChild}
+              >
+                <Text style={styles.modalDangerBtnText}>
+                  🗑️ Delete {editingStudent.student_name}'s Profile
+                </Text>
+              </TouchableOpacity>
             )}
           </View>
-        </PressScale>
-      </View>
-
-      {/* 7. Sign Out Button */}
-      <PressScale
-        onPress={onRequestLogout}
-        style={styles.signOutScale}
-        accessibilityRole="button"
-        accessibilityLabel="Sign out of parent account"
-      >
-        <View style={styles.signOutBtn}>
-          <Text style={styles.signOutText}>🚪 Sign Out</Text>
         </View>
-      </PressScale>
+      </Modal>
 
-      {/* PIN Confirmation Gate for Profile & Account Deletion (Category 2 Phase 2 & 3) */}
-      <ParentalGate
-        visible={deleteGateVisible}
-        onSuccess={handlePinConfirmedDeletion}
-        onCancel={() => {
-          setDeleteGateVisible(false);
-          setPendingDeleteType(null);
-        }}
-      />
-
-      {/* Password Confirmation Modal for Account Deletion (App Store 5.1.1 & Server Verification) */}
+      {/* ── MODAL 3: Password Confirmation for Permanent Account Deletion ── */}
       <Modal
         visible={accountDeleteModalVisible}
         transparent
@@ -898,8 +1333,8 @@ export default function ParentsHub({
           }
         }}
       >
-        <View style={styles.deleteModalBackdrop}>
-          <View style={styles.deleteModalCard}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCardCenter}>
             <Text style={styles.deleteModalTitle}>⚠️ Confirm Password</Text>
             <Text style={styles.deleteModalSub}>
               This will permanently delete your account, your children's profiles, learning history, and memory. This action cannot be undone.
@@ -909,7 +1344,7 @@ export default function ParentsHub({
             </Text>
 
             <TextInput
-              style={styles.deleteModalInput}
+              style={styles.modalTextInput}
               value={accountDeletePassword}
               onChangeText={(t) => {
                 setAccountDeletePassword(t);
@@ -923,12 +1358,12 @@ export default function ParentsHub({
             />
 
             {accountDeleteError ? (
-              <Text style={styles.deleteModalError}>{accountDeleteError}</Text>
+              <Text style={styles.modalErrorText}>{accountDeleteError}</Text>
             ) : null}
 
             <View style={styles.deleteModalActions}>
               <TouchableOpacity
-                style={styles.deleteModalCancelBtn}
+                style={styles.modalCancelBtn}
                 onPress={() => {
                   setAccountDeleteModalVisible(false);
                   setAccountDeletePassword('');
@@ -936,12 +1371,12 @@ export default function ParentsHub({
                 }}
                 disabled={deletingAccount}
               >
-                <Text style={styles.deleteModalCancelText}>Cancel</Text>
+                <Text style={styles.modalCancelBtnText}>Cancel</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={[
-                  styles.deleteModalConfirmBtn,
+                  styles.modalConfirmDeleteBtn,
                   deletingAccount && { opacity: 0.6 },
                 ]}
                 onPress={handleConfirmAccountDeletion}
@@ -950,562 +1385,255 @@ export default function ParentsHub({
                 {deletingAccount ? (
                   <ActivityIndicator color="#FFFFFF" size="small" />
                 ) : (
-                  <Text style={styles.deleteModalConfirmText}>Permanently Delete</Text>
+                  <Text style={styles.modalConfirmDeleteBtnText}>Permanently Delete</Text>
                 )}
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
+
+      {/* ── PIN Confirmation Gate for Profile Deletion & Account Deletion ── */}
+      <ParentalGate
+        visible={deleteGateVisible}
+        onSuccess={handlePinConfirmedAction}
+        onCancel={() => {
+          setDeleteGateVisible(false);
+          setPendingDeleteType(null);
+          setChildToDelete(null);
+        }}
+      />
+
+      {/* ── PIN Change Parental Gate ── */}
+      <ParentalGate
+        visible={changePinVisible}
+        onSuccess={() => {
+          setChangePinVisible(false);
+          Alert.alert('Parent PIN', 'PIN verified. You can update your PIN anytime.');
+        }}
+        onCancel={() => setChangePinVisible(false)}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: spacing.md,
-    paddingBottom: 40,
-    gap: 16,
+  mainContainer: {
+    flex: 1,
+    backgroundColor: '#F0F4F8',
   },
-  navyHeader: {
-    borderRadius: radii.xl,
-    padding: 20,
-    overflow: 'hidden',
-    ...shadows.card,
+  headerContainer: {
+    paddingTop: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 0,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
   },
-  headerTitleRow: {
+  headerTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
-    gap: 12,
-  },
-  headerEmoji: {
-    fontSize: 32,
-  },
-  headerTitleCol: {
-    flex: 1,
+    justifyContent: 'space-between',
+    marginBottom: 16,
   },
   headerTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontFamily: fontFamilies.black,
-    color: colors.white,
-    letterSpacing: -0.3,
+    color: '#FFFFFF',
   },
   headerSubtitle: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontFamily: fontFamilies.semiBold,
-    marginTop: 2,
-  },
-  childrenAvatarsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    flexWrap: 'wrap',
-  },
-  childAvatarCol: {
-    alignItems: 'center',
-    gap: 6,
-    width: 60,
-  },
-  childAvatarSquircle: {
-    width: 54,
-    height: 54,
-    borderRadius: 18,
-    backgroundColor: colors.cardBgMuted,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'transparent',
-    position: 'relative',
-  },
-  childAvatarSquircleActive: {
-    borderColor: colors.white,
-    borderWidth: 3,
-    shadowColor: colors.white,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  childAvatarEmoji: {
-    fontSize: 26,
-  },
-  activeChildBadge: {
-    position: 'absolute',
-    bottom: -4,
-    right: -4,
-    backgroundColor: colors.coralStrong,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: colors.white,
-  },
-  activeChildBadgeCheck: {
-    color: colors.white,
-    fontSize: 10,
-    fontFamily: fontFamilies.black,
-  },
-  childAvatarName: {
     fontSize: 12,
     fontFamily: fontFamilies.bold,
-    color: 'rgba(255, 255, 255, 0.85)',
-    textAlign: 'center',
+    color: 'rgba(255, 255, 255, 0.65)',
+    marginTop: 2,
   },
-  childAvatarNameActive: {
-    color: colors.white,
-    fontFamily: fontFamilies.extraBold,
+  closeBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeBtnText: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontFamily: fontFamilies.bold,
+  },
+  childrenPillsContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingBottom: 14,
+  },
+  childPillItem: {
+    alignItems: 'center',
+    gap: 6,
+  },
+  childPillSquircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  childPillActiveSquircle: {
+    borderWidth: 3,
+    borderColor: 'rgba(255, 255, 255, 0.95)',
+    ...shadows.card,
+  },
+  childPillInactiveSquircle: {
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  childPillEmoji: {
+    fontSize: 26,
+  },
+  childPillName: {
+    fontSize: 11,
+    fontFamily: fontFamilies.bold,
+    color: 'rgba(255, 255, 255, 0.6)',
+  },
+  childPillNameActive: {
+    color: '#FFFFFF',
+    fontFamily: fontFamilies.black,
   },
   addChildSquircle: {
-    width: 54,
-    height: 54,
+    width: 52,
+    height: 52,
     borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.4)',
+    borderColor: 'rgba(255, 255, 255, 0.35)',
     borderStyle: 'dashed',
-    justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  addChildSquircleActive: {
-    borderColor: colors.white,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
   },
   addChildPlus: {
     fontSize: 22,
-    fontFamily: fontFamilies.bold,
-    color: 'rgba(255, 255, 255, 0.9)',
   },
-  inlineAddRow: {
+  addChildText: {
+    fontSize: 11,
+    fontFamily: fontFamilies.bold,
+    color: 'rgba(255, 255, 255, 0.55)',
+  },
+  subnavBar: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginTop: 16,
-    paddingTop: 16,
+    gap: 4,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.15)',
+    borderTopColor: 'rgba(255, 255, 255, 0.12)',
+    paddingTop: 4,
   },
-  inlineAddInput: {
+  subnavTab: {
     flex: 1,
-    height: 42,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderRadius: radii.md,
-    paddingHorizontal: 12,
-    fontSize: 14,
-    fontFamily: fontFamilies.semiBold,
-    color: colors.white,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.25)',
-  },
-  inlineAddBtn: {
-    backgroundColor: colors.coralStrong,
-    paddingHorizontal: 16,
-    height: 42,
-    borderRadius: radii.md,
-    justifyContent: 'center',
-    alignItems: 'center',
-    minWidth: 64,
-  },
-  inlineAddBtnText: {
-    color: colors.white,
-    fontFamily: fontFamilies.extraBold,
-    fontSize: 13,
-  },
-  inlineErrorText: {
-    color: colors.errorBorder,
-    fontSize: 12,
-    fontFamily: fontFamilies.bold,
-    marginTop: 6,
-  },
-  sectionCard: {
-    backgroundColor: colors.cardBg,
-    borderRadius: radii.xl,
-    padding: spacing.lg,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    ...shadows.card,
-  },
-  sectionHeading: {
-    fontSize: 16,
-    fontFamily: fontFamilies.extraBold,
-    color: colors.text,
-    marginBottom: 2,
-  },
-  sectionSub: {
-    fontSize: 12,
-    color: colors.subtext,
-    marginBottom: spacing.md,
-    lineHeight: 16,
-  },
-  memoryHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  switchCol: {
-    alignItems: 'center',
-    marginTop: -2,
-  },
-  switchLabel: {
-    fontSize: 10,
-    fontFamily: fontFamilies.bold,
-    color: colors.subtext,
-    marginTop: 2,
-  },
-  memoryErrorContainer: {
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    backgroundColor: colors.errorBg,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.errorBorder,
-    marginTop: 10,
-    alignItems: 'center',
-    gap: 8,
-  },
-  memoryErrorText: {
-    color: colors.error,
-    fontSize: 12,
-    fontFamily: fontFamilies.semiBold,
-    textAlign: 'center',
-  },
-  retryBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    backgroundColor: colors.coralStrong,
-    borderRadius: radii.pill,
-  },
-  retryBtnText: {
-    color: colors.white,
-    fontSize: 12,
-    fontFamily: fontFamilies.extraBold,
-  },
-  preferredNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: spacing.sm,
-  },
-  preferredNameLabel: {
-    fontSize: 12,
-    fontFamily: fontFamilies.bold,
-    color: colors.subtext,
-  },
-  nameBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.cardBgMuted,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    gap: 6,
-  },
-  nameBadgeText: {
-    fontSize: 12,
-    fontFamily: fontFamilies.extraBold,
-    color: colors.coralStrong,
-  },
-  nameBadgeRemoveBtn: {
-    padding: 2,
-  },
-  nameBadgeRemoveText: {
-    fontSize: 11,
-    fontFamily: fontFamilies.black,
-    color: colors.coralStrong,
-  },
-  factsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 4,
-    marginBottom: spacing.sm,
-  },
-  factChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-    borderRadius: radii.pill,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: 6,
-  },
-  factChipText: {
-    fontSize: 12,
-    fontFamily: fontFamilies.bold,
-    color: colors.text,
-  },
-  factChipRemoveBtn: {
-    padding: 2,
-  },
-  factChipRemoveText: {
-    fontSize: 11,
-    fontFamily: fontFamilies.black,
-    color: colors.subtext,
-  },
-  noFactsText: {
-    fontSize: 13,
-    color: colors.subtext,
-    fontStyle: 'italic',
-    lineHeight: 18,
-    paddingVertical: 6,
-  },
-  forgetScale: {
-    alignSelf: 'flex-start',
-    marginTop: spacing.xs,
-  },
-  forgetBtn: {
     paddingVertical: 10,
-    paddingHorizontal: 14,
-    minHeight: 44,
-    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
     alignItems: 'center',
-    borderRadius: radii.sm,
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
   },
-  forgetBtnText: {
+  subnavTabActive: {
+    backgroundColor: '#F0F4F8',
+  },
+  subnavTabText: {
     fontSize: 12,
     fontFamily: fontFamilies.bold,
-    color: colors.error,
+    color: 'rgba(255, 255, 255, 0.65)',
   },
-  actionCardScale: {
-    width: '100%',
-  },
-  actionCard: {
-    backgroundColor: colors.cardBg,
-    borderRadius: radii.xl,
-    padding: spacing.lg,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    ...shadows.card,
-  },
-  actionCardRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  actionIconBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.cardBgMuted,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  actionIconBadgePremium: {
-    backgroundColor: colors.warningBg,
-  },
-  actionIcon: {
-    fontSize: 20,
-  },
-  actionCardContent: {
-    flex: 1,
-  },
-  planTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  actionCardTitle: {
-    fontSize: 15,
-    fontFamily: fontFamilies.extraBold,
-    color: colors.text,
-  },
-  actionCardSub: {
-    fontSize: 12,
-    color: colors.subtext,
-    marginTop: 2,
-    lineHeight: 16,
-  },
-  actionArrow: {
-    fontSize: 18,
-    fontFamily: fontFamilies.extraBold,
-    color: colors.subtext,
-  },
-  planPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: radii.pill,
-  },
-  planPillFree: {
-    backgroundColor: colors.disabledBg,
-  },
-  planPillPremium: {
-    backgroundColor: colors.sun,
-  },
-  planPillText: {
-    fontSize: 10,
+  subnavTabTextActive: {
+    color: '#1E3A5F',
     fontFamily: fontFamilies.black,
   },
-  planPillTextFree: {
-    color: colors.subtext,
+  contentBody: {
+    flex: 1,
+    padding: spacing.md,
   },
-  planPillTextPremium: {
-    color: colors.text,
+  tabContentWrapper: {
+    gap: 14,
   },
-  signOutScale: {
-    width: '100%',
-    marginTop: 6,
-  },
-  signOutBtn: {
-    alignItems: 'center',
-    paddingVertical: 14,
-    borderRadius: radii.pill,
-    backgroundColor: 'rgba(217, 74, 74, 0.08)',
-  },
-  signOutText: {
-    fontSize: 14,
-    fontFamily: fontFamilies.extraBold,
-    color: colors.error,
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 16,
+    ...shadows.card,
   },
   cardHeaderTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: fontFamilies.black,
     color: colors.text,
-    marginBottom: 14,
+    marginBottom: 4,
   },
-  controlRow: {
+  cardSubtitle: {
+    fontSize: 12,
+    fontFamily: fontFamilies.semiBold,
+    color: colors.subtext,
+    marginBottom: 12,
+  },
+  activeChildCardRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
+    gap: 14,
   },
-  controlLabel: {
-    fontSize: 14,
-    fontFamily: fontFamilies.extraBold,
+  activeChildAvatarCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeChildAvatarEmoji: {
+    fontSize: 28,
+  },
+  activeChildName: {
+    fontSize: 17,
+    fontFamily: fontFamilies.black,
     color: colors.text,
   },
-  controlSub: {
+  activeChildMeta: {
     fontSize: 12,
     fontFamily: fontFamilies.semiBold,
     color: colors.subtext,
     marginTop: 2,
-    lineHeight: 16,
   },
-  retentionPillRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 8,
-    marginBottom: 4,
+  activeStatusPill: {
+    backgroundColor: '#E8F8F0',
+    borderRadius: radii.pill,
+    paddingVertical: 5,
+    paddingHorizontal: 12,
   },
-  retentionPill: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: radii.md,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.cardBgMuted,
-    alignItems: 'center',
-  },
-  retentionPillActive: {
-    borderColor: colors.coral,
-    backgroundColor: 'rgba(255, 107, 107, 0.1)',
-  },
-  retentionPillText: {
+  activeStatusText: {
     fontSize: 12,
     fontFamily: fontFamilies.bold,
-    color: colors.subtext,
+    color: '#2ECC71',
   },
-  retentionPillTextActive: {
-    color: colors.coral,
-    fontFamily: fontFamilies.extraBold,
-  },
-  dangerCard: {
-    borderColor: 'rgba(217, 74, 74, 0.25)',
-    backgroundColor: '#FFF9F9',
-  },
-  deleteProfileBtn: {
-    width: '100%',
-    minHeight: 46,
-    borderRadius: radii.md,
-    borderWidth: 1.5,
-    borderColor: 'rgba(217, 74, 74, 0.4)',
-    backgroundColor: 'rgba(217, 74, 74, 0.06)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-  },
-  deleteProfileBtnText: {
-    fontSize: 13,
-    fontFamily: fontFamilies.extraBold,
-    color: colors.error,
-  },
-  deleteAccountBtn: {
-    width: '100%',
-    minHeight: 46,
-    borderRadius: radii.md,
-    backgroundColor: colors.error,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    elevation: 2,
-  },
-  deleteAccountBtnText: {
-    fontSize: 13,
-    fontFamily: fontFamilies.black,
-    color: colors.white,
-    letterSpacing: 0.3,
-  },
-  analyticsSection: {
-    gap: 12,
-  },
-  analyticsHeading: {
-    fontSize: 16,
-    fontFamily: fontFamilies.black,
-    color: colors.text,
-    marginLeft: 4,
-  },
-  metricGrid: {
+  metricsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
   },
   metricCard: {
-    width: '48%',
-    backgroundColor: colors.white,
+    flex: 1,
+    minWidth: '47%',
+    backgroundColor: '#FFFFFF',
     borderRadius: 18,
-    padding: 14,
+    padding: 16,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
     ...shadows.card,
   },
   metricEmoji: {
-    fontSize: 24,
+    fontSize: 26,
     marginBottom: 4,
   },
   metricValue: {
-    fontSize: 26,
+    fontSize: 28,
     fontFamily: fontFamilies.black,
-    lineHeight: 30,
+    lineHeight: 32,
   },
   metricLabel: {
     fontSize: 11,
     fontFamily: fontFamilies.bold,
     color: colors.subtext,
-    marginTop: 2,
-  },
-  analyticsCard: {
-    backgroundColor: colors.white,
-    borderRadius: 20,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadows.card,
-  },
-  analyticsCardTitle: {
-    fontSize: 14,
-    fontFamily: fontFamilies.black,
-    color: colors.text,
-    marginBottom: 14,
+    marginTop: 3,
   },
   topicRow: {
     marginBottom: 12,
@@ -1517,14 +1645,14 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   topicIconSquircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
   topicIconEmoji: {
-    fontSize: 14,
+    fontSize: 16,
   },
   topicName: {
     flex: 1,
@@ -1539,25 +1667,25 @@ const styles = StyleSheet.create({
   },
   progressBarTrack: {
     height: 8,
-    borderRadius: 4,
+    borderRadius: 8,
     backgroundColor: '#F0F4F8',
     overflow: 'hidden',
   },
   progressBarFill: {
     height: '100%',
-    borderRadius: 4,
+    borderRadius: 8,
   },
   barChartContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    height: 90,
     gap: 8,
+    height: 80,
     paddingTop: 10,
   },
   barCol: {
     flex: 1,
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
     height: '100%',
     justifyContent: 'flex-end',
   },
@@ -1571,39 +1699,430 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   barDayText: {
-    fontSize: 10,
+    fontSize: 9,
     fontFamily: fontFamilies.bold,
     color: colors.subtext,
   },
-  deleteModalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.lg,
-  },
-  deleteModalCard: {
-    width: '100%',
-    maxWidth: 380,
-    backgroundColor: colors.white,
-    borderRadius: radii.xl,
-    padding: spacing.xl,
-    ...shadows.card,
-  },
-  deleteModalTitle: {
-    fontSize: 20,
-    fontFamily: fontFamilies.black,
-    color: colors.error,
-    marginBottom: 8,
-  },
-  deleteModalSub: {
+  emptyStateText: {
     fontSize: 13,
     fontFamily: fontFamilies.regular,
     color: colors.subtext,
-    lineHeight: 18,
-    marginBottom: 10,
+    lineHeight: 19,
+    textAlign: 'center',
+    paddingVertical: 8,
   },
-  deleteModalInput: {
+  memoryHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  factsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  factChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F4F8',
+    borderRadius: radii.pill,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  factChipText: {
+    fontSize: 12,
+    fontFamily: fontFamilies.semiBold,
+    color: colors.text,
+  },
+  factChipRemove: {
+    fontSize: 13,
+    color: colors.subtext,
+    fontWeight: 'bold',
+  },
+  clearMemoryBtn: {
+    marginTop: 14,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  clearMemoryBtnText: {
+    fontSize: 12,
+    fontFamily: fontFamilies.bold,
+    color: colors.coral,
+  },
+  sectionHeaderTitle: {
+    fontSize: 15,
+    fontFamily: fontFamilies.black,
+    color: colors.text,
+    marginBottom: 2,
+  },
+  historyCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    ...shadows.card,
+  },
+  historyIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  historyIconEmoji: {
+    fontSize: 19,
+  },
+  historyItemTitle: {
+    fontSize: 13,
+    fontFamily: fontFamilies.bold,
+    color: colors.text,
+  },
+  historyItemMeta: {
+    fontSize: 11,
+    fontFamily: fontFamilies.semiBold,
+    color: colors.subtext,
+    marginTop: 2,
+  },
+  historyChevronBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: '#EBF5FB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  historyChevronText: {
+    fontSize: 16,
+    color: '#2980B9',
+    fontFamily: fontFamilies.bold,
+  },
+  fullTranscriptBtn: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 14,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    marginTop: 6,
+  },
+  fullTranscriptBtnText: {
+    fontSize: 13,
+    fontFamily: fontFamilies.bold,
+    color: colors.coral,
+  },
+  limitCounterBox: {
+    alignItems: 'center',
+    marginVertical: 14,
+  },
+  limitBigNumber: {
+    fontSize: 48,
+    fontFamily: fontFamilies.black,
+    color: colors.coral,
+    lineHeight: 52,
+  },
+  limitUnitsText: {
+    fontSize: 13,
+    fontFamily: fontFamilies.bold,
+    color: colors.subtext,
+    marginTop: 2,
+  },
+  limitTrack: {
+    backgroundColor: '#F0F4F8',
+    borderRadius: 10,
+    height: 10,
+    width: '100%',
+    marginVertical: 12,
+    overflow: 'hidden',
+  },
+  limitFill: {
+    height: '100%',
+    borderRadius: 10,
+    backgroundColor: colors.coral,
+  },
+  limitUsageText: {
+    fontSize: 12,
+    fontFamily: fontFamilies.bold,
+    color: colors.subtext,
+  },
+  limitPresetsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 6,
+  },
+  presetBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8F9FA',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  presetBtnActive: {
+    borderColor: colors.coral,
+    backgroundColor: 'rgba(255, 107, 107, 0.1)',
+  },
+  presetBtnText: {
+    fontSize: 13,
+    fontFamily: fontFamilies.bold,
+    color: colors.subtext,
+  },
+  presetBtnTextActive: {
+    color: colors.coral,
+    fontFamily: fontFamilies.black,
+  },
+  scheduleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5F5F5',
+  },
+  scheduleLabel: {
+    fontSize: 13,
+    fontFamily: fontFamilies.bold,
+    color: colors.text,
+  },
+  controlSub: {
+    fontSize: 11,
+    fontFamily: fontFamilies.regular,
+    color: colors.subtext,
+    marginTop: 2,
+  },
+  retentionPillRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+  },
+  retentionPill: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: radii.pill,
+    backgroundColor: '#F0F4F8',
+    alignItems: 'center',
+  },
+  retentionPillActive: {
+    backgroundColor: colors.coral,
+  },
+  retentionPillText: {
+    fontSize: 12,
+    fontFamily: fontFamilies.bold,
+    color: colors.text,
+  },
+  retentionPillTextActive: {
+    color: colors.white,
+  },
+  manageChildRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5F5F5',
+  },
+  manageChildAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  manageChildName: {
+    fontSize: 13,
+    fontFamily: fontFamilies.bold,
+    color: colors.text,
+  },
+  manageChildGrade: {
+    fontSize: 11,
+    fontFamily: fontFamilies.semiBold,
+    color: colors.subtext,
+    marginTop: 1,
+  },
+  manageChildEditBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8F9FA',
+  },
+  manageChildEditText: {
+    fontSize: 12,
+    fontFamily: fontFamilies.bold,
+    color: colors.subtext,
+  },
+  addAnotherChildBtn: {
+    width: '100%',
+    marginTop: 14,
+    backgroundColor: 'rgba(255, 107, 107, 0.08)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 107, 107, 0.4)',
+    borderStyle: 'dashed',
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  addAnotherChildText: {
+    fontSize: 14,
+    fontFamily: fontFamilies.bold,
+    color: colors.coral,
+  },
+  sectionCategoryHeader: {
+    fontSize: 10,
+    fontFamily: fontFamilies.black,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: '#9CA3AF',
+    paddingHorizontal: 4,
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  groupedListCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    overflow: 'hidden',
+    ...shadows.card,
+  },
+  groupedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5F5F5',
+  },
+  groupedIconSquircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  groupedRowTitle: {
+    fontSize: 14,
+    fontFamily: fontFamilies.bold,
+    color: colors.text,
+  },
+  groupedRowSubtitle: {
+    fontSize: 11,
+    fontFamily: fontFamilies.semiBold,
+    color: colors.subtext,
+    marginTop: 1,
+  },
+  groupedChevron: {
+    fontSize: 18,
+    color: '#D1D5DB',
+  },
+  deleteAccountCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1.5,
+    borderColor: 'rgba(239, 68, 68, 0.25)',
+    marginTop: 6,
+  },
+  deleteAccountText: {
+    fontSize: 13,
+    fontFamily: fontFamilies.bold,
+    color: colors.error,
+  },
+  signOutCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    ...shadows.card,
+  },
+  signOutText: {
+    fontSize: 14,
+    fontFamily: fontFamilies.bold,
+    color: '#EF4444',
+    marginLeft: 12,
+  },
+  noChildCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    ...shadows.card,
+  },
+  noChildEmoji: {
+    fontSize: 40,
+    marginBottom: 8,
+  },
+  noChildTitle: {
+    fontSize: 16,
+    fontFamily: fontFamilies.bold,
+    color: colors.text,
+    marginBottom: 4,
+  },
+  noChildSubtitle: {
+    fontSize: 13,
+    fontFamily: fontFamilies.regular,
+    color: colors.subtext,
+    textAlign: 'center',
+  },
+  // Modal Styles
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    justifyContent: 'flex-end',
+  },
+  modalSheetCard: {
+    width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 24,
+    paddingBottom: 40,
+  },
+  modalCardCenter: {
+    width: '90%',
+    alignSelf: 'center',
+    marginVertical: 'auto',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 20,
+    ...shadows.card,
+  },
+  modalSheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  modalSheetTitle: {
+    fontSize: 18,
+    fontFamily: fontFamilies.black,
+    color: colors.text,
+  },
+  modalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F0F4F8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalFieldLabel: {
+    fontSize: 12,
+    fontFamily: fontFamilies.bold,
+    color: colors.subtext,
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  modalTextInput: {
     borderWidth: 1.5,
     borderColor: '#E2E8F0',
     borderRadius: radii.md,
@@ -1612,14 +2131,75 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: fontFamilies.regular,
     color: colors.text,
-    marginTop: 6,
-    marginBottom: 8,
   },
-  deleteModalError: {
+  gradePickerRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginVertical: 4,
+  },
+  gradePickerPill: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: radii.md,
+    backgroundColor: '#F0F4F8',
+    alignItems: 'center',
+  },
+  gradePickerPillActive: {
+    backgroundColor: colors.coral,
+  },
+  gradePickerText: {
+    fontSize: 11,
+    fontFamily: fontFamilies.bold,
+    color: colors.text,
+  },
+  gradePickerTextActive: {
+    color: colors.white,
+  },
+  modalErrorText: {
     fontSize: 12,
     fontFamily: fontFamilies.bold,
     color: colors.error,
-    marginBottom: 10,
+    marginTop: 8,
+  },
+  modalPrimaryBtn: {
+    backgroundColor: '#1E3A5F',
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 18,
+    ...shadows.card,
+  },
+  modalPrimaryBtnText: {
+    fontSize: 15,
+    fontFamily: fontFamilies.black,
+    color: colors.white,
+  },
+  modalDangerBtn: {
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+    borderRadius: 16,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+  },
+  modalDangerBtnText: {
+    fontSize: 13,
+    fontFamily: fontFamilies.bold,
+    color: colors.error,
+  },
+  deleteModalTitle: {
+    fontSize: 18,
+    fontFamily: fontFamilies.black,
+    color: colors.error,
+    marginBottom: 8,
+  },
+  deleteModalSub: {
+    fontSize: 12,
+    fontFamily: fontFamilies.regular,
+    color: colors.subtext,
+    lineHeight: 17,
+    marginBottom: 8,
   },
   deleteModalActions: {
     flexDirection: 'row',
@@ -1627,27 +2207,26 @@ const styles = StyleSheet.create({
     gap: 12,
     marginTop: 14,
   },
-  deleteModalCancelBtn: {
+  modalCancelBtn: {
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: radii.pill,
     backgroundColor: '#F1F5F9',
   },
-  deleteModalCancelText: {
-    fontSize: 14,
+  modalCancelBtnText: {
+    fontSize: 13,
     fontFamily: fontFamilies.bold,
     color: colors.subtext,
   },
-  deleteModalConfirmBtn: {
+  modalConfirmDeleteBtn: {
     paddingVertical: 10,
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
     borderRadius: radii.pill,
     backgroundColor: colors.error,
-    justifyContent: 'center',
     alignItems: 'center',
   },
-  deleteModalConfirmText: {
-    fontSize: 14,
+  modalConfirmDeleteBtnText: {
+    fontSize: 13,
     fontFamily: fontFamilies.black,
     color: colors.white,
   },
