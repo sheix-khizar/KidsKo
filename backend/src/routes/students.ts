@@ -259,64 +259,93 @@ router.delete('/:id/memory', requireAuth, async (req: Request, res: Response) =>
 router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
   const { id } = req.params;
 
-  // 1. Ownership verification
-  const { data: student, error: studentError } = await req.supabase!
-    .from('students')
-    .select('id, student_name')
-    .eq('id', id)
-    .eq('parent_id', req.user!.id)
-    .maybeSingle();
+  try {
+    // 1. Ownership verification
+    const { data: student, error: studentError } = await req.supabase!
+      .from('students')
+      .select('id, student_name')
+      .eq('id', id)
+      .eq('parent_id', req.user!.id)
+      .maybeSingle();
 
-  if (studentError || !student) {
-    return res.status(404).json({ error: 'Student profile not found' });
-  }
+    if (studentError || !student) {
+      return res.status(404).json({ error: 'Student profile not found' });
+    }
 
-  // 2. Cascade cleanup of student_memory
-  await req.supabase!
-    .from('student_memory')
-    .delete()
-    .eq('student_id', id);
+    // 2. Cascade cleanup of student_memory (ignoring missing table warnings)
+    try {
+      await req.supabase!
+        .from('student_memory')
+        .delete()
+        .eq('student_id', id);
+    } catch (memErr: any) {
+      console.warn('[DELETE /students/:id Memory Warning]:', memErr?.message);
+    }
 
-  // 3. Cascade cleanup of chat threads, messages & thread images
-  const { data: threads } = await req.supabase!
-    .from('chat_threads')
-    .select('id')
-    .eq('student_id', id);
+    // 3. Cascade cleanup of usage_events associated with student
+    try {
+      await req.supabase!
+        .from('usage_events')
+        .delete()
+        .eq('student_id', id);
+    } catch (evErr: any) {
+      console.warn('[DELETE /students/:id Events Warning]:', evErr?.message);
+    }
 
-  if (threads && threads.length > 0) {
-    const threadIds = threads.map((t: any) => t.id);
-    await req.supabase!
-      .from('thread_images')
+    // 4. Cascade cleanup of chat threads, messages & thread images
+    try {
+      const { data: threads } = await req.supabase!
+        .from('chat_threads')
+        .select('id')
+        .eq('student_id', id);
+
+      if (threads && threads.length > 0) {
+        const threadIds = threads.map((t: any) => t.id);
+        try {
+          await req.supabase!
+            .from('thread_images')
+            .delete()
+            .in('thread_id', threadIds);
+        } catch {}
+        try {
+          await req.supabase!
+            .from('messages')
+            .delete()
+            .in('thread_id', threadIds);
+        } catch {}
+        try {
+          await req.supabase!
+            .from('chat_threads')
+            .delete()
+            .eq('student_id', id);
+        } catch {}
+      }
+    } catch (thErr: any) {
+      console.warn('[DELETE /students/:id Threads Warning]:', thErr?.message);
+    }
+
+    // 5. Delete student record
+    const { error: deleteErr } = await req.supabase!
+      .from('students')
       .delete()
-      .in('thread_id', threadIds);
-    await req.supabase!
-      .from('messages')
-      .delete()
-      .in('thread_id', threadIds);
-    await req.supabase!
-      .from('chat_threads')
-      .delete()
-      .eq('student_id', id);
+      .eq('id', id)
+      .eq('parent_id', req.user!.id);
+
+    if (deleteErr) {
+      console.error('[DELETE /students/:id Error]:', deleteErr.message);
+      return res.status(500).json({ error: 'Failed to delete child profile: ' + deleteErr.message });
+    }
+
+    console.log(`[Child Profile Deleted]: StudentId=${id}, Name=${student.student_name}, ParentId=${req.user!.id}`);
+    return res.status(200).json({
+      success: true,
+      deletedStudentId: id,
+      studentName: student.student_name,
+    });
+  } catch (err: any) {
+    console.error('[DELETE /students/:id Fatal Error]:', err);
+    return res.status(500).json({ error: err?.message || 'Server error deleting child profile' });
   }
-
-  // 4. Delete student record
-  const { error: deleteErr } = await req.supabase!
-    .from('students')
-    .delete()
-    .eq('id', id)
-    .eq('parent_id', req.user!.id);
-
-  if (deleteErr) {
-    console.error('[DELETE /students/:id Error]:', deleteErr.message);
-    return res.status(500).json({ error: 'Failed to delete child profile' });
-  }
-
-  console.log(`[Child Profile Deleted]: StudentId=${id}, Name=${student.student_name}, ParentId=${req.user!.id}`);
-  return res.status(200).json({
-    success: true,
-    deletedStudentId: id,
-    studentName: student.student_name,
-  });
 });
 
 export default router;

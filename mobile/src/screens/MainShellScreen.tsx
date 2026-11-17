@@ -59,7 +59,7 @@ export default function MainShellScreen({
   const [logoutGateVisible, setLogoutGateVisible] = useState(false);
   const [curfewEnabled, setCurfewEnabled] = useState(false);
 
-  const loadStudentList = async () => {
+  const loadStudentList = async (): Promise<Student[]> => {
     try {
       const list = await getStudents();
       setStudents(list);
@@ -74,8 +74,10 @@ export default function MainShellScreen({
       } else {
         setActiveStudent(null);
       }
+      return list;
     } catch (err: any) {
       console.warn('Failed to load students in shell:', err.message);
+      return [];
     } finally {
       setLoadingStudents(false);
     }

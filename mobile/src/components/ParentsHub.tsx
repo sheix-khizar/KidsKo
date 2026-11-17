@@ -35,7 +35,7 @@ type Props = {
   students: Student[];
   activeStudent: Student | null;
   onSelectStudent: (student: Student) => void;
-  onRefreshStudents: () => Promise<void>;
+  onRefreshStudents: () => Promise<Student[] | void>;
   onOpenTranscript: (student: Student) => void;
   onOpenPaywall: () => void;
   onRequestLogout: () => void;
@@ -189,13 +189,27 @@ export default function ParentsHub({
     if (pendingDeleteType === 'child') {
       if (!activeStudent) return;
       const childName = activeStudent.student_name;
+      const targetStudentId = activeStudent.id;
       setDeletingChild(true);
       try {
-        await deleteStudent(activeStudent.id);
-        await onRefreshStudents();
+        await deleteStudent(targetStudentId);
+        const updatedList = await onRefreshStudents();
+        if (Array.isArray(updatedList) && updatedList.length > 0) {
+          const nextChild = updatedList.find((s) => s.id !== targetStudentId) || updatedList[0];
+          onSelectStudent(nextChild);
+        }
         Alert.alert('Profile Deleted', `${childName}'s profile and data have been permanently erased.`);
       } catch (err: any) {
-        Alert.alert('Error', err.message || 'Failed to delete child profile');
+        const updatedList = await onRefreshStudents();
+        if (Array.isArray(updatedList) && updatedList.length > 0) {
+          const nextChild = updatedList.find((s) => s.id !== targetStudentId) || updatedList[0];
+          onSelectStudent(nextChild);
+        }
+        if (err?.message?.includes('not found')) {
+          Alert.alert('Profile Removed', `${childName}'s profile has been removed.`);
+        } else {
+          Alert.alert('Error', err.message || 'Failed to delete child profile');
+        }
       } finally {
         setDeletingChild(false);
         setPendingDeleteType(null);
