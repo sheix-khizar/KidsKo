@@ -11,7 +11,7 @@ export const getDefaultDevApiUrl = (): string => {
 };
 
 // Internal mutable URLs
-let currentApiUrl = process.env.EXPO_PUBLIC_API_URL || getDefaultDevApiUrl();
+let currentApiUrl = getDefaultDevApiUrl();
 let currentWsUrl = currentApiUrl.replace(/^http/, 'ws');
 
 export function getApiUrl(): string {

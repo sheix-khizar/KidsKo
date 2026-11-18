@@ -29,8 +29,8 @@ type Props = {
 
 export default function LoginScreen({ onLoggedIn, onGoToRegister }: Props) {
   const insets = useSafeAreaInsets();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState(__DEV__ ? 'test@kidsko.ai' : '');
+  const [password, setPassword] = useState(__DEV__ ? 'password123' : '');
   const [showPassword, setShowPassword] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
