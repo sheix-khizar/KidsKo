@@ -780,44 +780,33 @@ export default function ParentsHub({
                 {/* Topics This Week */}
                 <View style={styles.card}>
                   <Text style={styles.cardHeaderTitle}>📚 Topics This Week</Text>
-                  <View style={styles.topicRow}>
-                    <View style={styles.topicHeader}>
-                      <View style={[styles.topicIconSquircle, { backgroundColor: '#FFF0F0' }]}>
-                        <Text style={styles.topicIconEmoji}>🔬</Text>
-                      </View>
-                      <Text style={styles.topicName}>Science</Text>
-                      <Text style={styles.topicCount}>10 Qs</Text>
+                  {activity?.topics && activity.topics.length > 0 ? (
+                    <View style={{ marginTop: 4 }}>
+                      {activity.topics.map((t, idx) => {
+                        const totalWeekly = Math.max(1, activity.questionsThisWeek);
+                        const pct = Math.min(100, Math.round((t.count / totalWeekly) * 100));
+                        const isLast = idx === activity.topics!.length - 1;
+                        return (
+                          <View key={t.name} style={[styles.topicRow, isLast && { marginBottom: 0 }]}>
+                            <View style={styles.topicHeader}>
+                              <View style={[styles.topicIconSquircle, { backgroundColor: `${t.color}20` }]}>
+                                <Text style={styles.topicIconEmoji}>{t.icon}</Text>
+                              </View>
+                              <Text style={styles.topicName}>{t.name}</Text>
+                              <Text style={styles.topicCount}>{t.count} {t.count === 1 ? 'Q' : 'Qs'}</Text>
+                            </View>
+                            <View style={styles.progressBarTrack}>
+                              <View style={[styles.progressBarFill, { width: `${pct}%`, backgroundColor: t.color }]} />
+                            </View>
+                          </View>
+                        );
+                      })}
                     </View>
-                    <View style={styles.progressBarTrack}>
-                      <View style={[styles.progressBarFill, { width: '70%', backgroundColor: colors.coral }]} />
-                    </View>
-                  </View>
-
-                  <View style={styles.topicRow}>
-                    <View style={styles.topicHeader}>
-                      <View style={[styles.topicIconSquircle, { backgroundColor: '#FFF5E0' }]}>
-                        <Text style={styles.topicIconEmoji}>🔢</Text>
-                      </View>
-                      <Text style={styles.topicName}>Maths</Text>
-                      <Text style={styles.topicCount}>8 Qs</Text>
-                    </View>
-                    <View style={styles.progressBarTrack}>
-                      <View style={[styles.progressBarFill, { width: '55%', backgroundColor: '#FF9F43' }]} />
-                    </View>
-                  </View>
-
-                  <View style={[styles.topicRow, { marginBottom: 0 }]}>
-                    <View style={styles.topicHeader}>
-                      <View style={[styles.topicIconSquircle, { backgroundColor: '#E8F8F0' }]}>
-                        <Text style={styles.topicIconEmoji}>📖</Text>
-                      </View>
-                      <Text style={styles.topicName}>English</Text>
-                      <Text style={styles.topicCount}>5 Qs</Text>
-                    </View>
-                    <View style={styles.progressBarTrack}>
-                      <View style={[styles.progressBarFill, { width: '34%', backgroundColor: colors.green }]} />
-                    </View>
-                  </View>
+                  ) : (
+                    <Text style={styles.emptyStateText}>
+                      No learning topics explored yet this week. As {activeStudent.student_name} asks questions in Science, Maths, or English, real subject topics will appear here!
+                    </Text>
+                  )}
                 </View>
 
                 {/* Weekly Flexbox Bar Chart */}
@@ -997,7 +986,57 @@ export default function ParentsHub({
         {/* ════════ TAB 3: LIMITS (Image 3) ════════ */}
         {currentTab === 'limits' && (
           <View style={styles.tabContentWrapper}>
-            {activeStudent ? (
+            {!isPremium ? (
+              /* 🔒 Premium Locked Limits Screen (Free Plan) */
+              <View style={styles.limitsLockedContainer}>
+                <LinearGradient
+                  colors={['#1A2A44', '#1E3A5F']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.limitsLockedCard}
+                >
+                  <View style={styles.limitsLockedBadge}>
+                    <Text style={{ fontSize: 32 }}>🔒</Text>
+                  </View>
+                  <Text style={styles.limitsLockedTitle}>Custom Limits is a Premium Feature</Text>
+                  <Text style={styles.limitsLockedDesc}>
+                    Personalized question caps, custom study schedules, bedtime curfew, and camera vision controls are available exclusively with Kidsko Premium.
+                  </Text>
+
+                  {/* Free vs Premium Plan Comparison */}
+                  <View style={styles.limitsComparisonBox}>
+                    <View style={styles.limitsComparisonRow}>
+                      <Text style={styles.limitsComparisonLabel}>📦 Free Plan Default:</Text>
+                      <Text style={styles.limitsComparisonVal}>Fixed 30 questions/day</Text>
+                    </View>
+                    <View style={styles.limitsComparisonRow}>
+                      <Text style={[styles.limitsComparisonLabel, { color: '#FFD700' }]}>⭐ Premium Plan:</Text>
+                      <Text style={[styles.limitsComparisonVal, { color: '#FFFFFF', fontFamily: fontFamilies.bold }]}>
+                        Custom Caps & Unlimited
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Feature Highlights */}
+                  <View style={styles.limitsFeaturesList}>
+                    <Text style={styles.limitsFeatureItem}>✨ Set custom daily limits (10, 20, 50, or Unlimited)</Text>
+                    <Text style={styles.limitsFeatureItem}>⏰ Tailor study schedules (School, Evening, Weekend)</Text>
+                    <Text style={styles.limitsFeatureItem}>🌙 Enforce night-time Bedtime Curfew (8 PM – 7 AM)</Text>
+                    <Text style={styles.limitsFeatureItem}>📷 AI Camera Vision parental switch</Text>
+                  </View>
+
+                  <TouchableOpacity
+                    onPress={onOpenPaywall}
+                    style={styles.limitsUnlockBtn}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.limitsUnlockBtnText}>
+                      Upgrade to Premium to Unlock Limits 🚀
+                    </Text>
+                  </TouchableOpacity>
+                </LinearGradient>
+              </View>
+            ) : activeStudent ? (
               <>
                 {/* ⏱️ Daily Question Limit Card */}
                 <View style={styles.card}>
@@ -1047,18 +1086,6 @@ export default function ParentsHub({
                       );
                     })}
                   </View>
-
-                  {!isPremium && (
-                    <TouchableOpacity
-                      onPress={onOpenPaywall}
-                      style={styles.limitsUpgradeBanner}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.limitsUpgradeText}>
-                        🚀 Want unlimited questions? <Text style={{ textDecorationLine: 'underline', fontFamily: fontFamilies.black }}>Upgrade to Premium</Text>
-                      </Text>
-                    </TouchableOpacity>
-                  )}
                 </View>
 
                 {/* ⏰ Study Schedule Card */}
@@ -1237,7 +1264,7 @@ export default function ParentsHub({
                     </LinearGradient>
                     <View style={{ flex: 1, marginLeft: 12 }}>
                       <Text style={styles.manageChildName}>{st.student_name}</Text>
-                      <Text style={styles.manageChildGrade}>Grade {idx + 2}</Text>
+                      <Text style={styles.manageChildGrade}>Child Profile · Active Learner</Text>
                     </View>
                     <TouchableOpacity
                       onPress={() => handleOpenEditChild(st)}
@@ -2335,6 +2362,87 @@ const styles = StyleSheet.create({
   },
   retentionPillTextActive: {
     color: colors.white,
+  },
+  limitsLockedContainer: {
+    marginBottom: 16,
+  },
+  limitsLockedCard: {
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    ...shadows.card,
+  },
+  limitsLockedBadge: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  limitsLockedTitle: {
+    fontSize: 20,
+    fontFamily: fontFamilies.black,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  limitsLockedDesc: {
+    fontSize: 13,
+    fontFamily: fontFamilies.regular,
+    color: 'rgba(255, 255, 255, 0.85)',
+    textAlign: 'center',
+    lineHeight: 19,
+    marginBottom: 18,
+  },
+  limitsComparisonBox: {
+    width: '100%',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 18,
+    gap: 8,
+  },
+  limitsComparisonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  limitsComparisonLabel: {
+    fontSize: 12,
+    fontFamily: fontFamilies.semiBold,
+    color: 'rgba(255, 255, 255, 0.75)',
+  },
+  limitsComparisonVal: {
+    fontSize: 12,
+    fontFamily: fontFamilies.bold,
+    color: 'rgba(255, 255, 255, 0.95)',
+  },
+  limitsFeaturesList: {
+    width: '100%',
+    marginBottom: 20,
+    gap: 10,
+  },
+  limitsFeatureItem: {
+    fontSize: 12,
+    fontFamily: fontFamilies.semiBold,
+    color: 'rgba(255, 255, 255, 0.9)',
+    lineHeight: 18,
+  },
+  limitsUnlockBtn: {
+    width: '100%',
+    backgroundColor: colors.coral,
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.button,
+  },
+  limitsUnlockBtnText: {
+    fontSize: 14,
+    fontFamily: fontFamilies.black,
+    color: '#FFFFFF',
   },
   limitsUpgradeBanner: {
     marginTop: 12,

@@ -243,6 +243,13 @@ export async function deleteStudent(studentId: string): Promise<{ success: boole
 }
 
 // Real Learning Activity endpoints
+export type TopicSummary = {
+  name: string;
+  icon: string;
+  count: number;
+  color: string;
+};
+
 export type StudentActivityData = {
   studentId: string;
   studentName: string;
@@ -251,6 +258,7 @@ export type StudentActivityData = {
   topicsExplored: number;
   streak: number;
   dailyCounts: Record<string, number>;
+  topics?: TopicSummary[];
 };
 
 export async function getStudentActivity(studentId: string): Promise<StudentActivityData> {

@@ -81,16 +81,16 @@ router.get('/:id/activity', requireAuth, async (req: Request, res: Response) => 
   // 2. Fetch threads and user messages count
   const { data: threads } = await req.supabase!
     .from('chat_threads')
-    .select('id, created_at')
+    .select('id, title, created_at')
     .eq('student_id', id);
 
   const threadIds = (threads || []).map((t: any) => t.id);
 
-  let userMessages: { created_at: string }[] = [];
+  let userMessages: { content?: string; created_at: string }[] = [];
   if (threadIds.length > 0) {
     const { data: msgs } = await req.supabase!
       .from('messages')
-      .select('created_at')
+      .select('content, created_at')
       .in('thread_id', threadIds)
       .eq('role', 'user');
     userMessages = msgs || [];
@@ -105,11 +105,49 @@ router.get('/:id/activity', requireAuth, async (req: Request, res: Response) => 
     (m) => new Date(m.created_at).getTime() >= startOfToday
   ).length;
 
-  const questionsThisWeek = userMessages.filter(
+  const weekMessages = userMessages.filter(
     (m) => new Date(m.created_at).getTime() >= sevenDaysAgo
-  ).length;
+  );
 
+  const questionsThisWeek = weekMessages.length;
   const topicsExplored = threadIds.length;
+
+  // Real Subject Categorization
+  let scienceCount = 0;
+  let mathsCount = 0;
+  let englishCount = 0;
+  let otherCount = 0;
+
+  const scienceRegex = /\b(science|planet|solar|space|star|earth|moon|animal|plant|biology|chemistry|physics|body|cell|water|energy|light|sound|weather|dinosaur|dinasour|volcano|gravity|magnet|nature|experiment)\b/i;
+  const mathsRegex = /\b(math|maths|mathematics|number|numbers|add|addition|subtract|subtraction|multiply|multiplication|divide|division|fraction|fractions|decimal|algebra|geometry|shape|shapes|count|calculate|equation|sum|plus|minus|perimeter|area|angle)\b/i;
+  const englishRegex = /\b(english|word|words|spelling|spell|read|reading|write|writing|sentence|grammar|noun|verb|adjective|adverb|punctuation|poem|poetry|story|book|author|letter|vocabulary|paragraph|essay)\b/i;
+
+  weekMessages.forEach((m) => {
+    const text = (m.content || '').toLowerCase();
+    if (mathsRegex.test(text)) {
+      mathsCount++;
+    } else if (scienceRegex.test(text)) {
+      scienceCount++;
+    } else if (englishRegex.test(text)) {
+      englishCount++;
+    } else {
+      otherCount++;
+    }
+  });
+
+  const topics: { name: string; icon: string; count: number; color: string }[] = [];
+  if (scienceCount > 0) {
+    topics.push({ name: 'Science', icon: '🔬', count: scienceCount, color: '#FF6B6B' });
+  }
+  if (mathsCount > 0) {
+    topics.push({ name: 'Maths', icon: '🔢', count: mathsCount, color: '#FF9F43' });
+  }
+  if (englishCount > 0) {
+    topics.push({ name: 'English', icon: '📖', count: englishCount, color: '#2ECC71' });
+  }
+  if (otherCount > 0) {
+    topics.push({ name: 'General Learning', icon: '💡', count: otherCount, color: '#9B51E0' });
+  }
 
   // Day of week counts (Mon..Sun)
   const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -149,6 +187,7 @@ router.get('/:id/activity', requireAuth, async (req: Request, res: Response) => 
     topicsExplored,
     streak,
     dailyCounts,
+    topics,
   });
 });
 
