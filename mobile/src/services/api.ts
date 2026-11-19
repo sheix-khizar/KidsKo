@@ -1,6 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
-import { getApiUrl } from './config';
+import { getApiUrl, setCustomApiUrl } from './config';
 import { clearPin } from './pinService';
 
 import { configureBilling } from './billing';
@@ -62,8 +62,8 @@ export async function clearToken() {
   } catch {}
 }
 
-// Helper: fetch with 8s timeout to prevent infinite UI freezing on dead/stale IPs with auto-fallback to Android emulator host
-async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 8000): Promise<Response> {
+// Helper: fetch with 4s timeout to prevent UI freezing on dead/stale IPs with auto-fallback to Android emulator host
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 4000): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -75,6 +75,10 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutM
       if (fallbackUrl !== url) {
         try {
           const fallbackRes = await fetch(fallbackUrl, options);
+          if (fallbackRes.ok) {
+            // Persist the working host immediately so subsequent calls don't stall
+            setCustomApiUrl('http://10.0.2.2:3003').catch(() => {});
+          }
           return fallbackRes;
         } catch {}
       }

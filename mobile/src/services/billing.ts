@@ -4,6 +4,9 @@ const REVENUECAT_API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_API_KEY || 'placeh
 const ENTITLEMENT_ID = 'premium'; // must match the entitlement identifier in RevenueCat dashboard
 
 export async function configureBilling(userId: string) {
+  if (!REVENUECAT_API_KEY || REVENUECAT_API_KEY.includes('placeholder')) {
+    return;
+  }
   try {
     Purchases.configure({ apiKey: REVENUECAT_API_KEY, appUserID: userId });
   } catch (err: any) {
@@ -12,6 +15,9 @@ export async function configureBilling(userId: string) {
 }
 
 export async function getCurrentOffering(): Promise<PurchasesOffering | null> {
+  if (!REVENUECAT_API_KEY || REVENUECAT_API_KEY.includes('placeholder')) {
+    return null;
+  }
   try {
     const offerings = await Purchases.getOfferings();
     return offerings.current;
@@ -27,6 +33,9 @@ export async function purchasePackage(pkg: any): Promise<CustomerInfo> {
 }
 
 export async function isPremiumActive(): Promise<boolean> {
+  if (!REVENUECAT_API_KEY || REVENUECAT_API_KEY.includes('placeholder')) {
+    return false;
+  }
   try {
     const info = await Purchases.getCustomerInfo();
     return info.entitlements.active[ENTITLEMENT_ID] !== undefined;
