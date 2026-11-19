@@ -236,12 +236,12 @@ export default function ChatScreen({
         setRemaining(result.remaining);
         setIsPremium(result.isPremium);
       } catch (err: any) {
-        setErrorMsg(err.message);
-        setRemaining(0);
-        if (userText) setInput(userText);
-        if (err.status === 429 && onLimitReached) {
-          onLimitReached();
+        setErrorMsg(err.message || 'Something went wrong. Please try again.');
+        if (err.status === 429) {
+          setRemaining(0);
+          if (onLimitReached) onLimitReached();
         }
+        if (userText) setInput(userText);
       } finally {
         setSending(false);
         setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);

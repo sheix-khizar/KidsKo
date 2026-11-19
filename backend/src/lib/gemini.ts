@@ -134,7 +134,7 @@ export async function generateChatReply(
   let response;
   try {
     response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-3.5-flash',
       contents,
       config: {
         systemInstruction,
@@ -143,11 +143,16 @@ export async function generateChatReply(
       },
     });
   } catch (err: any) {
-    const is503 = err?.message?.includes('503') || err?.message?.includes('high demand') || err?.status === 503;
-    if (is503) {
-      console.warn('[Gemini] gemini-2.0-flash 503 spike, falling back to gemini-1.5-flash...');
+    const isRetryable =
+      err?.message?.includes('503') ||
+      err?.message?.includes('high demand') ||
+      err?.message?.includes('404') ||
+      err?.message?.includes('not found') ||
+      err?.status === 503;
+    if (isRetryable) {
+      console.warn('[Gemini] gemini-3.5-flash error, falling back to gemini-3.1-flash-lite...');
       response = await ai.models.generateContent({
-        model: 'gemini-1.5-flash',
+        model: 'gemini-3.1-flash-lite',
         contents,
         config: {
           systemInstruction,
@@ -178,23 +183,45 @@ export async function generateHomeworkExplanation(
     ? `${SYSTEM_PROMPT}\n\n${memoryBlock.trim()}`
     : SYSTEM_PROMPT;
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.0-flash',
-    contents: [
-      {
-        role: 'user',
-        parts: [
-          { inlineData: { data: imageBase64, mimeType } },
-          { text: promptInstruction },
-        ],
+  let response;
+  try {
+    response = await ai.models.generateContent({
+      model: 'gemini-3.5-flash',
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { inlineData: { data: imageBase64, mimeType } },
+            { text: promptInstruction },
+          ],
+        },
+      ],
+      config: {
+        systemInstruction,
+        maxOutputTokens: 250,
+        temperature: 0.3,
       },
-    ],
-    config: {
-      systemInstruction,
-      maxOutputTokens: 250,
-      temperature: 0.3,
-    },
-  });
+    });
+  } catch (err: any) {
+    console.warn('[Gemini] gemini-3.5-flash image fallback to gemini-3.1-flash-lite...');
+    response = await ai.models.generateContent({
+      model: 'gemini-3.1-flash-lite',
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { inlineData: { data: imageBase64, mimeType } },
+            { text: promptInstruction },
+          ],
+        },
+      ],
+      config: {
+        systemInstruction,
+        maxOutputTokens: 250,
+        temperature: 0.3,
+      },
+    });
+  }
 
   const rawText = response.text || '';
   return sanitizeChatResponse(rawText);
