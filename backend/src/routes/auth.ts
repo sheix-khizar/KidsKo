@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { supabase, supabaseAdmin } from '../lib/supabase';
 import { requireAuth } from '../middleware/auth';
+import { deleteThreadImagesFromStorage } from '../lib/homeworkStorage';
 
 const router = Router();
 
@@ -193,6 +194,16 @@ router.delete('/account', requireAuth, async (req: Request, res: Response) => {
 
       if (threads && threads.length > 0) {
         const threadIds = threads.map((t: any) => t.id);
+
+        // Purge photos from Supabase Storage for each thread
+        for (const t of threads) {
+          try {
+            await deleteThreadImagesFromStorage(dbClient, t.id);
+          } catch (storageErr: any) {
+            console.warn(`[DELETE /auth/account Storage Warning for thread ${t.id}]:`, storageErr?.message);
+          }
+        }
+
         const { error: imgErr } = await dbClient.from('thread_images').delete().in('thread_id', threadIds);
         if (imgErr) console.warn('[DELETE /auth/account Images Cleanup Warning]:', imgErr.message);
         

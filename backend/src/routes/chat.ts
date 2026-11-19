@@ -7,7 +7,7 @@ import { checkAndIncrementUsage } from '../lib/usageLimits';
 import { getCachedAnswer, setCachedAnswer, isPersonalMessage } from '../lib/cache';
 import { logUsageEvent } from '../lib/usageEvents';
 import { getThreadImage, setThreadImage, getThreadStoragePath, awaitPendingUpload } from '../lib/threadImageStore';
-import { downloadHomeworkImageFromStorage, deleteThreadImagesFromStorage } from '../lib/homeworkStorage';
+import { downloadHomeworkImageFromStorage, deleteThreadImagesFromStorage, deleteSingleImageFromStorage } from '../lib/homeworkStorage';
 import { cleanMessageForClient } from '../lib/chatHistory';
 import { supabaseAdmin } from '../lib/supabase';
 import { getMemory, buildMemoryBlock, extractFactsAfterTurn, hasCustomStudentMemory } from '../lib/studentMemory';
@@ -509,10 +509,35 @@ router.post('/retention/prune', requireAuth, async (req: Request, res: Response)
 
     const threadIds = (threads || []).map((t: any) => t.id);
     if (threadIds.length === 0) {
-      return res.status(200).json({ success: true, prunedCount: 0 });
+      return res.status(200).json({ success: true, prunedCount: 0, prunedThreadsCount: 0 });
     }
 
-    // 3. Delete messages older than cutoffDate
+    // 3. Find and delete photos in storage & thread_images older than cutoffDate
+    let prunedImagesCount = 0;
+    try {
+      const { data: oldImages } = await req.supabase!
+        .from('thread_images')
+        .select('id, storage_path, thread_id')
+        .in('thread_id', threadIds)
+        .lt('created_at', cutoffDate);
+
+      if (oldImages && oldImages.length > 0) {
+        for (const img of oldImages) {
+          if (img.storage_path) {
+            await deleteSingleImageFromStorage(supabaseAdmin, img.storage_path);
+            prunedImagesCount++;
+          }
+        }
+        await req.supabase!
+          .from('thread_images')
+          .delete()
+          .in('id', oldImages.map((i: any) => i.id));
+      }
+    } catch (imgPruneErr: any) {
+      console.warn('[Chat Retention Image Prune Warning]:', imgPruneErr?.message);
+    }
+
+    // 4. Delete messages older than cutoffDate
     const { data: deleted, error } = await req.supabase!
       .from('messages')
       .delete()
@@ -526,10 +551,34 @@ router.post('/retention/prune', requireAuth, async (req: Request, res: Response)
     }
 
     const prunedCount = deleted?.length || 0;
-    console.log(`[Chat Retention Pruned]: ParentId=${parentId}, Retention=${retentionDays}d, Cutoff=${cutoffDate}, Count=${prunedCount}`);
+
+    // 5. Clean up empty chat threads (threads that have 0 remaining messages)
+    let prunedThreadsCount = 0;
+    try {
+      for (const tId of threadIds) {
+        const { count, error: countErr } = await req.supabase!
+          .from('messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('thread_id', tId);
+
+        if (!countErr && (count === null || count === 0)) {
+          // Purge any remaining images in storage for this empty thread
+          await deleteThreadImagesFromStorage(supabaseAdmin, tId);
+          await req.supabase!.from('thread_images').delete().eq('thread_id', tId);
+          await req.supabase!.from('chat_threads').delete().eq('id', tId);
+          prunedThreadsCount++;
+        }
+      }
+    } catch (emptyThreadErr: any) {
+      console.warn('[Chat Retention Empty Threads Cleanup Warning]:', emptyThreadErr?.message);
+    }
+
+    console.log(`[Chat Retention Pruned]: ParentId=${parentId}, Retention=${retentionDays}d, Cutoff=${cutoffDate}, PrunedMsgs=${prunedCount}, PrunedImages=${prunedImagesCount}, PrunedEmptyThreads=${prunedThreadsCount}`);
     return res.status(200).json({
       success: true,
       prunedCount,
+      prunedImagesCount,
+      prunedThreadsCount,
       cutoffDate,
       retentionDays,
     });

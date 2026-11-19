@@ -12,6 +12,7 @@ import billingRoutes from './routes/billing';
 import transcriptRoutes from './routes/transcript';
 import adminRoutes from './routes/admin';
 import { attachVoiceSocketServer } from './lib/voiceSocketServer';
+import { runCoppaRetentionCleanup } from './lib/retentionCleanupJob';
 
 dotenv.config();
 
@@ -74,3 +75,13 @@ const httpServer = app.listen(PORT, () => {
 });
 
 attachVoiceSocketServer(httpServer);
+
+// Daily COPPA 48-hour photo retention cleanup job
+setInterval(() => {
+  runCoppaRetentionCleanup(48).catch((err) => console.warn('[Scheduled COPPA Cleanup Error]:', err?.message));
+}, 24 * 60 * 60 * 1000);
+
+// Run initial retention pass 60s after startup
+setTimeout(() => {
+  runCoppaRetentionCleanup(48).catch((err) => console.warn('[Startup COPPA Cleanup Error]:', err?.message));
+}, 60 * 1000);

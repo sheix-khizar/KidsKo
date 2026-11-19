@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/auth';
 import { getMemory, filterFact, filterPreferredName } from '../lib/studentMemory';
 import { supabaseAdmin } from '../lib/supabase';
+import { deleteThreadImagesFromStorage } from '../lib/homeworkStorage';
 
 const router = Router();
 
@@ -333,36 +334,49 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
       console.warn('[DELETE /students/:id Events Warning]:', evErr?.message);
     }
 
-    // 4. Cascade cleanup of chat threads, messages & thread images
+    // 4. Cascade cleanup of chat threads, messages & thread images (DB + Storage)
     try {
-      const { data: threads } = await db
+      const { data: threads, error: threadsErr } = await db
         .from('chat_threads')
         .select('id')
         .eq('student_id', id);
 
+      if (threadsErr) {
+        console.warn('[DELETE /students/:id Threads Fetch Warning]:', threadsErr.message);
+      }
+
       if (threads && threads.length > 0) {
         const threadIds = threads.map((t: any) => t.id);
-        try {
-          await db
-            .from('thread_images')
-            .delete()
-            .in('thread_id', threadIds);
-        } catch {}
-        try {
-          await db
-            .from('messages')
-            .delete()
-            .in('thread_id', threadIds);
-        } catch {}
-        try {
-          await db
-            .from('chat_threads')
-            .delete()
-            .eq('student_id', id);
-        } catch {}
+
+        // Purge photos from Supabase Storage bucket for each thread
+        for (const t of threads) {
+          try {
+            await deleteThreadImagesFromStorage(db, t.id);
+          } catch (storageErr: any) {
+            console.warn(`[DELETE /students/:id Storage Warning for thread ${t.id}]:`, storageErr?.message);
+          }
+        }
+
+        const { error: imgErr } = await db
+          .from('thread_images')
+          .delete()
+          .in('thread_id', threadIds);
+        if (imgErr) console.warn('[DELETE /students/:id Thread Images Error]:', imgErr.message);
+
+        const { error: msgErr } = await db
+          .from('messages')
+          .delete()
+          .in('thread_id', threadIds);
+        if (msgErr) console.warn('[DELETE /students/:id Messages Error]:', msgErr.message);
+
+        const { error: thDelErr } = await db
+          .from('chat_threads')
+          .delete()
+          .eq('student_id', id);
+        if (thDelErr) console.warn('[DELETE /students/:id Threads Delete Error]:', thDelErr.message);
       }
     } catch (thErr: any) {
-      console.warn('[DELETE /students/:id Threads Warning]:', thErr?.message);
+      console.warn('[DELETE /students/:id Threads Cascade Warning]:', thErr?.message);
     }
 
     // 5. Delete student record with select('id') to guarantee permanent removal

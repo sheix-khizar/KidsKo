@@ -103,6 +103,7 @@ export default function ParentsHub({
 
   const [changeEmailModalVisible, setChangeEmailModalVisible] = useState<boolean>(false);
   const [newEmailInput, setNewEmailInput] = useState<string>('');
+  const [confirmEmailInput, setConfirmEmailInput] = useState<string>('');
   const [emailPasswordInput, setEmailPasswordInput] = useState<string>('');
   const [updatingEmail, setUpdatingEmail] = useState<boolean>(false);
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -513,8 +514,17 @@ export default function ParentsHub({
   // Parent Email Update Action
   const handleUpdateEmail = async () => {
     const trimmed = newEmailInput.trim().toLowerCase();
+    const confirmTrimmed = confirmEmailInput.trim().toLowerCase();
     if (!trimmed || !trimmed.includes('@') || !trimmed.includes('.')) {
       setEmailError('Please enter a valid email address.');
+      return;
+    }
+    if (trimmed !== confirmTrimmed) {
+      setEmailError('Email addresses do not match. Please re-type to confirm.');
+      return;
+    }
+    if (trimmed === parentEmail.toLowerCase()) {
+      setEmailError('New email must be different from your current email.');
       return;
     }
     if (!emailPasswordInput) {
@@ -528,6 +538,7 @@ export default function ParentsHub({
       setParentEmail(res.email);
       setChangeEmailModalVisible(false);
       setNewEmailInput('');
+      setConfirmEmailInput('');
       setEmailPasswordInput('');
       Alert.alert('Email Updated', `Your account email has been updated to ${res.email}.`);
     } catch (err: any) {
@@ -1332,7 +1343,8 @@ export default function ParentsHub({
               {/* Account Email / Gmail */}
               <TouchableOpacity
                 onPress={() => {
-                  setNewEmailInput(parentEmail);
+                  setNewEmailInput('');
+                  setConfirmEmailInput('');
                   setEmailPasswordInput('');
                   setEmailError(null);
                   setChangeEmailModalVisible(true);
@@ -1698,6 +1710,21 @@ export default function ParentsHub({
                 if (emailError) setEmailError(null);
               }}
               placeholder="e.g. parent@gmail.com"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              placeholderTextColor={colors.subtext}
+              editable={!updatingEmail}
+            />
+
+            <Text style={styles.modalFieldLabel}>Confirm New Email Address</Text>
+            <TextInput
+              style={styles.modalTextInput}
+              value={confirmEmailInput}
+              onChangeText={(t) => {
+                setConfirmEmailInput(t);
+                if (emailError) setEmailError(null);
+              }}
+              placeholder="Re-type new email"
               keyboardType="email-address"
               autoCapitalize="none"
               placeholderTextColor={colors.subtext}
