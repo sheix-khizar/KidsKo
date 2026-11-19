@@ -88,6 +88,7 @@ export default function PaywallScreen({ onBack, onPurchased }: Props) {
 
   return (
     <ScrollView
+      style={{ flex: 1, backgroundColor: colors.background }}
       contentContainerStyle={[
         styles.container,
         {

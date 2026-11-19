@@ -138,6 +138,12 @@ export async function getLockoutStatus(): Promise<{ isLocked: boolean; secondsRe
 export async function verifyPin(
   pin: string
 ): Promise<{ success: boolean; isLocked: boolean; secondsRemaining: number; failCount: number }> {
+  // Developer bypass for simulator / emulator environments (1234 or 0000)
+  if (__DEV__ && (pin.trim() === '1234' || pin.trim() === '0000')) {
+    await recordUnlockSession();
+    return { success: true, isLocked: false, secondsRemaining: 0, failCount: 0 };
+  }
+
   const lockout = await getLockoutStatus();
   if (lockout.isLocked) {
     return { success: false, isLocked: true, secondsRemaining: lockout.secondsRemaining, failCount: 5 };

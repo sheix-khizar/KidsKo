@@ -29,6 +29,7 @@ import {
   ChatThreadSummary,
 } from '../services/api';
 import * as SecureStore from 'expo-secure-store';
+import { isPremiumActive } from '../services/billing';
 import { colors, radii, spacing, fontFamilies, gradients, shadows } from '../theme';
 import { LinearGradient } from '../ui/LinearGradient';
 import { PressScale } from '../ui/motion';
@@ -81,6 +82,27 @@ export default function ParentsHub({
   // Activity State
   const [activity, setActivity] = useState<StudentActivityData | null>(null);
   const [loadingActivity, setLoadingActivity] = useState<boolean>(false);
+
+  // Active Subscription Plan State
+  const [isPremium, setIsPremium] = useState<boolean>(false);
+  const [localStudents, setLocalStudents] = useState<Student[]>(students);
+
+  useEffect(() => {
+    setLocalStudents(students);
+  }, [students]);
+
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const active = await isPremiumActive();
+        if (isMounted) setIsPremium(active);
+      } catch {}
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, [billingVersion]);
 
   // Conversations History State
   const [threads, setThreads] = useState<ChatThreadSummary[]>([]);
@@ -372,6 +394,9 @@ export default function ParentsHub({
       if (!target) return;
       const childName = target.student_name;
       const targetId = target.id;
+      // Optimistically remove from UI immediately
+      setLocalStudents((prev) => prev.filter((s) => s.id !== targetId));
+      setEditingStudent(null);
       setDeletingChild(true);
       try {
         await deleteStudent(targetId);
@@ -380,7 +405,6 @@ export default function ParentsHub({
           const nextChild = updatedList.find((s) => s.id !== targetId) || updatedList[0];
           onSelectStudent(nextChild);
         }
-        setEditingStudent(null);
         Alert.alert('Profile Deleted', `${childName}'s profile has been removed.`);
       } catch (err: any) {
         const updatedList = await onRefreshStudents();
@@ -388,7 +412,6 @@ export default function ParentsHub({
           const nextChild = updatedList.find((s) => s.id !== targetId) || updatedList[0];
           onSelectStudent(nextChild);
         }
-        setEditingStudent(null);
         if (err?.message?.includes('not found')) {
           Alert.alert('Profile Removed', `${childName}'s profile was removed.`);
         } else {
@@ -528,7 +551,7 @@ export default function ParentsHub({
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.childrenPillsContainer}
         >
-          {students.map((st, idx) => {
+          {localStudents.map((st, idx) => {
             const isSelected = activeStudent?.id === st.id;
             const isAlternate = idx % 2 !== 0;
             return (
@@ -623,7 +646,17 @@ export default function ParentsHub({
                     </LinearGradient>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.activeChildName}>{activeStudent.student_name}</Text>
-                      <Text style={styles.activeChildMeta}>Grade 5 · Active Learner</Text>
+                      <TouchableOpacity
+                        onPress={onOpenPaywall}
+                        activeOpacity={0.7}
+                        style={styles.activeChildPlanBadge}
+                        accessibilityRole="button"
+                        accessibilityLabel="Change plan"
+                      >
+                        <Text style={styles.activeChildPlanText}>
+                          {isPremium ? '⭐ Premium Active' : '📦 Free Plan · Upgrade 🚀'}
+                        </Text>
+                      </TouchableOpacity>
                     </View>
                     <View style={styles.activeStatusPill}>
                       <Text style={styles.activeStatusText}>🟢 Active</Text>
@@ -933,6 +966,18 @@ export default function ParentsHub({
                       );
                     })}
                   </View>
+
+                  {!isPremium && (
+                    <TouchableOpacity
+                      onPress={onOpenPaywall}
+                      style={styles.limitsUpgradeBanner}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.limitsUpgradeText}>
+                        🚀 Want unlimited questions? <Text style={{ textDecorationLine: 'underline', fontFamily: fontFamilies.black }}>Upgrade to Premium</Text>
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
 
                 {/* ⏰ Study Schedule Card */}
@@ -1038,11 +1083,70 @@ export default function ParentsHub({
         {/* ════════ TAB 4: SETTINGS (Images 4 & 5) ════════ */}
         {currentTab === 'settings' && (
           <View style={styles.tabContentWrapper}>
+            {/* ⭐ MEMBERSHIP & PLAN Section */}
+            <Text style={styles.sectionCategoryHeader}>MEMBERSHIP & SUBSCRIPTION</Text>
+            <TouchableOpacity
+              onPress={() => {
+                console.log('[ParentsHub] onOpenPaywall tapped!');
+                onOpenPaywall();
+              }}
+              activeOpacity={0.85}
+              style={styles.membershipCard}
+              accessibilityRole="button"
+              accessibilityLabel="View and manage subscription plan"
+            >
+              <LinearGradient
+                colors={isPremium ? ['#1A2A44', '#1E3A5F'] : ['#2C3E50', '#1E3A5F']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.membershipCardGradient}
+              >
+                <View style={styles.membershipTopRow}>
+                  <View style={styles.membershipIconBadge}>
+                    <Text style={{ fontSize: 24 }}>{isPremium ? '⭐' : '📦'}</Text>
+                  </View>
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={styles.membershipSubText}>ACTIVE PLAN</Text>
+                    <Text style={styles.membershipTitle}>
+                      {isPremium ? 'Kidsko Premium' : 'Free Starter Plan'}
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.membershipStatusPill,
+                      isPremium ? styles.statusPillPremium : styles.statusPillFree,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.membershipStatusText,
+                        isPremium ? styles.statusTextPremium : styles.statusTextFree,
+                      ]}
+                    >
+                      {isPremium ? 'ACTIVE' : 'FREE'}
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={styles.membershipFeaturesText}>
+                  {isPremium
+                    ? '✨ Unlimited homework questions\n📞 Unlimited Voice & Video calls\n📷 Real-time AI Camera Vision\n👨‍👩‍👧‍👦 Multi-child learning profiles'
+                    : '• 30 questions/day limit\n• Standard homework help\n• Tap to unlock unlimited voice/video & camera vision'}
+                </Text>
+
+                <View style={styles.membershipActionBtn}>
+                  <Text style={styles.membershipActionBtnText}>
+                    {isPremium ? 'Manage Subscription Plan ›' : 'Upgrade to Premium 🚀'}
+                  </Text>
+                </View>
+              </LinearGradient>
+            </TouchableOpacity>
+
             {/* 👨‍👩‍👧‍👦 Manage Children Card */}
             <View style={styles.card}>
               <Text style={styles.cardHeaderTitle}>👨‍👩‍👧‍👦 Manage Children</Text>
               <View style={{ marginTop: 8 }}>
-                {students.map((st, idx) => (
+                {localStudents.map((st, idx) => (
                   <View key={st.id} style={styles.manageChildRow}>
                     <LinearGradient
                       colors={idx % 2 === 0 ? ['#FF6B6B', '#FF9F43'] : ['#4ECDC4', '#74B9FF']}
@@ -1599,6 +1703,21 @@ const styles = StyleSheet.create({
     color: colors.subtext,
     marginTop: 2,
   },
+  activeChildPlanBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 107, 107, 0.1)',
+    borderRadius: radii.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginTop: 4,
+    alignSelf: 'flex-start',
+  },
+  activeChildPlanText: {
+    fontSize: 11,
+    fontFamily: fontFamilies.bold,
+    color: colors.coral,
+  },
   activeStatusPill: {
     backgroundColor: '#E8F8F0',
     borderRadius: radii.pill,
@@ -1923,6 +2042,97 @@ const styles = StyleSheet.create({
   },
   retentionPillTextActive: {
     color: colors.white,
+  },
+  limitsUpgradeBanner: {
+    marginTop: 12,
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 107, 107, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 107, 0.25)',
+    alignItems: 'center',
+  },
+  limitsUpgradeText: {
+    fontSize: 12,
+    fontFamily: fontFamilies.bold,
+    color: colors.coral,
+    textAlign: 'center',
+  },
+  membershipCard: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    marginBottom: 4,
+    ...shadows.card,
+  },
+  membershipCardGradient: {
+    padding: 18,
+    borderRadius: 20,
+  },
+  membershipTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  membershipIconBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  membershipSubText: {
+    fontSize: 10,
+    fontFamily: fontFamilies.black,
+    color: 'rgba(255, 255, 255, 0.65)',
+    letterSpacing: 0.8,
+  },
+  membershipTitle: {
+    fontSize: 18,
+    fontFamily: fontFamilies.black,
+    color: '#FFFFFF',
+    marginTop: 1,
+  },
+  membershipStatusPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: radii.pill,
+  },
+  statusPillPremium: {
+    backgroundColor: '#FFD700',
+  },
+  statusPillFree: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  membershipStatusText: {
+    fontSize: 10,
+    fontFamily: fontFamilies.black,
+    letterSpacing: 0.5,
+  },
+  statusTextPremium: {
+    color: '#1A2A44',
+  },
+  statusTextFree: {
+    color: '#FFFFFF',
+  },
+  membershipFeaturesText: {
+    fontSize: 12,
+    fontFamily: fontFamilies.regular,
+    color: 'rgba(255, 255, 255, 0.85)',
+    lineHeight: 18,
+    marginTop: 12,
+    marginBottom: 14,
+  },
+  membershipActionBtn: {
+    backgroundColor: colors.coral,
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  membershipActionBtnText: {
+    fontSize: 13,
+    fontFamily: fontFamilies.black,
+    color: '#FFFFFF',
   },
   manageChildRow: {
     flexDirection: 'row',
