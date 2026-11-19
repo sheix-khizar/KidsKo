@@ -48,6 +48,7 @@ export default function App() {
   });
   const [screen, setScreen] = useState<Screen>('checking');
   const [activeStudent, setActiveStudent] = useState<Student | null>(null);
+  const [activeThread, setActiveThread] = useState<{ id: string; title: string } | null>(null);
   const [initialCallMode, setInitialCallMode] = useState<'voice' | 'video'>('voice');
   const [gateVisible, setGateVisible] = useState(false);
   // Bumped after a successful purchase so mounted screens re-check the plan.
@@ -95,6 +96,7 @@ export default function App() {
   useEffect(() => {
     const onBackPress = () => {
       if (screen === 'liveVoice' || screen === 'transcript' || screen === 'paywall') {
+        setActiveThread(null);
         setScreen('main');
         return true;
       }
@@ -197,8 +199,9 @@ export default function App() {
           <MainShellScreen
             onLogout={() => setScreen('welcome')}
             onOpenPaywall={() => setScreen('paywall')}
-            onOpenTranscript={(student) => {
+            onOpenTranscript={(student, thread) => {
               setActiveStudent(student);
+              setActiveThread(thread || null);
               setScreen('transcript');
             }}
             onStartCall={(student, mode = 'voice') => {
@@ -225,7 +228,12 @@ export default function App() {
           <TranscriptScreen
             studentId={activeStudent.id}
             studentName={activeStudent.student_name}
-            onBack={() => setScreen('main')}
+            threadId={activeThread?.id}
+            threadTitle={activeThread?.title}
+            onBack={() => {
+              setActiveThread(null);
+              setScreen('main');
+            }}
           />
         )}
 

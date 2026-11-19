@@ -1,4 +1,4 @@
-import { getToken } from './api';
+import { getToken, fetchWithTimeout } from './api';
 import { getApiUrl } from './config';
 
 export type ThreadSummary = {
@@ -27,7 +27,7 @@ export async function getThreads(studentId: string, before?: string): Promise<Ge
     url += `&before=${encodeURIComponent(before)}`;
   }
 
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -44,7 +44,7 @@ export async function getThreads(studentId: string, before?: string): Promise<Ge
 
 export async function getThreadMessages(threadId: string): Promise<ThreadMessage[]> {
   const token = await getToken();
-  const res = await fetch(`${getApiUrl()}/api/chat/threads/${encodeURIComponent(threadId)}/messages?limit=200`, {
+  const res = await fetchWithTimeout(`${getApiUrl()}/api/chat/threads/${encodeURIComponent(threadId)}/messages?limit=200`, {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -61,7 +61,7 @@ export async function getThreadMessages(threadId: string): Promise<ThreadMessage
 
 export async function deleteThread(threadId: string): Promise<boolean> {
   const token = await getToken();
-  const res = await fetch(`${getApiUrl()}/api/chat/threads/${encodeURIComponent(threadId)}`, {
+  const res = await fetchWithTimeout(`${getApiUrl()}/api/chat/threads/${encodeURIComponent(threadId)}`, {
     method: 'DELETE',
     headers: {
       Authorization: `Bearer ${token}`,

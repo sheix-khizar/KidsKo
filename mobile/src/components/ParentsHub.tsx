@@ -47,7 +47,7 @@ type Props = {
   activeStudent: Student | null;
   onSelectStudent: (student: Student) => void;
   onRefreshStudents: () => Promise<Student[] | void>;
-  onOpenTranscript: (student: Student) => void;
+  onOpenTranscript: (student: Student, thread?: { id: string; title: string }) => void;
   onOpenPaywall: () => void;
   onRequestLogout: () => void;
   onRequestClose?: () => void;
@@ -938,7 +938,7 @@ export default function ParentsHub({
                       return (
                         <TouchableOpacity
                           key={item.id}
-                          onPress={() => onOpenTranscript(activeStudent)}
+                          onPress={() => onOpenTranscript(activeStudent, { id: item.id, title: item.title })}
                           style={styles.historyCard}
                           activeOpacity={0.8}
                         >

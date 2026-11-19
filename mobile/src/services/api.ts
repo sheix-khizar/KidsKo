@@ -63,7 +63,7 @@ export async function clearToken() {
 }
 
 // Helper: fetch with 4s timeout to prevent UI freezing on dead/stale IPs with auto-fallback to Android emulator host
-async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 4000): Promise<Response> {
+export async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 4000): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {

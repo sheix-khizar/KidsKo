@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
 import { getTranscript } from '../services/api';
+import { getThreadMessages } from '../services/threads';
 import { cleanMessageText, parseFormattedText } from '../utils/messageText';
 import { colors, radii, spacing, typography, fontFamilies, shadows } from '../theme';
 import { PressScale, FadeSlideIn } from '../ui/motion';
@@ -11,6 +12,8 @@ type Message = { role: string; content: string; message_type?: string; created_a
 type Props = {
   studentId: string;
   studentName: string;
+  threadId?: string;
+  threadTitle?: string;
   onBack: () => void;
 };
 
@@ -18,24 +21,49 @@ type GroupedItem =
   | { type: 'header'; date: string }
   | { type: 'message'; message: Message; id: string };
 
-export default function TranscriptScreen({ studentId, studentName, onBack }: Props) {
+export default function TranscriptScreen({ studentId, studentName, threadId, threadTitle, onBack }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
+    let isCancelled = false;
     (async () => {
+      setLoading(true);
+      setErrorMsg(null);
       try {
-        const data = await getTranscript(studentId);
-        setMessages(data.messages || []);
+        if (threadId) {
+          const threadMsgs = await getThreadMessages(threadId);
+          if (!isCancelled) {
+            const mapped: Message[] = (threadMsgs || []).map((m: any) => ({
+              role: m.role,
+              content: m.text || m.content || '',
+              created_at: m.createdAt || m.created_at || new Date().toISOString(),
+              message_type: m.hasImage ? 'image' : 'text',
+            }));
+            setMessages(mapped);
+          }
+        } else {
+          const data = await getTranscript(studentId);
+          if (!isCancelled) {
+            setMessages(data.messages || []);
+          }
+        }
       } catch (err: any) {
-        setErrorMsg(err.message || 'Failed to load transcript');
+        if (!isCancelled) {
+          setErrorMsg(err.message || (threadId ? 'Failed to load conversation' : 'Failed to load transcript'));
+        }
       } finally {
-        setLoading(false);
+        if (!isCancelled) {
+          setLoading(false);
+        }
       }
     })();
-  }, [studentId]);
+    return () => {
+      isCancelled = true;
+    };
+  }, [studentId, threadId]);
 
   // Group messages chronologically with friendly date headers
   const listItems: GroupedItem[] = useMemo(() => {
@@ -97,9 +125,11 @@ export default function TranscriptScreen({ studentId, studentName, onBack }: Pro
         </PressScale>
         <View style={styles.headerTitleWrap}>
           <Text style={styles.title} numberOfLines={1}>
-            {studentName}'s Transcript
+            {threadTitle || `${studentName}'s Transcript`}
           </Text>
-          <Text style={styles.subTitle}>Read-only parental oversight</Text>
+          <Text style={styles.subTitle}>
+            {threadTitle ? `Conversation with ${studentName}` : 'Read-only parental oversight'}
+          </Text>
         </View>
         <View style={{ width: 44 }} />
       </View>
@@ -195,11 +225,15 @@ export default function TranscriptScreen({ studentId, studentName, onBack }: Pro
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <View style={styles.emptyIconBadge}>
-                <Text style={styles.emptyEmoji}>📜</Text>
+                <Text style={styles.emptyEmoji}>{threadTitle ? '💬' : '📜'}</Text>
               </View>
-              <Text style={styles.emptyTitle}>No messages recorded yet</Text>
+              <Text style={styles.emptyTitle}>
+                {threadTitle ? 'No messages in this chat' : 'No messages recorded yet'}
+              </Text>
               <Text style={styles.emptySub}>
-                When {studentName} asks Kidsko questions, the conversation transcripts will appear here.
+                {threadTitle
+                  ? `There are no recorded messages in "${threadTitle}".`
+                  : `When ${studentName} asks Kidsko questions, the conversation transcripts will appear here.`}
               </Text>
             </View>
           }

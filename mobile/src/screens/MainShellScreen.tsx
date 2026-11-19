@@ -28,7 +28,7 @@ export type Student = { id: string; student_name: string };
 type Props = {
   onLogout: () => void;
   onOpenPaywall: () => void;
-  onOpenTranscript: (student: Student) => void;
+  onOpenTranscript: (student: Student, thread?: { id: string; title: string }) => void;
   onStartCall: (student: Student, initialMode?: 'voice' | 'video') => void;
   onLimitReached: () => void;
   billingVersion?: number;
