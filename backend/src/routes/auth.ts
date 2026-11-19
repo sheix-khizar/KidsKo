@@ -64,6 +64,84 @@ router.get('/me', requireAuth, async (req: Request, res: Response) => {
   });
 });
 
+// PUT /api/auth/password (Update parent account password)
+router.put('/password', requireAuth, async (req: Request, res: Response) => {
+  const parentId = req.user!.id;
+  const parentEmail = req.user!.email;
+  const { currentPassword, newPassword } = req.body || {};
+
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'Current password and new password are required' });
+  }
+
+  if (newPassword.length < 6) {
+    return res.status(400).json({ error: 'New password must be at least 6 characters' });
+  }
+
+  // 1. Verify current password
+  const { error: pwdErr } = await supabase.auth.signInWithPassword({
+    email: parentEmail,
+    password: currentPassword,
+  });
+
+  if (pwdErr) {
+    return res.status(401).json({ error: 'Current password is incorrect' });
+  }
+
+  // 2. Update to new password via admin client
+  const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(parentId, {
+    password: newPassword,
+  });
+
+  if (updateErr) {
+    return res.status(500).json({ error: 'Failed to update password: ' + updateErr.message });
+  }
+
+  return res.status(200).json({ success: true, message: 'Password updated successfully' });
+});
+
+// PUT /api/auth/email (Update parent account email / Gmail)
+router.put('/email', requireAuth, async (req: Request, res: Response) => {
+  const parentId = req.user!.id;
+  const parentEmail = req.user!.email;
+  const { password, newEmail } = req.body || {};
+
+  if (!password || !newEmail) {
+    return res.status(400).json({ error: 'Password and new email are required' });
+  }
+
+  const trimmedEmail = newEmail.trim().toLowerCase();
+  if (!trimmedEmail.includes('@') || !trimmedEmail.includes('.')) {
+    return res.status(400).json({ error: 'Please enter a valid email address' });
+  }
+
+  // 1. Verify password
+  const { error: pwdErr } = await supabase.auth.signInWithPassword({
+    email: parentEmail,
+    password,
+  });
+
+  if (pwdErr) {
+    return res.status(401).json({ error: 'Incorrect password' });
+  }
+
+  // 2. Update email in Supabase Auth
+  const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(parentId, {
+    email: trimmedEmail,
+    email_confirm: true,
+  });
+
+  if (updateErr) {
+    return res.status(500).json({ error: 'Failed to update email: ' + updateErr.message });
+  }
+
+  // 3. Update profiles table
+  const dbClient = supabaseAdmin || supabase;
+  await dbClient.from('profiles').update({ email: trimmedEmail }).eq('id', parentId);
+
+  return res.status(200).json({ success: true, email: trimmedEmail, message: 'Email updated successfully' });
+});
+
 // DELETE /api/auth/account (Category 2: Password-verified Complete Account Deletion - App Store 5.1.1 compliant)
 router.delete('/account', requireAuth, async (req: Request, res: Response) => {
   const parentId = req.user!.id;

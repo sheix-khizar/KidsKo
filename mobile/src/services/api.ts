@@ -295,3 +295,38 @@ export async function deleteAccount(password: string): Promise<{ success: boolea
   return data as { success: boolean; message: string };
 }
 
+// Update parent account password
+export async function updateParentPassword(currentPassword: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+  const token = await getToken();
+  const res = await fetchWithTimeout(`${getApiUrl()}/api/auth/password`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Could not update password');
+  return data as { success: boolean; message: string };
+}
+
+// Update parent account email
+export async function updateParentEmail(password: string, newEmail: string): Promise<{ success: boolean; email: string; message: string }> {
+  const token = await getToken();
+  const res = await fetchWithTimeout(`${getApiUrl()}/api/auth/email`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ password, newEmail }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Could not update email');
+  if (data?.email) {
+    await SecureStore.setItemAsync(EMAIL_KEY, data.email);
+  }
+  return data as { success: boolean; email: string; message: string };
+}
+

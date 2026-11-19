@@ -21,6 +21,9 @@ import {
   deleteStudent,
   deleteAccount,
   clearToken,
+  updateParentPassword,
+  updateParentEmail,
+  getCurrentUserEmail,
   StudentMemoryData,
   getStudentActivity,
   StudentActivityData,
@@ -86,6 +89,27 @@ export default function ParentsHub({
   // Active Subscription Plan State
   const [isPremium, setIsPremium] = useState<boolean>(false);
   const [localStudents, setLocalStudents] = useState<Student[]>(students);
+
+  // Parent Account Management State
+  const [parentEmail, setParentEmail] = useState<string>('');
+  const [changePasswordModalVisible, setChangePasswordModalVisible] = useState<boolean>(false);
+  const [currentPasswordInput, setCurrentPasswordInput] = useState<string>('');
+  const [newPasswordInput, setNewPasswordInput] = useState<string>('');
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState<string>('');
+  const [updatingPassword, setUpdatingPassword] = useState<boolean>(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+
+  const [changeEmailModalVisible, setChangeEmailModalVisible] = useState<boolean>(false);
+  const [newEmailInput, setNewEmailInput] = useState<string>('');
+  const [emailPasswordInput, setEmailPasswordInput] = useState<string>('');
+  const [updatingEmail, setUpdatingEmail] = useState<boolean>(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getCurrentUserEmail().then((em) => {
+      if (em) setParentEmail(em);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     setLocalStudents(students);
@@ -451,6 +475,63 @@ export default function ParentsHub({
       setAccountDeleteError(err?.message || 'Failed to delete account. Please check your password.');
     } finally {
       setDeletingAccount(false);
+    }
+  };
+
+  // Parent Password Update Action
+  const handleUpdatePassword = async () => {
+    if (!currentPasswordInput) {
+      setPasswordError('Please enter your current password.');
+      return;
+    }
+    if (!newPasswordInput || newPasswordInput.length < 6) {
+      setPasswordError('New password must be at least 6 characters.');
+      return;
+    }
+    if (newPasswordInput !== confirmPasswordInput) {
+      setPasswordError('New passwords do not match.');
+      return;
+    }
+    setUpdatingPassword(true);
+    setPasswordError(null);
+    try {
+      await updateParentPassword(currentPasswordInput, newPasswordInput);
+      setChangePasswordModalVisible(false);
+      setCurrentPasswordInput('');
+      setNewPasswordInput('');
+      setConfirmPasswordInput('');
+      Alert.alert('Password Updated', 'Your parent account password has been updated successfully.');
+    } catch (err: any) {
+      setPasswordError(err?.message || 'Failed to update password.');
+    } finally {
+      setUpdatingPassword(false);
+    }
+  };
+
+  // Parent Email Update Action
+  const handleUpdateEmail = async () => {
+    const trimmed = newEmailInput.trim().toLowerCase();
+    if (!trimmed || !trimmed.includes('@') || !trimmed.includes('.')) {
+      setEmailError('Please enter a valid email address.');
+      return;
+    }
+    if (!emailPasswordInput) {
+      setEmailError('Please enter your current password.');
+      return;
+    }
+    setUpdatingEmail(true);
+    setEmailError(null);
+    try {
+      const res = await updateParentEmail(emailPasswordInput, trimmed);
+      setParentEmail(res.email);
+      setChangeEmailModalVisible(false);
+      setNewEmailInput('');
+      setEmailPasswordInput('');
+      Alert.alert('Email Updated', `Your account email has been updated to ${res.email}.`);
+    } catch (err: any) {
+      setEmailError(err?.message || 'Failed to update email.');
+    } finally {
+      setUpdatingEmail(false);
     }
   };
 
@@ -1214,6 +1295,68 @@ export default function ParentsHub({
               </TouchableOpacity>
             </View>
 
+            {/* PARENT ACCOUNT & SECURITY Section */}
+            <Text style={styles.sectionCategoryHeader}>PARENT ACCOUNT</Text>
+            <View style={styles.groupedListCard}>
+              {/* Account Email / Gmail */}
+              <TouchableOpacity
+                onPress={() => {
+                  setNewEmailInput(parentEmail);
+                  setEmailPasswordInput('');
+                  setEmailError(null);
+                  setChangeEmailModalVisible(true);
+                }}
+                style={styles.groupedRow}
+              >
+                <View style={[styles.groupedIconSquircle, { backgroundColor: '#EBF3FF' }]}>
+                  <Text style={{ fontSize: 18 }}>📧</Text>
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.groupedRowTitle}>Account Email / Gmail</Text>
+                  <Text style={styles.groupedRowSubtitle} numberOfLines={1}>
+                    {parentEmail || 'Tap to update email'}
+                  </Text>
+                </View>
+                <Text style={styles.groupedChevron}>Edit ›</Text>
+              </TouchableOpacity>
+
+              {/* Change Password */}
+              <TouchableOpacity
+                onPress={() => {
+                  setCurrentPasswordInput('');
+                  setNewPasswordInput('');
+                  setConfirmPasswordInput('');
+                  setPasswordError(null);
+                  setChangePasswordModalVisible(true);
+                }}
+                style={styles.groupedRow}
+              >
+                <View style={[styles.groupedIconSquircle, { backgroundColor: '#F0E7FF' }]}>
+                  <Text style={{ fontSize: 18 }}>🔑</Text>
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.groupedRowTitle}>Change Password</Text>
+                  <Text style={styles.groupedRowSubtitle}>Update your parent login password</Text>
+                </View>
+                <Text style={styles.groupedChevron}>›</Text>
+              </TouchableOpacity>
+
+              {/* Sign Out Parent */}
+              <TouchableOpacity
+                onPress={onRequestLogout}
+                style={[styles.groupedRow, { borderBottomWidth: 0 }]}
+              >
+                <View style={[styles.groupedIconSquircle, { backgroundColor: '#FFF0F0' }]}>
+                  <Text style={{ fontSize: 18 }}>🚪</Text>
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={[styles.groupedRowTitle, { color: colors.coral }]}>Sign Out Parent</Text>
+                  <Text style={styles.groupedRowSubtitle}>Log out of this device</Text>
+                </View>
+                <Text style={[styles.groupedChevron, { color: colors.coral }]}>›</Text>
+              </TouchableOpacity>
+            </View>
+
             {/* NOTIFICATIONS Section */}
             <Text style={styles.sectionCategoryHeader}>NOTIFICATIONS</Text>
             <View style={styles.groupedListCard}>
@@ -1258,17 +1401,6 @@ export default function ParentsHub({
             >
               <Text style={{ fontSize: 18 }}>⚠️</Text>
               <Text style={styles.deleteAccountText}>Permanently Delete Account</Text>
-            </TouchableOpacity>
-
-            {/* Sign Out Parent */}
-            <TouchableOpacity
-              onPress={onRequestLogout}
-              style={styles.signOutCard}
-            >
-              <View style={[styles.groupedIconSquircle, { backgroundColor: '#FFF0F0' }]}>
-                <Text style={{ fontSize: 18 }}>🚪</Text>
-              </View>
-              <Text style={styles.signOutText}>Sign Out Parent</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -1497,6 +1629,167 @@ export default function ParentsHub({
                 )}
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── MODAL 4: Change Parent Email / Gmail ── */}
+      <Modal
+        visible={changeEmailModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => !updatingEmail && setChangeEmailModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalSheetCard}>
+            <View style={styles.modalSheetHeader}>
+              <Text style={styles.modalSheetTitle}>📧 Account Email</Text>
+              <TouchableOpacity
+                onPress={() => setChangeEmailModalVisible(false)}
+                style={styles.modalCloseBtn}
+                disabled={updatingEmail}
+              >
+                <Text style={{ fontSize: 16, color: colors.subtext }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={{ fontSize: 13, fontFamily: fontFamilies.regular, color: colors.subtext, marginBottom: 14 }}>
+              Update your registered email / Gmail for parent sign-in and reports.
+            </Text>
+
+            <Text style={styles.modalFieldLabel}>New Email Address</Text>
+            <TextInput
+              style={styles.modalTextInput}
+              value={newEmailInput}
+              onChangeText={(t) => {
+                setNewEmailInput(t);
+                if (emailError) setEmailError(null);
+              }}
+              placeholder="e.g. parent@gmail.com"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              placeholderTextColor={colors.subtext}
+              editable={!updatingEmail}
+            />
+
+            <Text style={styles.modalFieldLabel}>Current Account Password</Text>
+            <TextInput
+              style={styles.modalTextInput}
+              value={emailPasswordInput}
+              onChangeText={(t) => {
+                setEmailPasswordInput(t);
+                if (emailError) setEmailError(null);
+              }}
+              placeholder="Enter password to confirm"
+              secureTextEntry
+              autoCapitalize="none"
+              placeholderTextColor={colors.subtext}
+              editable={!updatingEmail}
+            />
+
+            {emailError ? (
+              <Text style={styles.modalErrorText}>{emailError}</Text>
+            ) : null}
+
+            <TouchableOpacity
+              onPress={handleUpdateEmail}
+              style={[styles.modalPrimaryBtn, updatingEmail && { opacity: 0.6 }]}
+              disabled={updatingEmail}
+            >
+              {updatingEmail ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={styles.modalPrimaryBtnText}>Update Email</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── MODAL 5: Change Account Password ── */}
+      <Modal
+        visible={changePasswordModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => !updatingPassword && setChangePasswordModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalSheetCard}>
+            <View style={styles.modalSheetHeader}>
+              <Text style={styles.modalSheetTitle}>🔑 Change Password</Text>
+              <TouchableOpacity
+                onPress={() => setChangePasswordModalVisible(false)}
+                style={styles.modalCloseBtn}
+                disabled={updatingPassword}
+              >
+                <Text style={{ fontSize: 16, color: colors.subtext }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={{ fontSize: 13, fontFamily: fontFamilies.regular, color: colors.subtext, marginBottom: 14 }}>
+              Enter your current password and choose a secure new password.
+            </Text>
+
+            <Text style={styles.modalFieldLabel}>Current Password</Text>
+            <TextInput
+              style={styles.modalTextInput}
+              value={currentPasswordInput}
+              onChangeText={(t) => {
+                setCurrentPasswordInput(t);
+                if (passwordError) setPasswordError(null);
+              }}
+              placeholder="Current password"
+              secureTextEntry
+              autoCapitalize="none"
+              placeholderTextColor={colors.subtext}
+              editable={!updatingPassword}
+            />
+
+            <Text style={styles.modalFieldLabel}>New Password</Text>
+            <TextInput
+              style={styles.modalTextInput}
+              value={newPasswordInput}
+              onChangeText={(t) => {
+                setNewPasswordInput(t);
+                if (passwordError) setPasswordError(null);
+              }}
+              placeholder="At least 6 characters"
+              secureTextEntry
+              autoCapitalize="none"
+              placeholderTextColor={colors.subtext}
+              editable={!updatingPassword}
+            />
+
+            <Text style={styles.modalFieldLabel}>Confirm New Password</Text>
+            <TextInput
+              style={styles.modalTextInput}
+              value={confirmPasswordInput}
+              onChangeText={(t) => {
+                setConfirmPasswordInput(t);
+                if (passwordError) setPasswordError(null);
+              }}
+              placeholder="Re-type new password"
+              secureTextEntry
+              autoCapitalize="none"
+              placeholderTextColor={colors.subtext}
+              editable={!updatingPassword}
+            />
+
+            {passwordError ? (
+              <Text style={styles.modalErrorText}>{passwordError}</Text>
+            ) : null}
+
+            <TouchableOpacity
+              onPress={handleUpdatePassword}
+              style={[styles.modalPrimaryBtn, updatingPassword && { opacity: 0.6 }]}
+              disabled={updatingPassword}
+            >
+              {updatingPassword ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={styles.modalPrimaryBtnText}>Update Password</Text>
+              )}
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
