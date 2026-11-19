@@ -179,8 +179,8 @@ export default function MainShellScreen({
 
   return (
     <Screen safeBottom={false}>
-      {/* Shell Header: Child Switcher Chip (non-chat tabs) */}
-      {tab !== 'chat' && (
+      {/* Shell Header: Child Switcher Chip (call tab only; chat and parents hub have dedicated headers) */}
+      {tab === 'call' && (
       <View style={[styles.shellHeader, { paddingTop: spacing.sm }]}>
         <View style={styles.brandRow}>
           <Text style={styles.brandText}>Kidsko.ai 🦉</Text>
@@ -423,7 +423,7 @@ export default function MainShellScreen({
                 />
               </View>
             ) : (
-              <ScrollView contentContainerStyle={{ paddingBottom: 60 }} bounces={false}>
+              <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 40 }} bounces={false}>
                 <ParentsHub
                   students={students}
                   activeStudent={activeStudent}
@@ -432,7 +432,10 @@ export default function MainShellScreen({
                   onOpenTranscript={onOpenTranscript}
                   onOpenPaywall={onOpenPaywall}
                   onRequestLogout={() => setLogoutGateVisible(true)}
-                  onRequestClose={() => setTab('chat')}
+                  onRequestClose={() => {
+                    setParentsUnlocked(false);
+                    setTab('chat');
+                  }}
                   onAccountDeleted={() => onLogout()}
                   billingVersion={billingVersion}
                 />
@@ -506,8 +509,10 @@ export default function MainShellScreen({
         </Pressable>
       </Modal>
 
-      {/* Bottom Tab Bar */}
-      <TabBar activeTab={tab} onSelectTab={handleTabSelect} />
+      {/* Bottom Tab Bar (hidden when inside Parental Dashboard) */}
+      {tab !== 'parents' && (
+        <TabBar activeTab={tab} onSelectTab={handleTabSelect} />
+      )}
     </Screen>
   );
 }

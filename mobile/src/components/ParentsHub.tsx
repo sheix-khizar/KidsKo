@@ -11,6 +11,8 @@ import {
   Modal,
   TouchableOpacity,
   ScrollView,
+  Platform,
+  StatusBar,
 } from 'react-native';
 import { Student } from '../screens/MainShellScreen';
 import {
@@ -35,7 +37,7 @@ import * as SecureStore from 'expo-secure-store';
 import { isPremiumActive } from '../services/billing';
 import { colors, radii, spacing, fontFamilies, gradients, shadows } from '../theme';
 import { LinearGradient } from '../ui/LinearGradient';
-import { PressScale } from '../ui/motion';
+import { PressScale, FadeSlideIn } from '../ui/motion';
 import ParentalGate from './ParentalGate';
 
 type SubTab = 'overview' | 'history' | 'limits' | 'settings';
@@ -617,6 +619,8 @@ export default function ParentsHub({
           {onRequestClose && (
             <TouchableOpacity
               onPress={onRequestClose}
+              hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+              activeOpacity={0.7}
               style={styles.closeBtn}
               accessibilityRole="button"
               accessibilityLabel="Close parent dashboard"
@@ -694,23 +698,23 @@ export default function ParentsHub({
             const isActive = currentTab === tab;
             const label = tab.charAt(0).toUpperCase() + tab.slice(1);
             return (
-              <TouchableOpacity
+              <PressScale
                 key={tab}
                 onPress={() => setCurrentTab(tab)}
                 style={[styles.subnavTab, isActive && styles.subnavTabActive]}
-                activeOpacity={0.7}
               >
                 <Text style={[styles.subnavTabText, isActive && styles.subnavTabTextActive]}>
                   {label}
                 </Text>
-              </TouchableOpacity>
+              </PressScale>
             );
           })}
         </View>
       </LinearGradient>
 
-      {/* ── Sub-tab Content Area ── */}
+      {/* ── Sub-tab Content Area with Animated Transitions ── */}
       <View style={styles.contentBody}>
+        <FadeSlideIn key={currentTab} duration={240} style={{ flex: 1 }}>
         {/* ════════ TAB 1: OVERVIEW ════════ */}
         {currentTab === 'overview' && (
           <View style={styles.tabContentWrapper}>
@@ -1431,6 +1435,7 @@ export default function ParentsHub({
             </TouchableOpacity>
           </View>
         )}
+        </FadeSlideIn>
       </View>
 
       {/* ── MODAL 1: Add Child Modal ── */}
@@ -1851,7 +1856,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F0F4F8',
   },
   headerContainer: {
-    paddingTop: 16,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 28) + 12 : 20,
     paddingHorizontal: 16,
     paddingBottom: 0,
     borderBottomLeftRadius: 24,
