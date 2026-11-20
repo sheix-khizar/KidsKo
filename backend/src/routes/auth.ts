@@ -185,12 +185,20 @@ router.delete('/account', requireAuth, async (req: Request, res: Response) => {
         .from('student_memory')
         .delete()
         .in('student_id', studentIds);
-      if (memErr) console.warn('[DELETE /auth/account Memory Cleanup Warning]:', memErr.message);
+      if (memErr && !memErr.message?.includes('relation "student_memory" does not exist')) {
+        console.error('[DELETE /auth/account Memory Cleanup Error]:', memErr.message);
+        return res.status(500).json({ error: 'Failed to purge child memory records' });
+      }
 
-      const { data: threads } = await dbClient
+      const { data: threads, error: threadsErr } = await dbClient
         .from('chat_threads')
         .select('id')
         .in('student_id', studentIds);
+
+      if (threadsErr) {
+        console.error('[DELETE /auth/account Threads Fetch Error]:', threadsErr.message);
+        return res.status(500).json({ error: 'Failed to query child conversations before deletion' });
+      }
 
       if (threads && threads.length > 0) {
         const threadIds = threads.map((t: any) => t.id);
@@ -205,13 +213,22 @@ router.delete('/account', requireAuth, async (req: Request, res: Response) => {
         }
 
         const { error: imgErr } = await dbClient.from('thread_images').delete().in('thread_id', threadIds);
-        if (imgErr) console.warn('[DELETE /auth/account Images Cleanup Warning]:', imgErr.message);
+        if (imgErr && !imgErr.message?.includes('relation "thread_images" does not exist')) {
+          console.error('[DELETE /auth/account Images Cleanup Error]:', imgErr.message);
+          return res.status(500).json({ error: 'Failed to purge child photos' });
+        }
         
         const { error: msgErr } = await dbClient.from('messages').delete().in('thread_id', threadIds);
-        if (msgErr) console.warn('[DELETE /auth/account Messages Cleanup Warning]:', msgErr.message);
+        if (msgErr) {
+          console.error('[DELETE /auth/account Messages Cleanup Error]:', msgErr.message);
+          return res.status(500).json({ error: 'Failed to purge child messages' });
+        }
         
         const { error: thErr } = await dbClient.from('chat_threads').delete().in('student_id', studentIds);
-        if (thErr) console.warn('[DELETE /auth/account Threads Cleanup Warning]:', thErr.message);
+        if (thErr) {
+          console.error('[DELETE /auth/account Threads Cleanup Error]:', thErr.message);
+          return res.status(500).json({ error: 'Failed to purge child chat threads' });
+        }
       }
 
       const { error: stErr } = await dbClient.from('students').delete().eq('parent_id', parentId);
@@ -222,9 +239,23 @@ router.delete('/account', requireAuth, async (req: Request, res: Response) => {
     }
 
     // 4. Delete usage events, family usage, and profiles records
-    await dbClient.from('usage_events').delete().eq('parent_id', parentId);
-    await dbClient.from('family_usage').delete().eq('parent_id', parentId);
-    await dbClient.from('profiles').delete().eq('id', parentId);
+    const { error: evErr } = await dbClient.from('usage_events').delete().eq('parent_id', parentId);
+    if (evErr && !evErr.message?.includes('relation "usage_events" does not exist')) {
+      console.error('[DELETE /auth/account Usage Events Error]:', evErr.message);
+      return res.status(500).json({ error: 'Failed to purge usage events' });
+    }
+
+    const { error: fuErr } = await dbClient.from('family_usage').delete().eq('parent_id', parentId);
+    if (fuErr && !fuErr.message?.includes('relation "family_usage" does not exist')) {
+      console.error('[DELETE /auth/account Family Usage Error]:', fuErr.message);
+      return res.status(500).json({ error: 'Failed to purge family usage' });
+    }
+
+    const { error: profErr } = await dbClient.from('profiles').delete().eq('id', parentId);
+    if (profErr) {
+      console.error('[DELETE /auth/account Profile Delete Error]:', profErr.message);
+      return res.status(500).json({ error: 'Failed to purge parent profile' });
+    }
 
     // 5. Permanently delete user from Supabase Auth
     const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(parentId);

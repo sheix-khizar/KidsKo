@@ -314,69 +314,75 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Student profile not found' });
     }
 
-    // 2. Cascade cleanup of student_memory (ignoring missing table warnings)
-    try {
-      await db
-        .from('student_memory')
-        .delete()
-        .eq('student_id', id);
-    } catch (memErr: any) {
-      console.warn('[DELETE /students/:id Memory Warning]:', memErr?.message);
+    // 2. Cascade cleanup of student_memory
+    const { error: memErr } = await db
+      .from('student_memory')
+      .delete()
+      .eq('student_id', id);
+    if (memErr && memErr.code !== 'PGRST116' && !memErr.message?.includes('relation "student_memory" does not exist')) {
+      console.error('[DELETE /students/:id Memory Error]:', memErr.message);
+      return res.status(500).json({ error: `Failed to remove student memory: ${memErr.message}` });
     }
 
     // 3. Cascade cleanup of usage_events associated with student
-    try {
-      await db
-        .from('usage_events')
-        .delete()
-        .eq('student_id', id);
-    } catch (evErr: any) {
-      console.warn('[DELETE /students/:id Events Warning]:', evErr?.message);
+    const { error: evErr } = await db
+      .from('usage_events')
+      .delete()
+      .eq('student_id', id);
+    if (evErr && !evErr.message?.includes('relation "usage_events" does not exist')) {
+      console.error('[DELETE /students/:id Events Error]:', evErr.message);
+      return res.status(500).json({ error: `Failed to clear usage events: ${evErr.message}` });
     }
 
     // 4. Cascade cleanup of chat threads, messages & thread images (DB + Storage)
-    try {
-      const { data: threads, error: threadsErr } = await db
-        .from('chat_threads')
-        .select('id')
-        .eq('student_id', id);
+    const { data: threads, error: threadsErr } = await db
+      .from('chat_threads')
+      .select('id')
+      .eq('student_id', id);
 
-      if (threadsErr) {
-        console.warn('[DELETE /students/:id Threads Fetch Warning]:', threadsErr.message);
-      }
+    if (threadsErr) {
+      console.error('[DELETE /students/:id Threads Fetch Error]:', threadsErr.message);
+      return res.status(500).json({ error: `Failed to query child conversations: ${threadsErr.message}` });
+    }
 
-      if (threads && threads.length > 0) {
-        const threadIds = threads.map((t: any) => t.id);
+    if (threads && threads.length > 0) {
+      const threadIds = threads.map((t: any) => t.id);
 
-        // Purge photos from Supabase Storage bucket for each thread
-        for (const t of threads) {
-          try {
-            await deleteThreadImagesFromStorage(db, t.id);
-          } catch (storageErr: any) {
-            console.warn(`[DELETE /students/:id Storage Warning for thread ${t.id}]:`, storageErr?.message);
-          }
+      // Purge photos from Supabase Storage bucket for each thread
+      for (const t of threads) {
+        try {
+          await deleteThreadImagesFromStorage(db, t.id);
+        } catch (storageErr: any) {
+          console.warn(`[DELETE /students/:id Storage Warning for thread ${t.id}]:`, storageErr?.message);
         }
-
-        const { error: imgErr } = await db
-          .from('thread_images')
-          .delete()
-          .in('thread_id', threadIds);
-        if (imgErr) console.warn('[DELETE /students/:id Thread Images Error]:', imgErr.message);
-
-        const { error: msgErr } = await db
-          .from('messages')
-          .delete()
-          .in('thread_id', threadIds);
-        if (msgErr) console.warn('[DELETE /students/:id Messages Error]:', msgErr.message);
-
-        const { error: thDelErr } = await db
-          .from('chat_threads')
-          .delete()
-          .eq('student_id', id);
-        if (thDelErr) console.warn('[DELETE /students/:id Threads Delete Error]:', thDelErr.message);
       }
-    } catch (thErr: any) {
-      console.warn('[DELETE /students/:id Threads Cascade Warning]:', thErr?.message);
+
+      const { error: imgErr } = await db
+        .from('thread_images')
+        .delete()
+        .in('thread_id', threadIds);
+      if (imgErr && !imgErr.message?.includes('relation "thread_images" does not exist')) {
+        console.error('[DELETE /students/:id Thread Images Error]:', imgErr.message);
+        return res.status(500).json({ error: `Failed to delete child thread photos: ${imgErr.message}` });
+      }
+
+      const { error: msgErr } = await db
+        .from('messages')
+        .delete()
+        .in('thread_id', threadIds);
+      if (msgErr) {
+        console.error('[DELETE /students/:id Messages Error]:', msgErr.message);
+        return res.status(500).json({ error: `Failed to delete child messages: ${msgErr.message}` });
+      }
+
+      const { error: thDelErr } = await db
+        .from('chat_threads')
+        .delete()
+        .eq('student_id', id);
+      if (thDelErr) {
+        console.error('[DELETE /students/:id Threads Delete Error]:', thDelErr.message);
+        return res.status(500).json({ error: `Failed to delete child chat threads: ${thDelErr.message}` });
+      }
     }
 
     // 5. Delete student record with select('id') to guarantee permanent removal
@@ -390,6 +396,10 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
     if (deleteErr) {
       console.error('[DELETE /students/:id Error]:', deleteErr.message);
       return res.status(500).json({ error: 'Failed to delete child profile: ' + deleteErr.message });
+    }
+
+    if (!deletedRows || deletedRows.length === 0) {
+      return res.status(404).json({ error: 'Child profile could not be removed or was already deleted' });
     }
 
     console.log(`[Child Profile Deleted]: StudentId=${id}, Name=${student.student_name}, DeletedRows=${deletedRows?.length || 0}`);
