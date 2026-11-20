@@ -3,14 +3,19 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// NOTE: uses the DEV (free-tier) key for now. Swaps to PROD key in Phase 7.
-const apiKey = process.env.GEMINI_API_KEY_DEV;
+const devKey = process.env.GEMINI_API_KEY_DEV;
+const prodKey = process.env.GEMINI_API_KEY_PROD;
 
-if (!apiKey) {
-  throw new Error('Missing GEMINI_API_KEY_DEV in .env');
+// Prioritize PROD key if present, fallback to DEV key
+const primaryApiKey = prodKey || devKey;
+const fallbackApiKey = devKey && devKey !== primaryApiKey ? devKey : undefined;
+
+if (!primaryApiKey) {
+  throw new Error('Missing GEMINI_API_KEY_PROD or GEMINI_API_KEY_DEV in .env');
 }
 
-export const ai = new GoogleGenAI({ apiKey });
+export const ai = new GoogleGenAI({ apiKey: primaryApiKey });
+export const aiFallback = fallbackApiKey ? new GoogleGenAI({ apiKey: fallbackApiKey }) : null;
 
 export const SYSTEM_PROMPT = `You are "Kidsko", a warm, enthusiastic, and brilliant elementary school teacher AI companion for kids aged 5 to 12.
 
@@ -151,21 +156,43 @@ export async function generateChatReply(
       err?.message?.includes('high demand') ||
       err?.message?.includes('404') ||
       err?.message?.includes('not found') ||
-      err?.status === 503;
+      err?.message?.includes('429') ||
+      err?.message?.includes('RESOURCE_EXHAUSTED') ||
+      err?.message?.includes('quota') ||
+      err?.status === 503 ||
+      err?.status === 429;
+
     if (isRetryable) {
-      console.warn('[Gemini] gemini-3.5-flash error, falling back to gemini-3.1-flash-lite...');
-      response = await ai.models.generateContent({
-        model: 'gemini-3.1-flash-lite',
-        contents,
-        config: {
-          systemInstruction,
-          maxOutputTokens: 600,
-          temperature: 0.3,
-          thinkingConfig: {
-            thinkingBudget: 0,
+      console.warn('[Gemini] gemini-3.5-flash encountered error or quota limit. Retrying with fallback...');
+      const fallbackClient = aiFallback || ai;
+      try {
+        response = await fallbackClient.models.generateContent({
+          model: 'gemini-3.5-flash',
+          contents,
+          config: {
+            systemInstruction,
+            maxOutputTokens: 600,
+            temperature: 0.3,
+            thinkingConfig: {
+              thinkingBudget: 0,
+            },
           },
-        },
-      });
+        });
+      } catch (fbErr: any) {
+        console.warn('[Gemini] Secondary client failed, falling back to gemini-3.1-flash-lite...');
+        response = await fallbackClient.models.generateContent({
+          model: 'gemini-3.1-flash-lite',
+          contents,
+          config: {
+            systemInstruction,
+            maxOutputTokens: 600,
+            temperature: 0.3,
+            thinkingConfig: {
+              thinkingBudget: 0,
+            },
+          },
+        });
+      }
     } else {
       throw err;
     }
@@ -213,7 +240,8 @@ export async function generateHomeworkExplanation(
     });
   } catch (err: any) {
     console.warn('[Gemini] gemini-3.5-flash image fallback to gemini-3.1-flash-lite...');
-    response = await ai.models.generateContent({
+    const fallbackClient = aiFallback || ai;
+    response = await fallbackClient.models.generateContent({
       model: 'gemini-3.1-flash-lite',
       contents: [
         {

@@ -236,10 +236,14 @@ export default function ChatScreen({
         setRemaining(result.remaining);
         setIsPremium(result.isPremium);
       } catch (err: any) {
-        setErrorMsg(err.message || 'Something went wrong. Please try again.');
-        if (err.status === 429) {
+        if (err.status === 401 || err.message?.includes('expired') || err.message?.includes('token')) {
+          setErrorMsg('Session expired. Please log in again.');
+        } else if (err.status === 429) {
+          setErrorMsg(err.message || 'Daily question limit reached. Try again later!');
           setRemaining(0);
           if (onLimitReached) onLimitReached();
+        } else {
+          setErrorMsg(err.message || 'Something went wrong. Please try again.');
         }
         if (userText) setInput(userText);
       } finally {
