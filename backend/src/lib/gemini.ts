@@ -138,8 +138,11 @@ export async function generateChatReply(
       contents,
       config: {
         systemInstruction,
-        maxOutputTokens: 400, // NFR-3: cost control with headroom for complete solutions
+        maxOutputTokens: 600, // NFR-3: cost control with generous headroom for complete solutions
         temperature: 0.3,
+        thinkingConfig: {
+          thinkingBudget: 0, // Disable internal thinking tokens from consuming maxOutputTokens budget
+        },
       },
     });
   } catch (err: any) {
@@ -156,8 +159,11 @@ export async function generateChatReply(
         contents,
         config: {
           systemInstruction,
-          maxOutputTokens: 400,
+          maxOutputTokens: 600,
           temperature: 0.3,
+          thinkingConfig: {
+            thinkingBudget: 0,
+          },
         },
       });
     } else {
@@ -198,8 +204,11 @@ export async function generateHomeworkExplanation(
       ],
       config: {
         systemInstruction,
-        maxOutputTokens: 250,
+        maxOutputTokens: 500,
         temperature: 0.3,
+        thinkingConfig: {
+          thinkingBudget: 0,
+        },
       },
     });
   } catch (err: any) {
@@ -217,8 +226,11 @@ export async function generateHomeworkExplanation(
       ],
       config: {
         systemInstruction,
-        maxOutputTokens: 250,
+        maxOutputTokens: 500,
         temperature: 0.3,
+        thinkingConfig: {
+          thinkingBudget: 0,
+        },
       },
     });
   }

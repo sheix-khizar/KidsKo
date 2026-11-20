@@ -206,7 +206,10 @@ OUTPUT ONLY VALID JSON with schema:
     config: {
       temperature: 0,
       responseMimeType: 'application/json',
-      maxOutputTokens: 300,
+      maxOutputTokens: 400,
+      thinkingConfig: {
+        thinkingBudget: 0,
+      },
     },
   });
 
