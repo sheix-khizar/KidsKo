@@ -3,15 +3,17 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+const isProd = process.env.NODE_ENV === 'production';
 const devKey = process.env.GEMINI_API_KEY_DEV;
 const prodKey = process.env.GEMINI_API_KEY_PROD;
 
-// Prioritize PROD key if present, fallback to DEV key
-const primaryApiKey = prodKey || devKey;
-const fallbackApiKey = devKey && devKey !== primaryApiKey ? devKey : undefined;
+// In production, strictly use the paid PROD key to protect student privacy (no free-tier data logging)
+const primaryApiKey = isProd ? prodKey : (prodKey || devKey);
+// In production, never fallback to devKey; in dev mode, allow devKey fallback if available
+const fallbackApiKey = !isProd && devKey && devKey !== primaryApiKey ? devKey : undefined;
 
 if (!primaryApiKey) {
-  throw new Error('Missing GEMINI_API_KEY_PROD or GEMINI_API_KEY_DEV in .env');
+  throw new Error(`Missing ${isProd ? 'GEMINI_API_KEY_PROD' : 'GEMINI_API_KEY_PROD or GEMINI_API_KEY_DEV'} in .env`);
 }
 
 export const ai = new GoogleGenAI({ apiKey: primaryApiKey });

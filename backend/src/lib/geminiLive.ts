@@ -3,8 +3,14 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const apiKey = process.env.GEMINI_API_KEY_DEV || process.env.GEMINI_API_KEY_PROD;
-if (!apiKey) throw new Error('Missing GEMINI_API_KEY_DEV or GEMINI_API_KEY_PROD in .env');
+const isProd = process.env.NODE_ENV === 'production';
+const apiKey = isProd
+  ? process.env.GEMINI_API_KEY_PROD
+  : (process.env.GEMINI_API_KEY_PROD || process.env.GEMINI_API_KEY_DEV);
+
+if (!apiKey) {
+  throw new Error(`Missing ${isProd ? 'GEMINI_API_KEY_PROD' : 'GEMINI_API_KEY_PROD or GEMINI_API_KEY_DEV'} in .env`);
+}
 
 const GEMINI_WS_URL = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
 

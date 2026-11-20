@@ -8,14 +8,15 @@ const router = Router();
 
 function isTableMissingError(error: any): boolean {
   if (!error) return false;
-  return (
-    error.code === 'PGRST205' ||
-    error.code === '42P01' ||
-    error.code === 'PGRST116' ||
-    error.message?.includes('schema cache') ||
-    error.message?.includes('Could not find the table') ||
-    error.message?.includes('does not exist')
-  );
+  // Strictly match PostgreSQL '42P01' (undefined_table) or PostgREST 'PGRST205' (table not in schema cache)
+  if (error.code === 'PGRST205' || error.code === '42P01') return true;
+  if (typeof error.message === 'string') {
+    return (
+      error.message.includes('Could not find the table') ||
+      /relation "[^"]+" does not exist/i.test(error.message)
+    );
+  }
+  return false;
 }
 
 router.post('/', requireAuth, async (req: Request, res: Response) => {
