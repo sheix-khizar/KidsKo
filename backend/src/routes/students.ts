@@ -6,6 +6,18 @@ import { deleteThreadImagesFromStorage } from '../lib/homeworkStorage';
 
 const router = Router();
 
+function isTableMissingError(error: any): boolean {
+  if (!error) return false;
+  return (
+    error.code === 'PGRST205' ||
+    error.code === '42P01' ||
+    error.code === 'PGRST116' ||
+    error.message?.includes('schema cache') ||
+    error.message?.includes('Could not find the table') ||
+    error.message?.includes('does not exist')
+  );
+}
+
 router.post('/', requireAuth, async (req: Request, res: Response) => {
   const { student_name } = req.body;
 
@@ -314,22 +326,22 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Student profile not found' });
     }
 
-    // 2. Cascade cleanup of student_memory
+    // 2. Cascade cleanup of student_memory (if table exists)
     const { error: memErr } = await db
       .from('student_memory')
       .delete()
       .eq('student_id', id);
-    if (memErr && memErr.code !== 'PGRST116' && !memErr.message?.includes('relation "student_memory" does not exist')) {
+    if (memErr && !isTableMissingError(memErr)) {
       console.error('[DELETE /students/:id Memory Error]:', memErr.message);
       return res.status(500).json({ error: `Failed to remove student memory: ${memErr.message}` });
     }
 
-    // 3. Cascade cleanup of usage_events associated with student
+    // 3. Cascade cleanup of usage_events associated with student (if table exists)
     const { error: evErr } = await db
       .from('usage_events')
       .delete()
       .eq('student_id', id);
-    if (evErr && !evErr.message?.includes('relation "usage_events" does not exist')) {
+    if (evErr && !isTableMissingError(evErr)) {
       console.error('[DELETE /students/:id Events Error]:', evErr.message);
       return res.status(500).json({ error: `Failed to clear usage events: ${evErr.message}` });
     }
@@ -340,7 +352,7 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
       .select('id')
       .eq('student_id', id);
 
-    if (threadsErr) {
+    if (threadsErr && !isTableMissingError(threadsErr)) {
       console.error('[DELETE /students/:id Threads Fetch Error]:', threadsErr.message);
       return res.status(500).json({ error: `Failed to query child conversations: ${threadsErr.message}` });
     }
@@ -361,7 +373,7 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
         .from('thread_images')
         .delete()
         .in('thread_id', threadIds);
-      if (imgErr && !imgErr.message?.includes('relation "thread_images" does not exist')) {
+      if (imgErr && !isTableMissingError(imgErr)) {
         console.error('[DELETE /students/:id Thread Images Error]:', imgErr.message);
         return res.status(500).json({ error: `Failed to delete child thread photos: ${imgErr.message}` });
       }

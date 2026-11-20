@@ -5,6 +5,18 @@ import { deleteThreadImagesFromStorage } from '../lib/homeworkStorage';
 
 const router = Router();
 
+function isTableMissingError(error: any): boolean {
+  if (!error) return false;
+  return (
+    error.code === 'PGRST205' ||
+    error.code === '42P01' ||
+    error.code === 'PGRST116' ||
+    error.message?.includes('schema cache') ||
+    error.message?.includes('Could not find the table') ||
+    error.message?.includes('does not exist')
+  );
+}
+
 router.post('/register', async (req: Request, res: Response) => {
   const { email, password } = req.body;
 
@@ -185,7 +197,7 @@ router.delete('/account', requireAuth, async (req: Request, res: Response) => {
         .from('student_memory')
         .delete()
         .in('student_id', studentIds);
-      if (memErr && !memErr.message?.includes('relation "student_memory" does not exist')) {
+      if (memErr && !isTableMissingError(memErr)) {
         console.error('[DELETE /auth/account Memory Cleanup Error]:', memErr.message);
         return res.status(500).json({ error: 'Failed to purge child memory records' });
       }
@@ -195,7 +207,7 @@ router.delete('/account', requireAuth, async (req: Request, res: Response) => {
         .select('id')
         .in('student_id', studentIds);
 
-      if (threadsErr) {
+      if (threadsErr && !isTableMissingError(threadsErr)) {
         console.error('[DELETE /auth/account Threads Fetch Error]:', threadsErr.message);
         return res.status(500).json({ error: 'Failed to query child conversations before deletion' });
       }
@@ -213,7 +225,7 @@ router.delete('/account', requireAuth, async (req: Request, res: Response) => {
         }
 
         const { error: imgErr } = await dbClient.from('thread_images').delete().in('thread_id', threadIds);
-        if (imgErr && !imgErr.message?.includes('relation "thread_images" does not exist')) {
+        if (imgErr && !isTableMissingError(imgErr)) {
           console.error('[DELETE /auth/account Images Cleanup Error]:', imgErr.message);
           return res.status(500).json({ error: 'Failed to purge child photos' });
         }
@@ -240,13 +252,13 @@ router.delete('/account', requireAuth, async (req: Request, res: Response) => {
 
     // 4. Delete usage events, family usage, and profiles records
     const { error: evErr } = await dbClient.from('usage_events').delete().eq('parent_id', parentId);
-    if (evErr && !evErr.message?.includes('relation "usage_events" does not exist')) {
+    if (evErr && !isTableMissingError(evErr)) {
       console.error('[DELETE /auth/account Usage Events Error]:', evErr.message);
       return res.status(500).json({ error: 'Failed to purge usage events' });
     }
 
     const { error: fuErr } = await dbClient.from('family_usage').delete().eq('parent_id', parentId);
-    if (fuErr && !fuErr.message?.includes('relation "family_usage" does not exist')) {
+    if (fuErr && !isTableMissingError(fuErr)) {
       console.error('[DELETE /auth/account Family Usage Error]:', fuErr.message);
       return res.status(500).json({ error: 'Failed to purge family usage' });
     }
