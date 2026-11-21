@@ -9,8 +9,10 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Modal,
+  Alert,
 } from 'react-native';
-import { login, saveToken } from '../services/api';
+import { login, saveToken, forgotPassword, resetPasswordWithOtp } from '../services/api';
 import { getApiUrl, loadSavedApiUrl } from '../services/config';
 import ServerConfigModal from '../components/ServerConfigModal';
 import {
@@ -39,6 +41,16 @@ export default function LoginScreen({ onLoggedIn, onGoToRegister }: Props) {
   const [showServerModal, setShowServerModal] = useState(false);
   const [serverUrl, setServerUrl] = useState(getApiUrl());
 
+  // Forgot Password modal state
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotStep, setForgotStep] = useState<'email' | 'reset'>('email');
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotOtp, setForgotOtp] = useState('');
+  const [forgotNewPassword, setForgotNewPassword] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotError, setForgotError] = useState<string | null>(null);
+  const [forgotSuccess, setForgotSuccess] = useState<string | null>(null);
+
   useEffect(() => {
     loadSavedApiUrl().then((saved) => {
       setServerUrl(saved);
@@ -54,12 +66,65 @@ export default function LoginScreen({ onLoggedIn, onGoToRegister }: Props) {
     setLoading(true);
     try {
       const result = await login(email.trim(), password);
-      await saveToken(result.session.access_token, result.userId, email.trim());
+      await saveToken(
+        result.session.access_token,
+        result.userId,
+        email.trim(),
+        result.session.refresh_token
+      );
       onLoggedIn();
     } catch (err: any) {
       setErrorMsg(err.message || 'Login failed. Please check your credentials.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSendForgotCode = async () => {
+    setForgotError(null);
+    if (!forgotEmail || !forgotEmail.includes('@')) {
+      setForgotError('Please enter a valid email address.');
+      return;
+    }
+    setForgotLoading(true);
+    try {
+      await forgotPassword(forgotEmail.trim());
+      setForgotStep('reset');
+      setForgotError(null);
+    } catch (err: any) {
+      setForgotError(err.message || 'Failed to send recovery code.');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    setForgotError(null);
+    if (!forgotOtp || forgotOtp.trim().length < 6) {
+      setForgotError('Please enter the 6-digit recovery code.');
+      return;
+    }
+    if (!forgotNewPassword || forgotNewPassword.length < 8) {
+      setForgotError('New password must be at least 8 characters long.');
+      return;
+    }
+    setForgotLoading(true);
+    try {
+      await resetPasswordWithOtp(forgotEmail.trim(), forgotOtp.trim(), forgotNewPassword);
+      setEmail(forgotEmail.trim());
+      setPassword(forgotNewPassword);
+      setForgotSuccess('Password updated successfully! You can now sign in.');
+      setTimeout(() => {
+        setShowForgotModal(false);
+        setForgotStep('email');
+        setForgotOtp('');
+        setForgotNewPassword('');
+        setForgotSuccess(null);
+      }, 1500);
+    } catch (err: any) {
+      setForgotError(err.message || 'Failed to reset password. Please check the code.');
+    } finally {
+      setForgotLoading(false);
     }
   };
 
@@ -179,6 +244,25 @@ export default function LoginScreen({ onLoggedIn, onGoToRegister }: Props) {
             </View>
           </FadeSlideIn>
 
+          {/* Forgot Password Link */}
+          <FadeSlideIn delay={130}>
+            <View style={styles.forgotRow}>
+              <Pressable
+                onPress={() => {
+                  setForgotEmail(email);
+                  setForgotError(null);
+                  setForgotSuccess(null);
+                  setForgotStep('email');
+                  setShowForgotModal(true);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Forgot Password"
+              >
+                <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+              </Pressable>
+            </View>
+          </FadeSlideIn>
+
           {/* Error notification */}
           {errorMsg && (
             <FadeSlideIn delay={140}>
@@ -247,6 +331,131 @@ export default function LoginScreen({ onLoggedIn, onGoToRegister }: Props) {
           setErrorMsg(null);
         }}
       />
+
+      {/* ── Forgot Password Modal ── */}
+      <Modal
+        visible={showForgotModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowForgotModal(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Reset Password 🔑</Text>
+              <Pressable
+                onPress={() => setShowForgotModal(false)}
+                style={styles.modalCloseBtn}
+                accessibilityLabel="Close"
+              >
+                <Text style={styles.modalCloseText}>✕</Text>
+              </Pressable>
+            </View>
+
+            {forgotSuccess ? (
+              <View style={styles.forgotSuccessBox}>
+                <Text style={styles.forgotSuccessText}>🎉 {forgotSuccess}</Text>
+              </View>
+            ) : forgotStep === 'email' ? (
+              <View>
+                <Text style={styles.modalDescription}>
+                  Enter the email address registered with your Kidsko account. We'll send you a 6-digit recovery code.
+                </Text>
+
+                <View style={styles.modalField}>
+                  <Text style={styles.fieldLabel}>Parent Email</Text>
+                  <View style={styles.inputContainer}>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="you@gmail.com"
+                      placeholderTextColor={colors.subtext}
+                      autoCapitalize="none"
+                      keyboardType="email-address"
+                      value={forgotEmail}
+                      onChangeText={setForgotEmail}
+                    />
+                  </View>
+                </View>
+
+                {forgotError && (
+                  <View style={styles.errorContainer}>
+                    <Text style={styles.errorText}>{forgotError}</Text>
+                  </View>
+                )}
+
+                <Button
+                  title="Send Recovery Code ✉️"
+                  onPress={handleSendForgotCode}
+                  loading={forgotLoading}
+                  variant="primary"
+                />
+              </View>
+            ) : (
+              <View>
+                <Text style={styles.modalDescription}>
+                  We sent a 6-digit code to{' '}
+                  <Text style={{ fontFamily: fontFamilies.bold, color: colors.text }}>
+                    {forgotEmail}
+                  </Text>
+                  . Enter the code and your new password below.
+                </Text>
+
+                <View style={styles.modalField}>
+                  <Text style={styles.fieldLabel}>6-Digit Recovery Code</Text>
+                  <View style={styles.inputContainer}>
+                    <TextInput
+                      style={[styles.input, { letterSpacing: 3, fontFamily: fontFamilies.bold }]}
+                      placeholder="123456"
+                      placeholderTextColor={colors.subtext}
+                      keyboardType="number-pad"
+                      maxLength={6}
+                      value={forgotOtp}
+                      onChangeText={setForgotOtp}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.modalField}>
+                  <Text style={styles.fieldLabel}>New Password (Min 8 chars)</Text>
+                  <View style={styles.inputContainer}>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="At least 8 characters"
+                      placeholderTextColor={colors.subtext}
+                      secureTextEntry
+                      value={forgotNewPassword}
+                      onChangeText={setForgotNewPassword}
+                    />
+                  </View>
+                </View>
+
+                {forgotError && (
+                  <View style={styles.errorContainer}>
+                    <Text style={styles.errorText}>{forgotError}</Text>
+                  </View>
+                )}
+
+                <Button
+                  title="Reset Password & Sign In 🔐"
+                  onPress={handleResetPassword}
+                  loading={forgotLoading}
+                  variant="primary"
+                />
+
+                <Pressable
+                  onPress={() => setForgotStep('email')}
+                  style={{ marginTop: 14, alignItems: 'center' }}
+                >
+                  <Text style={styles.forgotBackLink}>← Change email</Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -417,5 +626,88 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.semiBold,
     color: colors.warningText,
     lineHeight: 18,
+  },
+  forgotRow: {
+    alignItems: 'flex-end',
+    marginTop: -8,
+    marginBottom: 16,
+    paddingRight: 4,
+  },
+  forgotPasswordText: {
+    fontSize: 13,
+    fontFamily: fontFamilies.bold,
+    color: colors.coralStrong,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: colors.white,
+    borderRadius: 24,
+    padding: 22,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontFamily: fontFamilies.black,
+    color: colors.text,
+  },
+  modalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCloseText: {
+    fontSize: 14,
+    fontFamily: fontFamilies.bold,
+    color: colors.subtext,
+  },
+  modalDescription: {
+    fontSize: 13,
+    fontFamily: fontFamilies.regular,
+    color: colors.subtext,
+    lineHeight: 19,
+    marginBottom: 16,
+  },
+  modalField: {
+    marginBottom: 14,
+  },
+  forgotSuccessBox: {
+    backgroundColor: '#E8F5E9',
+    borderWidth: 1.5,
+    borderColor: '#4CAF50',
+    borderRadius: 14,
+    padding: 16,
+    alignItems: 'center',
+  },
+  forgotSuccessText: {
+    fontSize: 14,
+    fontFamily: fontFamilies.bold,
+    color: '#2E7D32',
+    textAlign: 'center',
+  },
+  forgotBackLink: {
+    fontSize: 13,
+    fontFamily: fontFamilies.bold,
+    color: colors.subtext,
   },
 });

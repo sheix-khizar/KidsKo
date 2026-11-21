@@ -1,9 +1,36 @@
 import { Router, Request, Response } from 'express';
+import { createClient } from '@supabase/supabase-js';
+import rateLimit from 'express-rate-limit';
 import { supabase, supabaseAdmin } from '../lib/supabase';
 import { requireAuth } from '../middleware/auth';
 import { deleteThreadImagesFromStorage } from '../lib/homeworkStorage';
 
 const router = Router();
+
+// Ephemeral unpersisted Supabase client for memory-isolated auth calls per request
+function createEphemeralAuthClient() {
+  const url = process.env.SUPABASE_URL;
+  const anonKey = process.env.SUPABASE_ANON_KEY;
+  if (!url || !anonKey) {
+    throw new Error('Missing SUPABASE_URL or SUPABASE_ANON_KEY in environment');
+  }
+  return createClient(url, anonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
+}
+
+// Dedicated rate limiter for sensitive authentication attempts (10 attempts / min per client IP)
+const authAttemptLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  message: { error: 'Too many authentication attempts. Please wait a minute and try again.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 function isTableMissingError(error: any): boolean {
   if (!error) return false;
@@ -18,41 +45,233 @@ function isTableMissingError(error: any): boolean {
   return false;
 }
 
-router.post('/register', async (req: Request, res: Response) => {
+// POST /api/auth/register - Initiates registration with email & password (enforces 8+ chars and OTP flow)
+router.post('/register', authAttemptLimiter, async (req: Request, res: Response) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required' });
   }
 
-  const { data, error } = await supabase.auth.signUp({ email, password });
+  const trimmedEmail = email.trim().toLowerCase();
+  if (!trimmedEmail.includes('@') || !trimmedEmail.includes('.')) {
+    return res.status(400).json({ error: 'Please enter a valid email address' });
+  }
+
+  if (password.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters long' });
+  }
+
+  const authClient = createEphemeralAuthClient();
+  const { data, error } = await authClient.auth.signUp({
+    email: trimmedEmail,
+    password,
+  });
 
   if (error) {
-    return res.status(400).json({ error: error.message });
+    const msg = error.message || '';
+    if (msg.toLowerCase().includes('already registered') || msg.toLowerCase().includes('user already exists')) {
+      return res.status(400).json({ error: 'An account with this email already exists. Please log in.' });
+    }
+    return res.status(400).json({ error: msg });
   }
 
   if (!data.user) {
     return res.status(500).json({ error: 'User creation failed unexpectedly' });
   }
 
-  // Ensure profiles row exists for FK relationships (e.g. family_usage)
-  await supabase.from('profiles').upsert({ id: data.user.id, email: data.user.email });
+  // Ensure profiles row exists for FK relationships
+  try {
+    await supabaseAdmin.from('profiles').upsert({ id: data.user.id, email: trimmedEmail });
+  } catch (profErr: any) {
+    console.warn('[Register Profile Upsert Warning]:', profErr?.message);
+  }
+
+  const needsVerification = !data.session;
 
   return res.status(201).json({
-    message: 'Account created successfully',
+    message: needsVerification
+      ? 'Verification code sent to your email'
+      : 'Account created successfully',
+    userId: data.user.id,
+    email: trimmedEmail,
+    needsVerification,
+    session: data.session || undefined,
+  });
+});
+
+// POST /api/auth/verify-otp - Verifies 6-digit email confirmation code
+router.post('/verify-otp', authAttemptLimiter, async (req: Request, res: Response) => {
+  const { email, token, type } = req.body;
+
+  if (!email || !token) {
+    return res.status(400).json({ error: 'Email and verification code are required' });
+  }
+
+  const trimmedEmail = email.trim().toLowerCase();
+  const trimmedToken = token.trim();
+
+  const authClient = createEphemeralAuthClient();
+  const otpType = (type === 'recovery' || type === 'email_change') ? type : 'signup';
+
+  const { data, error } = await authClient.auth.verifyOtp({
+    email: trimmedEmail,
+    token: trimmedToken,
+    type: otpType as any,
+  });
+
+  if (error || !data.user) {
+    return res.status(400).json({
+      error: error?.message || 'Invalid or expired verification code. Please request a new one.',
+    });
+  }
+
+  // Ensure profile exists once verified
+  try {
+    await supabaseAdmin.from('profiles').upsert({
+      id: data.user.id,
+      email: data.user.email || trimmedEmail,
+    });
+  } catch {}
+
+  return res.status(200).json({
+    message: 'Email verified successfully',
     userId: data.user.id,
     session: data.session,
   });
 });
 
-router.post('/login', async (req: Request, res: Response) => {
+// POST /api/auth/resend-otp - Resends email confirmation code
+router.post('/resend-otp', authAttemptLimiter, async (req: Request, res: Response) => {
+  const { email, type } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ error: 'Email is required' });
+  }
+
+  const trimmedEmail = email.trim().toLowerCase();
+  const authClient = createEphemeralAuthClient();
+
+  const resendType = type === 'recovery' ? 'recovery' : 'signup';
+  const { error } = await authClient.auth.resend({
+    email: trimmedEmail,
+    type: resendType as any,
+  });
+
+  if (error) {
+    return res.status(400).json({ error: error.message });
+  }
+
+  return res.status(200).json({
+    message: 'A new 6-digit verification code has been sent to your email.',
+  });
+});
+
+// POST /api/auth/refresh - Automatically renews expired 1-hour session using refresh token
+router.post('/refresh', async (req: Request, res: Response) => {
+  const { refreshToken } = req.body;
+
+  if (!refreshToken) {
+    return res.status(400).json({ error: 'refreshToken is required' });
+  }
+
+  const authClient = createEphemeralAuthClient();
+  const { data, error } = await authClient.auth.refreshSession({
+    refresh_token: refreshToken,
+  });
+
+  if (error || !data.session) {
+    return res.status(401).json({
+      error: 'Session has expired or refresh token is invalid. Please log in again.',
+    });
+  }
+
+  return res.status(200).json({
+    message: 'Session refreshed successfully',
+    userId: data.user?.id,
+    session: data.session,
+  });
+});
+
+// POST /api/auth/forgot-password - Initiates password recovery email with 6-digit OTP
+router.post('/forgot-password', authAttemptLimiter, async (req: Request, res: Response) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ error: 'Email is required' });
+  }
+
+  const trimmedEmail = email.trim().toLowerCase();
+  const authClient = createEphemeralAuthClient();
+
+  const { error } = await authClient.auth.resetPasswordForEmail(trimmedEmail);
+
+  if (error) {
+    // Avoid user enumeration: if user not found, respond with generic success message
+    console.warn('[Forgot Password Notice]:', error.message);
+  }
+
+  return res.status(200).json({
+    message: 'If an account exists with this email, a password reset code has been sent.',
+  });
+});
+
+// POST /api/auth/reset-password - Verifies recovery code and sets new password
+router.post('/reset-password', authAttemptLimiter, async (req: Request, res: Response) => {
+  const { email, token, newPassword } = req.body;
+
+  if (!email || !token || !newPassword) {
+    return res.status(400).json({ error: 'Email, reset code, and new password are required' });
+  }
+
+  if (newPassword.length < 8) {
+    return res.status(400).json({ error: 'New password must be at least 8 characters long' });
+  }
+
+  const trimmedEmail = email.trim().toLowerCase();
+  const trimmedToken = token.trim();
+  const authClient = createEphemeralAuthClient();
+
+  // 1. Verify recovery OTP
+  const { data, error } = await authClient.auth.verifyOtp({
+    email: trimmedEmail,
+    token: trimmedToken,
+    type: 'recovery',
+  });
+
+  if (error || !data.user) {
+    return res.status(400).json({ error: 'Invalid or expired password reset code. Please request a new one.' });
+  }
+
+  // 2. Set new password via admin client
+  const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(data.user.id, {
+    password: newPassword,
+  });
+
+  if (updateErr) {
+    return res.status(500).json({ error: 'Failed to reset password: ' + updateErr.message });
+  }
+
+  return res.status(200).json({
+    success: true,
+    message: 'Password reset successfully! You can now log in with your new password.',
+  });
+});
+
+// POST /api/auth/login - Parent sign-in (isolated ephemeral client per request)
+router.post('/login', authAttemptLimiter, async (req: Request, res: Response) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required' });
   }
 
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  const trimmedEmail = email.trim().toLowerCase();
+  const authClient = createEphemeralAuthClient();
+  const { data, error } = await authClient.auth.signInWithPassword({
+    email: trimmedEmail,
+    password,
+  });
 
   if (error) {
     return res.status(401).json({ error: error.message });
@@ -60,7 +279,7 @@ router.post('/login', async (req: Request, res: Response) => {
 
   // Ensure profiles row exists on login if missing
   if (data.user) {
-    await supabase.from('profiles').upsert({ id: data.user.id, email: data.user.email });
+    await supabaseAdmin.from('profiles').upsert({ id: data.user.id, email: data.user.email || trimmedEmail });
   }
 
   return res.status(200).json({
@@ -88,8 +307,8 @@ router.put('/password', requireAuth, async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Current password and new password are required' });
   }
 
-  if (newPassword.length < 6) {
-    return res.status(400).json({ error: 'New password must be at least 6 characters' });
+  if (newPassword.length < 8) {
+    return res.status(400).json({ error: 'New password must be at least 8 characters long' });
   }
 
   // 1. Verify current password

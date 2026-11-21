@@ -19,6 +19,9 @@ dotenv.config();
 const app = express();
 const PORT = Number(process.env.PORT) || 3003;
 
+// Enable trust proxy so rate limiters and secure cookies inspect real client IP behind reverse proxies
+app.set('trust proxy', 1);
+
 app.use(helmet());
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -30,12 +33,6 @@ const generalLimiter = rateLimit({
 });
 app.use(generalLimiter);
 
-const authLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 5,
-  message: { error: 'Too many attempts. Please wait a minute and try again.' },
-});
-
 app.get('/health', (req: Request, res: Response) => {
   res.status(200).json({
     status: 'ok',
@@ -45,7 +42,7 @@ app.get('/health', (req: Request, res: Response) => {
   });
 });
 
-app.use('/api/auth', authLimiter, authRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/homework', homeworkRoutes);

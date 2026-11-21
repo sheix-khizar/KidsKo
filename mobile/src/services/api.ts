@@ -6,12 +6,21 @@ import { clearPin } from './pinService';
 import { configureBilling } from './billing';
 
 const TOKEN_KEY = 'kidsko_access_token';
+const REFRESH_TOKEN_KEY = 'kidsko_refresh_token';
 const USER_ID_KEY = 'kidsko_user_id';
 const EMAIL_KEY = 'kidsko_user_email';
 
 // ---- Token storage helpers ----
-export async function saveToken(token: string, userId?: string, email?: string) {
+export async function saveToken(
+  token: string,
+  userId?: string,
+  email?: string,
+  refreshToken?: string
+) {
   await SecureStore.setItemAsync(TOKEN_KEY, token);
+  if (refreshToken) {
+    await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, refreshToken);
+  }
   if (userId) {
     await SecureStore.setItemAsync(USER_ID_KEY, userId);
     configureBilling(userId);
@@ -50,8 +59,13 @@ export async function getToken(): Promise<string | null> {
   return SecureStore.getItemAsync(TOKEN_KEY);
 }
 
+export async function getRefreshToken(): Promise<string | null> {
+  return SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
+}
+
 export async function clearToken() {
   await SecureStore.deleteItemAsync(TOKEN_KEY);
+  await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
   await SecureStore.deleteItemAsync(USER_ID_KEY);
   await SecureStore.deleteItemAsync(EMAIL_KEY);
   try {
@@ -62,12 +76,80 @@ export async function clearToken() {
   } catch {}
 }
 
-// Helper: fetch with 12s timeout to prevent UI freezing while giving AI responses sufficient latency
-export async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 12000): Promise<Response> {
+// In-flight refresh deduplication lock
+let isRefreshing = false;
+let refreshPromise: Promise<boolean> | null = null;
+
+// Automatically renews expired 1-hour access token using the stored refresh token
+export async function refreshSession(): Promise<boolean> {
+  if (isRefreshing && refreshPromise) return refreshPromise;
+  isRefreshing = true;
+  refreshPromise = (async () => {
+    try {
+      const refreshToken = await getRefreshToken();
+      if (!refreshToken) return false;
+
+      const res = await fetch(`${getApiUrl()}/api/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      });
+
+      if (!res.ok) {
+        return false;
+      }
+
+      const data = await res.json();
+      if (data.session?.access_token) {
+        await SecureStore.setItemAsync(TOKEN_KEY, data.session.access_token);
+        if (data.session.refresh_token) {
+          await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, data.session.refresh_token);
+        }
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    } finally {
+      isRefreshing = false;
+      refreshPromise = null;
+    }
+  })();
+  return refreshPromise;
+}
+
+// Helper: fetch with 12s timeout, automatic token refresh on 401, and emulator fallback
+export async function fetchWithTimeout(
+  url: string,
+  options: RequestInit = {},
+  timeoutMs = 12000,
+  isRetry = false
+): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, { ...options, signal: controller.signal });
+
+    // Automatic transparent token refresh on HTTP 401 (excluding auth routes)
+    if (
+      res.status === 401 &&
+      !isRetry &&
+      !url.includes('/api/auth/login') &&
+      !url.includes('/api/auth/register') &&
+      !url.includes('/api/auth/verify-otp') &&
+      !url.includes('/api/auth/refresh')
+    ) {
+      const refreshed = await refreshSession();
+      if (refreshed) {
+        const freshToken = await getToken();
+        const updatedHeaders = {
+          ...(options.headers || {}),
+          Authorization: `Bearer ${freshToken}`,
+        };
+        return fetchWithTimeout(url, { ...options, headers: updatedHeaders }, timeoutMs, true);
+      }
+    }
+
     return res;
   } catch (err: any) {
     if (Platform.OS === 'android' && !url.includes('10.0.2.2')) {
@@ -101,7 +183,60 @@ export async function register(email: string, password: string) {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Registration failed');
-  return data as { userId: string; session: { access_token: string } };
+  return data as {
+    userId: string;
+    email: string;
+    needsVerification: boolean;
+    session?: { access_token: string; refresh_token: string };
+  };
+}
+
+export async function verifyOtp(email: string, token: string, type: 'signup' | 'recovery' = 'signup') {
+  const res = await fetchWithTimeout(`${getApiUrl()}/api/auth/verify-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, token, type }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Verification failed');
+  return data as {
+    userId: string;
+    session: { access_token: string; refresh_token: string };
+    message: string;
+  };
+}
+
+export async function resendOtp(email: string, type: 'signup' | 'recovery' = 'signup') {
+  const res = await fetchWithTimeout(`${getApiUrl()}/api/auth/resend-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, type }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to resend code');
+  return data as { message: string };
+}
+
+export async function forgotPassword(email: string) {
+  const res = await fetchWithTimeout(`${getApiUrl()}/api/auth/forgot-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to send password reset code');
+  return data as { message: string };
+}
+
+export async function resetPasswordWithOtp(email: string, token: string, newPassword: string) {
+  const res = await fetchWithTimeout(`${getApiUrl()}/api/auth/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, token, newPassword }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to reset password');
+  return data as { success: boolean; message: string };
 }
 
 export async function login(email: string, password: string) {
@@ -112,7 +247,10 @@ export async function login(email: string, password: string) {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Login failed');
-  return data as { userId: string; session: { access_token: string } };
+  return data as {
+    userId: string;
+    session: { access_token: string; refresh_token: string };
+  };
 }
 
 // ---- Student endpoints (require a token) ----

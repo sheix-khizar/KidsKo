@@ -6,6 +6,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { Mascot, LinearGradient, Bounce, FloatStar, LoadBar, SafeAreaProvider, FadeSlideIn } from './src/ui';
 import WelcomeScreen from './src/screens/WelcomeScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
+import VerifyOtpScreen from './src/screens/VerifyOtpScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import MainShellScreen from './src/screens/MainShellScreen';
 import PaywallScreen from './src/screens/PaywallScreen';
@@ -32,6 +33,7 @@ type Screen =
   | 'checking'
   | 'welcome'
   | 'register'
+  | 'verifyOtp'
   | 'login'
   | 'main'
   | 'paywall'
@@ -47,6 +49,7 @@ export default function App() {
     Nunito_900Black,
   });
   const [screen, setScreen] = useState<Screen>('checking');
+  const [pendingVerificationEmail, setPendingVerificationEmail] = useState('');
   const [activeStudent, setActiveStudent] = useState<Student | null>(null);
   const [activeThread, setActiveThread] = useState<{ id: string; title: string } | null>(null);
   const [initialCallMode, setInitialCallMode] = useState<'voice' | 'video'>('voice');
@@ -98,6 +101,10 @@ export default function App() {
       if (screen === 'liveVoice' || screen === 'transcript' || screen === 'paywall') {
         setActiveThread(null);
         setScreen('main');
+        return true;
+      }
+      if (screen === 'verifyOtp') {
+        setScreen('register');
         return true;
       }
       if (screen === 'login' || screen === 'register') {
@@ -173,9 +180,25 @@ export default function App() {
       return (
         <FadeSlideIn key='register' duration={220} style={{ flex: 1 }}>
           <RegisterScreen
-          onRegistered={() => setScreen('main')}
-          onGoToLogin={() => setScreen('login')}
-        />
+            onRegistered={() => setScreen('main')}
+            onRequireVerification={(email) => {
+              setPendingVerificationEmail(email);
+              setScreen('verifyOtp');
+            }}
+            onGoToLogin={() => setScreen('login')}
+          />
+        </FadeSlideIn>
+      );
+    }
+
+    if (screen === 'verifyOtp') {
+      return (
+        <FadeSlideIn key='verifyOtp' duration={220} style={{ flex: 1 }}>
+          <VerifyOtpScreen
+            email={pendingVerificationEmail}
+            onVerified={() => setScreen('main')}
+            onBack={() => setScreen('register')}
+          />
         </FadeSlideIn>
       );
     }

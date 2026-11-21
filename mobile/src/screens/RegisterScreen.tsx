@@ -24,15 +24,17 @@ import { colors, fontFamilies, gradients } from '../theme';
 
 type Props = {
   onRegistered: () => void;
+  onRequireVerification: (email: string) => void;
   onGoToLogin: () => void;
 };
 
-export default function RegisterScreen({ onRegistered, onGoToLogin }: Props) {
+export default function RegisterScreen({ onRegistered, onRequireVerification, onGoToLogin }: Props) {
   const insets = useSafeAreaInsets();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [parentConsentChecked, setParentConsentChecked] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
@@ -58,20 +60,35 @@ export default function RegisterScreen({ onRegistered, onGoToLogin }: Props) {
       setErrorMsg('Please fill in both email and password.');
       return;
     }
-    if (password.length < 6) {
-      setErrorMsg('Password must be at least 6 characters.');
+    if (password.length < 8) {
+      setErrorMsg('Password must be at least 8 characters long.');
       return;
     }
     if (confirmPassword && password !== confirmPassword) {
       setErrorMsg('Passwords do not match.');
       return;
     }
+    if (!parentConsentChecked) {
+      setErrorMsg('Please confirm you are an adult parent or legal guardian.');
+      return;
+    }
 
     setLoading(true);
     try {
       const result = await register(email.trim(), password);
-      await saveToken(result.session.access_token, result.userId, email.trim());
-      onRegistered();
+      if (result.needsVerification) {
+        onRequireVerification(email.trim());
+      } else if (result.session) {
+        await saveToken(
+          result.session.access_token,
+          result.userId,
+          email.trim(),
+          result.session.refresh_token
+        );
+        onRegistered();
+      } else {
+        onRequireVerification(email.trim());
+      }
     } catch (err: any) {
       setErrorMsg(err.message || 'Registration failed. Please try again.');
     } finally {
@@ -198,7 +215,7 @@ export default function RegisterScreen({ onRegistered, onGoToLogin }: Props) {
               >
                 <TextInput
                   style={[styles.input, { flex: 1 }]}
-                  placeholder="Min 6 characters"
+                  placeholder="Min 8 characters"
                   placeholderTextColor={colors.subtext}
                   secureTextEntry={!showPassword}
                   value={password}
@@ -219,7 +236,7 @@ export default function RegisterScreen({ onRegistered, onGoToLogin }: Props) {
           </FadeSlideIn>
 
           {/* Confirm Password Field */}
-          <FadeSlideIn delay={160}>
+          <FadeSlideIn delay={150}>
             <View style={styles.field}>
               <Text style={styles.fieldLabel}>Confirm Password</Text>
               <View
@@ -252,6 +269,28 @@ export default function RegisterScreen({ onRegistered, onGoToLogin }: Props) {
                 </Pressable>
               </View>
             </View>
+          </FadeSlideIn>
+
+          {/* Parental Consent Checkbox & COPPA Notice */}
+          <FadeSlideIn delay={170}>
+            <Pressable
+              style={styles.consentRow}
+              onPress={() => setParentConsentChecked((prev) => !prev)}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: parentConsentChecked }}
+            >
+              <View style={[styles.checkbox, parentConsentChecked && styles.checkboxChecked]}>
+                {parentConsentChecked && <Text style={styles.checkmark}>✓</Text>}
+              </View>
+              <Text style={styles.consentText}>
+                I confirm I am an adult parent or legal guardian (Age 18+).
+              </Text>
+            </Pressable>
+            <Text style={styles.termsNote}>
+              By creating an account, you agree to Kidsko's{' '}
+              <Text style={styles.legalLink}>Terms of Service</Text> and{' '}
+              <Text style={styles.legalLink}>Privacy Policy</Text>.
+            </Text>
           </FadeSlideIn>
 
           {/* Error notification */}
@@ -440,6 +479,52 @@ const styles = StyleSheet.create({
     width: '100%',
     marginTop: 6,
     marginBottom: 16,
+  },
+  consentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: colors.coralStrong,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  checkboxChecked: {
+    backgroundColor: colors.coralStrong,
+  },
+  checkmark: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  consentText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: fontFamilies.bold,
+    color: colors.text,
+    lineHeight: 18,
+  },
+  termsNote: {
+    fontSize: 12,
+    fontFamily: fontFamilies.regular,
+    color: colors.subtext,
+    lineHeight: 17,
+    paddingHorizontal: 4,
+    marginBottom: 12,
+  },
+  legalLink: {
+    color: colors.coralStrong,
+    fontFamily: fontFamilies.bold,
+    textDecorationLine: 'underline',
   },
   switchLink: {
     alignItems: 'center',
