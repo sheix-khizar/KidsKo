@@ -21,7 +21,7 @@ async function createExponentsWorksheetBuffer(): Promise<Buffer> {
 
 async function runMathToneTest() {
   console.log('🧪 =================================================================');
-  console.log('🦉 TESTING KIDS KO MATH EXPLANATION TONE & JARGON ELIMINATION');
+  console.log('✨ TESTING KIDS KO MATH EXPLANATION TONE & JARGON ELIMINATION');
   console.log('🧪 =================================================================\n');
 
   const testImageBuffer = await createExponentsWorksheetBuffer();

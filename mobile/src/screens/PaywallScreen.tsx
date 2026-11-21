@@ -18,6 +18,7 @@ import { colors, radii, spacing, typography, fontFamilies, gradients, shadows } 
 import { LinearGradient } from '../ui/LinearGradient';
 import { PressScale, FadeSlideIn, Bounce } from '../ui/motion';
 import { useSafeAreaInsets } from '../ui/safeArea';
+import { AskieCompanion } from '../ui/AskieCompanion';
 
 type Props = { onBack: () => void; onPurchased: () => void };
 
@@ -112,14 +113,9 @@ export default function PaywallScreen({ onBack, onPurchased }: Props) {
       <FadeSlideIn delay={0}>
         <View style={styles.header}>
           <Bounce>
-            <LinearGradient
-              colors={gradients.primary.colors}
-              start={gradients.primary.start}
-              end={gradients.primary.end}
-              style={styles.mascotBadge}
-            >
-              <Text style={styles.mascotEmoji}>🦉</Text>
-            </LinearGradient>
+            <View style={{ marginBottom: 12 }}>
+              <AskieCompanion size="m" state="celebrate" />
+            </View>
           </Bounce>
           <Text style={styles.title}>Unlock Kidsko Premium</Text>
           <Text style={styles.subtitle}>

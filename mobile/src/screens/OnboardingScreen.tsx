@@ -357,9 +357,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
           <ScrollView contentContainerStyle={styles.scrollPad} keyboardShouldPersistTaps="handled">
             <FadeSlideIn delay={40}>
               <View style={styles.mascotBubbleRow}>
-                <View style={styles.mascotBadge}>
-                  <Text style={styles.mascotEmoji}>🦉</Text>
-                </View>
+                <AskieCompanion size="s" state="speaking" style={{ marginRight: 10 }} />
                 <View style={styles.mascotBubble}>
                   <Text style={styles.mascotBubbleText}>
                     {isNameValid ? `Nice to meet you, ${firstName}! 🎉` : "What's your child's name?"}
@@ -440,9 +438,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
         <ScrollView contentContainerStyle={styles.scrollPad}>
           <FadeSlideIn delay={40}>
             <View style={styles.mascotBubbleRow}>
-              <View style={styles.mascotBadge}>
-                <Text style={styles.mascotEmoji}>🦉</Text>
-              </View>
+              <AskieCompanion size="s" state="speaking" style={{ marginRight: 10 }} />
               <View style={styles.mascotBubble}>
                 <Text style={styles.mascotBubbleText}>How old is {firstName}?</Text>
               </View>
@@ -521,9 +517,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
         <ScrollView contentContainerStyle={styles.scrollPad}>
           <FadeSlideIn delay={40}>
             <View style={styles.mascotBubbleRow}>
-              <View style={styles.mascotBadge}>
-                <Text style={styles.mascotEmoji}>🦉</Text>
-              </View>
+              <AskieCompanion size="s" state="speaking" style={{ marginRight: 10 }} />
               <View style={styles.mascotBubble}>
                 <Text style={styles.mascotBubbleText}>What does {firstName} love learning about?</Text>
               </View>
@@ -770,9 +764,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
         <ScrollView contentContainerStyle={styles.scrollPad}>
           <FadeSlideIn delay={40}>
             <View style={styles.mascotBubbleRow}>
-              <View style={styles.mascotBadge}>
-                <Text style={styles.mascotEmoji}>🦉</Text>
-              </View>
+              <AskieCompanion size="s" state="speaking" style={{ marginRight: 10 }} />
               <View style={styles.mascotBubble}>
                 <Text style={styles.mascotBubbleText}>I need a few permissions to help in all the ways!</Text>
               </View>
@@ -864,8 +856,8 @@ export default function OnboardingScreen({ onFinish }: Props) {
         <ScrollView contentContainerStyle={[styles.scrollPad, { alignItems: 'center' }]}>
           <FadeSlideIn delay={40}>
             <Bounce>
-              <View style={styles.doneMascotBox}>
-                <Text style={{ fontSize: 60 }}>🦉</Text>
+              <View style={[styles.doneMascotBox, { backgroundColor: 'transparent', borderWidth: 0 }]}>
+                <AskieCompanion size="l" state="celebrate" />
               </View>
             </Bounce>
 
@@ -955,8 +947,8 @@ export default function OnboardingScreen({ onFinish }: Props) {
               onPress={() => setStep('kid-tour')}
               style={[styles.tourCard, { borderColor: 'rgba(255, 107, 107, 0.4)' }]}
             >
-              <View style={[styles.tourCardIcon, { backgroundColor: '#FFE8E8' }]}>
-                <Text style={{ fontSize: 32 }}>🦉</Text>
+              <View style={[styles.tourCardIcon, { backgroundColor: 'transparent' }]}>
+                <AskieCompanion size="s" state="idle" />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.tourCardTitle}>{firstName}'s tour</Text>
@@ -1003,7 +995,8 @@ export default function OnboardingScreen({ onFinish }: Props) {
   if (step === 'kid-tour') {
     const slides = [
       {
-        emoji: '🦉',
+        isMascot: true,
+        emoji: '✨',
         title: `Hi ${firstName}! I'm Kidsko!`,
         desc: "I'm your friendly AI teacher. Ask me anything and I'll explain it in a fun, easy way.",
       },
@@ -1047,8 +1040,12 @@ export default function OnboardingScreen({ onFinish }: Props) {
 
         <View style={styles.carouselStage}>
           <FadeSlideIn key={kidTourIndex} delay={0}>
-            <View style={styles.tourMascotCard}>
-              <Text style={{ fontSize: 90 }}>{cur.emoji}</Text>
+            <View style={[styles.tourMascotCard, cur.isMascot && { backgroundColor: 'transparent', elevation: 0, shadowOpacity: 0 }]}>
+              {cur.isMascot ? (
+                <AskieCompanion size="xl" state="celebrate" />
+              ) : (
+                <AskieEmoji emoji={cur.emoji} size={72} effect="bounce" />
+              )}
             </View>
             <Text style={styles.tourSlideTitle}>{cur.title}</Text>
             <Text style={styles.tourSlideDesc}>{cur.desc}</Text>
@@ -1228,8 +1225,8 @@ export default function OnboardingScreen({ onFinish }: Props) {
               </View>
 
               <View style={styles.workflowStep}>
-                <View style={[styles.workflowBadge, { backgroundColor: '#F3EEFF' }]}>
-                  <Text style={{ fontSize: 24 }}>🦉</Text>
+                <View style={[styles.workflowBadge, { backgroundColor: 'transparent' }]}>
+                  <AskieCompanion size="s" state="speaking" />
                 </View>
                 <View style={styles.workflowContent}>
                   <Text style={styles.workflowTitle}>3. Kidsko explains</Text>

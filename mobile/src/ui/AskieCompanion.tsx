@@ -12,17 +12,19 @@ import { LinearGradient } from './LinearGradient';
 import { useReduceMotion } from './motion';
 
 export type CompanionState = 'idle' | 'listening' | 'speaking' | 'thinking' | 'celebrate';
-export type CompanionSize = 's' | 'm' | 'l' | 'xl';
+export type CompanionSize = 'xs' | 's' | 'm' | 'l' | 'xl';
 
 type Props = {
   state?: CompanionState;
   size?: CompanionSize;
+  shape?: 'squircle' | 'circle';
   interactive?: boolean;
   onPress?: () => void;
   style?: ViewStyle;
 };
 
 const SIZE_CONFIG: Record<CompanionSize, { container: number; radius: number; eyeSize: number; beakSize: number }> = {
+  xs: { container: 34, radius: 11, eyeSize: 9, beakSize: 6 },
   s: { container: 48, radius: 16, eyeSize: 14, beakSize: 8 },
   m: { container: 80, radius: 26, eyeSize: 22, beakSize: 12 },
   l: { container: 130, radius: 42, eyeSize: 34, beakSize: 18 },
@@ -36,12 +38,14 @@ const SIZE_CONFIG: Record<CompanionSize, { container: number; radius: number; ey
 export function AskieCompanion({
   state = 'idle',
   size = 'm',
+  shape = 'squircle',
   interactive = true,
   onPress,
   style,
 }: Props) {
   const reduceMotion = useReduceMotion();
   const config = SIZE_CONFIG[size] || SIZE_CONFIG.m;
+  const effectiveRadius = shape === 'circle' ? config.container / 2 : config.radius;
 
   // Animation values
   const floatAnim = useRef(new Animated.Value(0)).current;
@@ -301,12 +305,12 @@ export function AskieCompanion({
             {
               width: config.container,
               height: config.container,
-              borderRadius: config.radius,
+              borderRadius: effectiveRadius,
             },
           ]}
         >
           {/* 3D Specular Lighting / Sheen */}
-          <View style={[styles.avatarSheen, { borderRadius: config.radius - 2 }]} />
+          <View style={[styles.avatarSheen, { borderRadius: effectiveRadius - 2 }]} />
 
           {/* Cute Tuft / Ear Accent */}
           <View style={[styles.earAccentL, { top: -config.container * 0.08 }]} />

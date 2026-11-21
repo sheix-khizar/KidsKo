@@ -186,7 +186,7 @@ export default function TranscriptScreen({ studentId, studentName, threadId, thr
                       isUser ? styles.userRoleLabel : styles.assistantRoleLabel,
                     ]}
                   >
-                    {isUser ? `🧒 ${studentName}` : '🦉 Kidsko'}
+                    {isUser ? `🧒 ${studentName}` : '✨ Kidsko'}
                   </Text>
                   <Text style={styles.timeText}>{timeStr}</Text>
                 </View>

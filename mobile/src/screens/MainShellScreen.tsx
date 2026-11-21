@@ -21,6 +21,7 @@ import { configureBilling, isPremiumActive } from '../services/billing';
 import { TabBar, TabKey } from '../ui/TabBar';
 import { LinearGradient } from '../ui/LinearGradient';
 import { Screen, Mascot, Button, Card, Pill, FadeSlideIn, Bounce, PressScale } from '../ui';
+import { AskieCompanion } from '../ui/AskieCompanion';
 import { colors, radii, typography, spacing, gradients } from '../theme';
 
 export type Student = { id: string; student_name: string };
@@ -183,7 +184,8 @@ export default function MainShellScreen({
       {tab === 'call' && (
       <View style={[styles.shellHeader, { paddingTop: spacing.sm }]}>
         <View style={styles.brandRow}>
-          <Text style={styles.brandText}>Kidsko.ai 🦉</Text>
+          <AskieCompanion size="xs" state="idle" style={{ marginRight: 8 }} />
+          <Text style={styles.brandText}>Kidsko.ai</Text>
         </View>
 
         {activeStudent && (

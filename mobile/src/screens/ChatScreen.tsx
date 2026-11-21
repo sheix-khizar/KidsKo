@@ -829,8 +829,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 24,
   },
-  heroOwlEmoji: {
-    fontSize: 52,
+  heroMascotBadge: {
     marginBottom: 8,
   },
   heroTitle: {

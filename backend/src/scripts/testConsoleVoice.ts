@@ -133,7 +133,7 @@ async function runConsoleVoiceTest() {
     }
 
     if (ws.readyState === WebSocket.OPEN && line.trim().length > 0) {
-      console.log(`\n🦉 Kidsko: `);
+      console.log(`\n✨ Kidsko: `);
       ws.send(JSON.stringify({ type: 'text_prompt', data: line.trim() }));
     }
   });
