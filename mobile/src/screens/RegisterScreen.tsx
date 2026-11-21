@@ -60,6 +60,15 @@ export default function RegisterScreen({ onRegistered, onRequireVerification, on
       setErrorMsg('Please fill in both email and password.');
       return;
     }
+    const cleanEmail = email.trim().toLowerCase();
+    if (
+      cleanEmail.endsWith('@gmail.cm') ||
+      cleanEmail.endsWith('@gmai.com') ||
+      cleanEmail.endsWith('@gamil.com')
+    ) {
+      setErrorMsg('Did you mean @gmail.com? Please check your email spelling.');
+      return;
+    }
     if (password.length < 8) {
       setErrorMsg('Password must be at least 8 characters long.');
       return;

@@ -54,8 +54,19 @@ router.post('/register', authAttemptLimiter, async (req: Request, res: Response)
   }
 
   const trimmedEmail = email.trim().toLowerCase();
-  if (!trimmedEmail.includes('@') || !trimmedEmail.includes('.')) {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(trimmedEmail)) {
     return res.status(400).json({ error: 'Please enter a valid email address' });
+  }
+
+  // Common email domain typos check to prevent failed OTP deliveries
+  if (
+    trimmedEmail.endsWith('@gmail.cm') ||
+    trimmedEmail.endsWith('@gmai.com') ||
+    trimmedEmail.endsWith('@gamil.com') ||
+    trimmedEmail.endsWith('@gmial.com')
+  ) {
+    return res.status(400).json({ error: 'Did you mean @gmail.com? Please check your email spelling.' });
   }
 
   if (password.length < 8) {
