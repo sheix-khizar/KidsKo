@@ -2,6 +2,7 @@ import { colors, fontFamilies, gradients } from '../theme';
 import { LinearGradient } from '../ui/LinearGradient';
 import { Pulse, WaveBars, LiveDot, PressScale } from '../ui/motion';
 import { Mascot } from '../ui/Mascot';
+import { AskieCompanion } from '../ui/AskieCompanion';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, ActivityIndicator, AppState, AppStateStatus } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission, usePhotoOutput } from 'react-native-vision-camera';
@@ -312,12 +313,12 @@ export default function LiveVoiceScreen({ studentId, studentName, initialMode = 
               {voiceState === 'speaking' ? (
                 <>
                   <Pressable
-                    style={[styles.avatarCircle, styles.avatarSpeaking, { overflow: 'visible', borderWidth: 0, backgroundColor: 'transparent' }]}
+                    style={[styles.avatarCircle, { overflow: 'visible', borderWidth: 0, backgroundColor: 'transparent' }]}
                     onPress={handleInterrupt}
                     accessibilityRole="button"
                     accessibilityLabel="Stop Kidsko talking"
                   >
-                    <Mascot size="l" shape="circle" />
+                    <AskieCompanion size="l" state="speaking" />
                     <View style={styles.speakingBadge}>
                       <Text style={styles.speakingBadgeText}>Kidsko is talking… (Tap to speak)</Text>
                     </View>
@@ -334,13 +335,15 @@ export default function LiveVoiceScreen({ studentId, studentName, initialMode = 
                   </PressScale>
                 </>
               ) : voiceState === 'thinking' ? (
-                <View style={[styles.avatarCircle, styles.avatarThinking]}>
-                  <ActivityIndicator size="large" color="#FFE66D" />
-                  <Text style={styles.thinkingText}>Thinking…</Text>
+                <View style={[styles.avatarCircle, { overflow: 'visible', borderWidth: 0, backgroundColor: 'transparent' }]}>
+                  <AskieCompanion size="l" state="thinking" />
+                  <View style={[styles.listeningBadge, { backgroundColor: '#FDCB6E' }]}>
+                    <Text style={[styles.listeningBadgeText, { color: '#2D3436' }]}>Thinking…</Text>
+                  </View>
                 </View>
               ) : (
-                <View style={[styles.avatarCircle, styles.avatarListening]}>
-                  <Text style={styles.avatarEmoji}>🎙️</Text>
+                <View style={[styles.avatarCircle, { overflow: 'visible', borderWidth: 0, backgroundColor: 'transparent' }]}>
+                  <AskieCompanion size="l" state="listening" />
                   <View style={styles.listeningBadge}>
                     <Text style={styles.listeningBadgeText}>Listening…</Text>
                   </View>

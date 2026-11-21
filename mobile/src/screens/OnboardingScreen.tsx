@@ -18,6 +18,8 @@ import {
   FadeSlideIn,
   Bounce,
   Mascot,
+  AskieEmoji,
+  AskieCompanion,
   useSafeAreaInsets,
 } from '../ui';
 import { colors, fontFamilies, gradients } from '../theme';
@@ -239,9 +241,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
         <ScrollView contentContainerStyle={styles.scrollPad} showsVerticalScrollIndicator={false}>
           <FadeSlideIn delay={40}>
             <View style={styles.mascotBubbleRow}>
-              <View style={styles.mascotBadge}>
-                <Text style={styles.mascotEmoji}>🦉</Text>
-              </View>
+              <AskieCompanion size="s" state="idle" style={{ marginRight: 10 }} />
               <View style={styles.mascotBubble}>
                 <Text style={styles.mascotBubbleText}>Hi, grown-up! Let's set up Kidsko for your child.</Text>
               </View>
@@ -542,7 +542,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
                     onPress={() => toggleInterest(item.label)}
                     style={[styles.interestChip, isSel && styles.interestChipSelected]}
                   >
-                    <Text style={styles.interestChipEmoji}>{item.emoji}</Text>
+                    <AskieEmoji emoji={item.emoji} size={20} effect={isSel ? 'bounce' : 'none'} style={{ marginRight: 6 }} />
                     <Text style={[styles.interestChipLabel, isSel && styles.interestChipLabelSelected]}>
                       {item.label}
                     </Text>

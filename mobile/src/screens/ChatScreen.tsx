@@ -20,6 +20,10 @@ import {
   PressScale,
   FadeSlideIn,
   Mascot,
+  AskieEmoji,
+  AskieCompanion,
+  AskieReactionOverlay,
+  triggerAskieReaction,
 } from '../ui';
 import { sendMessage, Message } from '../services/chat';
 import { analyzeHomework } from '../services/homework';
@@ -390,8 +394,11 @@ export default function ChatScreen({
               end={gradients.primary.end}
               style={styles.heroCard}
             >
-              <Mascot size="m" shape="squircle" style={{ marginBottom: 12 }} />
-              <Text style={styles.heroTitle}>Hi {studentName}! 👋</Text>
+              <AskieCompanion size="m" state="idle" style={{ marginBottom: 12 }} />
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={styles.heroTitle}>Hi {studentName}!</Text>
+                <AskieEmoji emoji="👋" size={24} effect="wiggle" style={{ marginLeft: 6 }} />
+              </View>
               <Text style={styles.heroSubtitle}>
                 I'm Kidsko! What do you want to learn today?
               </Text>
@@ -407,6 +414,7 @@ export default function ChatScreen({
                   <Pressable
                     style={styles.promptCard}
                     onPress={() => {
+                      triggerAskieReaction(card.icon);
                       if (card.isHomework) {
                         setShowImagePickerModal(true);
                       } else {
@@ -416,7 +424,7 @@ export default function ChatScreen({
                     accessibilityRole="button"
                     accessibilityLabel={card.text}
                   >
-                    <Text style={styles.promptCardIcon}>{card.icon}</Text>
+                    <AskieEmoji emoji={card.icon} size={28} effect="bounce" interactive />
                     <Text style={styles.promptCardText}>{card.text}</Text>
                   </Pressable>
                 </PressScale>
@@ -642,6 +650,9 @@ export default function ChatScreen({
           setShowDrawer(true);
         }}
       />
+
+      {/* Floating 3D Emoji Celebration Overlay */}
+      <AskieReactionOverlay />
     </KeyboardAvoidingView>
   );
 }
