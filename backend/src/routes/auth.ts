@@ -315,7 +315,7 @@ router.get('/me', requireAuth, async (req: Request, res: Response) => {
   });
 });
 
-// PUT /api/auth/password (Update parent account password)
+// PUT /api/auth/password (Update parent account password - legacy direct update)
 router.put('/password', requireAuth, async (req: Request, res: Response) => {
   const parentId = req.user!.id;
   const parentEmail = req.user!.email;
@@ -351,7 +351,86 @@ router.put('/password', requireAuth, async (req: Request, res: Response) => {
   return res.status(200).json({ success: true, message: 'Password updated successfully' });
 });
 
-// PUT /api/auth/email (Update parent account email / Gmail)
+// POST /api/auth/password/request-otp (Step 1: Verify current password & send OTP to parent's email)
+router.post('/password/request-otp', requireAuth, authAttemptLimiter, async (req: Request, res: Response) => {
+  const parentEmail = req.user!.email;
+  const { currentPassword, newPassword } = req.body || {};
+
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'Current password and new password are required' });
+  }
+
+  if (newPassword.length < 8) {
+    return res.status(400).json({ error: 'New password must be at least 8 characters long' });
+  }
+
+  // 1. Verify current password
+  const { error: pwdErr } = await supabase.auth.signInWithPassword({
+    email: parentEmail,
+    password: currentPassword,
+  });
+
+  if (pwdErr) {
+    return res.status(401).json({ error: 'Current password is incorrect' });
+  }
+
+  // 2. Dispatch recovery OTP to registered parent email
+  const authClient = createEphemeralAuthClient();
+  const { error: resetErr } = await authClient.auth.resetPasswordForEmail(parentEmail);
+
+  if (resetErr) {
+    return res.status(500).json({ error: 'Failed to send verification code: ' + resetErr.message });
+  }
+
+  return res.status(200).json({
+    success: true,
+    message: `Verification code sent to ${parentEmail}`,
+  });
+});
+
+// POST /api/auth/password/confirm-otp (Step 2: Verify OTP & commit new password)
+router.post('/password/confirm-otp', requireAuth, authAttemptLimiter, async (req: Request, res: Response) => {
+  const parentId = req.user!.id;
+  const parentEmail = req.user!.email;
+  const { token, newPassword } = req.body || {};
+
+  if (!token || !newPassword) {
+    return res.status(400).json({ error: 'Verification code and new password are required' });
+  }
+
+  if (newPassword.length < 8) {
+    return res.status(400).json({ error: 'New password must be at least 8 characters long' });
+  }
+
+  const authClient = createEphemeralAuthClient();
+
+  // 1. Verify recovery OTP
+  const { data, error } = await authClient.auth.verifyOtp({
+    email: parentEmail,
+    token: token.trim(),
+    type: 'recovery',
+  });
+
+  if (error || !data.user) {
+    return res.status(400).json({ error: 'Invalid or expired verification code. Please request a new one.' });
+  }
+
+  // 2. Set new password via admin client
+  const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(parentId, {
+    password: newPassword,
+  });
+
+  if (updateErr) {
+    return res.status(500).json({ error: 'Failed to update password: ' + updateErr.message });
+  }
+
+  return res.status(200).json({
+    success: true,
+    message: 'Password updated successfully',
+  });
+});
+
+// PUT /api/auth/email (Update parent account email / Gmail - legacy direct update)
 router.put('/email', requireAuth, async (req: Request, res: Response) => {
   const parentId = req.user!.id;
   const parentEmail = req.user!.email;
@@ -391,6 +470,131 @@ router.put('/email', requireAuth, async (req: Request, res: Response) => {
   await dbClient.from('profiles').update({ email: trimmedEmail }).eq('id', parentId);
 
   return res.status(200).json({ success: true, email: trimmedEmail, message: 'Email updated successfully' });
+});
+
+// POST /api/auth/email/request-otp (Step 1: Verify current password & send OTP to new email)
+router.post('/email/request-otp', requireAuth, authAttemptLimiter, async (req: Request, res: Response) => {
+  const parentId = req.user!.id;
+  const parentEmail = req.user!.email;
+  const { password, newEmail } = req.body || {};
+
+  if (!password || !newEmail) {
+    return res.status(400).json({ error: 'Password and new email are required' });
+  }
+
+  const trimmedEmail = newEmail.trim().toLowerCase();
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(trimmedEmail)) {
+    return res.status(400).json({ error: 'Please enter a valid email address' });
+  }
+
+  if (
+    trimmedEmail.endsWith('@gmail.cm') ||
+    trimmedEmail.endsWith('@gmai.com') ||
+    trimmedEmail.endsWith('@gamil.com') ||
+    trimmedEmail.endsWith('@gmial.com')
+  ) {
+    return res.status(400).json({ error: 'Did you mean @gmail.com? Please check your email spelling.' });
+  }
+
+  if (trimmedEmail === parentEmail.toLowerCase()) {
+    return res.status(400).json({ error: 'New email must be different from your current email' });
+  }
+
+  // 1. Verify current account password
+  const { error: pwdErr } = await supabase.auth.signInWithPassword({
+    email: parentEmail,
+    password,
+  });
+
+  if (pwdErr) {
+    return res.status(401).json({ error: 'Incorrect password' });
+  }
+
+  // 2. Check if new email is already in use by another account
+  const dbClient = supabaseAdmin || supabase;
+  const { data: existingProfile } = await dbClient
+    .from('profiles')
+    .select('id')
+    .eq('email', trimmedEmail)
+    .maybeSingle();
+
+  if (existingProfile && existingProfile.id !== parentId) {
+    return res.status(400).json({ error: 'This email is already associated with another account.' });
+  }
+
+  // 3. Dispatch OTP to the new email address
+  const authClient = createEphemeralAuthClient();
+  const { error: otpErr } = await authClient.auth.signInWithOtp({
+    email: trimmedEmail,
+  });
+
+  if (otpErr) {
+    return res.status(500).json({ error: 'Failed to send verification code to new email: ' + otpErr.message });
+  }
+
+  return res.status(200).json({
+    success: true,
+    message: `Verification code sent to ${trimmedEmail}`,
+  });
+});
+
+// POST /api/auth/email/confirm-otp (Step 2: Verify OTP sent to new email & commit email change)
+router.post('/email/confirm-otp', requireAuth, authAttemptLimiter, async (req: Request, res: Response) => {
+  const parentId = req.user!.id;
+  const { newEmail, token } = req.body || {};
+
+  if (!newEmail || !token) {
+    return res.status(400).json({ error: 'New email and verification code are required' });
+  }
+
+  const trimmedEmail = newEmail.trim().toLowerCase();
+  const trimmedToken = token.trim();
+
+  const authClient = createEphemeralAuthClient();
+
+  // 1. Verify OTP for the new email address
+  const { data: verifyData, error: verifyErr } = await authClient.auth.verifyOtp({
+    email: trimmedEmail,
+    token: trimmedToken,
+    type: 'email',
+  });
+
+  if (verifyErr || !verifyData?.user) {
+    return res.status(400).json({
+      error: 'Invalid or expired verification code. Please check the code and try again.',
+    });
+  }
+
+  // 2. Clean up temporary shadow user if signInWithOtp created one
+  const tempUserId = verifyData.user.id;
+  if (tempUserId && tempUserId !== parentId) {
+    try {
+      await supabaseAdmin.auth.admin.deleteUser(tempUserId);
+    } catch (delErr: any) {
+      console.warn('[Email Change Temp User Cleanup Warning]:', delErr?.message);
+    }
+  }
+
+  // 3. Update parent email in Supabase Auth and mark confirmed
+  const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(parentId, {
+    email: trimmedEmail,
+    email_confirm: true,
+  });
+
+  if (updateErr) {
+    return res.status(500).json({ error: 'Failed to update email: ' + updateErr.message });
+  }
+
+  // 4. Update profiles table
+  const dbClient = supabaseAdmin || supabase;
+  await dbClient.from('profiles').update({ email: trimmedEmail }).eq('id', parentId);
+
+  return res.status(200).json({
+    success: true,
+    email: trimmedEmail,
+    message: 'Email updated successfully',
+  });
 });
 
 // DELETE /api/auth/account (Category 2: Password-verified Complete Account Deletion - App Store 5.1.1 compliant)

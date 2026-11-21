@@ -25,6 +25,10 @@ import {
   clearToken,
   updateParentPassword,
   updateParentEmail,
+  requestPasswordChangeOtp,
+  confirmPasswordChangeOtp,
+  requestEmailChangeOtp,
+  confirmEmailChangeOtp,
   getCurrentUserEmail,
   StudentMemoryData,
   getStudentActivity,
@@ -95,18 +99,36 @@ export default function ParentsHub({
   // Parent Account Management State
   const [parentEmail, setParentEmail] = useState<string>('');
   const [changePasswordModalVisible, setChangePasswordModalVisible] = useState<boolean>(false);
+  const [passwordStep, setPasswordStep] = useState<'form' | 'otp'>('form');
   const [currentPasswordInput, setCurrentPasswordInput] = useState<string>('');
   const [newPasswordInput, setNewPasswordInput] = useState<string>('');
   const [confirmPasswordInput, setConfirmPasswordInput] = useState<string>('');
+  const [passwordOtpInput, setPasswordOtpInput] = useState<string>('');
+  const [passwordResendTimer, setPasswordResendTimer] = useState<number>(0);
   const [updatingPassword, setUpdatingPassword] = useState<boolean>(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
   const [changeEmailModalVisible, setChangeEmailModalVisible] = useState<boolean>(false);
+  const [emailStep, setEmailStep] = useState<'form' | 'otp'>('form');
   const [newEmailInput, setNewEmailInput] = useState<string>('');
   const [confirmEmailInput, setConfirmEmailInput] = useState<string>('');
   const [emailPasswordInput, setEmailPasswordInput] = useState<string>('');
+  const [emailOtpInput, setEmailOtpInput] = useState<string>('');
+  const [emailResendTimer, setEmailResendTimer] = useState<number>(0);
   const [updatingEmail, setUpdatingEmail] = useState<boolean>(false);
   const [emailError, setEmailError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (passwordResendTimer <= 0) return;
+    const t = setInterval(() => setPasswordResendTimer((c) => Math.max(0, c - 1)), 1000);
+    return () => clearInterval(t);
+  }, [passwordResendTimer]);
+
+  useEffect(() => {
+    if (emailResendTimer <= 0) return;
+    const t = setInterval(() => setEmailResendTimer((c) => Math.max(0, c - 1)), 1000);
+    return () => clearInterval(t);
+  }, [emailResendTimer]);
 
   useEffect(() => {
     getCurrentUserEmail().then((em) => {
@@ -481,14 +503,14 @@ export default function ParentsHub({
     }
   };
 
-  // Parent Password Update Action
-  const handleUpdatePassword = async () => {
+  // Parent Password Update Action (Step 1: Request OTP)
+  const handleRequestPasswordOtp = async () => {
     if (!currentPasswordInput) {
       setPasswordError('Please enter your current password.');
       return;
     }
-    if (!newPasswordInput || newPasswordInput.length < 6) {
-      setPasswordError('New password must be at least 6 characters.');
+    if (!newPasswordInput || newPasswordInput.length < 8) {
+      setPasswordError('New password must be at least 8 characters.');
       return;
     }
     if (newPasswordInput !== confirmPasswordInput) {
@@ -498,25 +520,57 @@ export default function ParentsHub({
     setUpdatingPassword(true);
     setPasswordError(null);
     try {
-      await updateParentPassword(currentPasswordInput, newPasswordInput);
-      setChangePasswordModalVisible(false);
-      setCurrentPasswordInput('');
-      setNewPasswordInput('');
-      setConfirmPasswordInput('');
-      Alert.alert('Password Updated', 'Your parent account password has been updated successfully.');
+      await requestPasswordChangeOtp(currentPasswordInput, newPasswordInput);
+      setPasswordStep('otp');
+      setPasswordOtpInput('');
+      setPasswordResendTimer(30);
     } catch (err: any) {
-      setPasswordError(err?.message || 'Failed to update password.');
+      setPasswordError(err?.message || 'Failed to send verification code.');
     } finally {
       setUpdatingPassword(false);
     }
   };
 
-  // Parent Email Update Action
-  const handleUpdateEmail = async () => {
+  // Parent Password Update Action (Step 2: Verify OTP & Change Password)
+  const handleConfirmPasswordOtp = async () => {
+    const trimmedOtp = passwordOtpInput.trim();
+    if (!trimmedOtp || trimmedOtp.length < 6) {
+      setPasswordError('Please enter the verification code sent to your email.');
+      return;
+    }
+    setUpdatingPassword(true);
+    setPasswordError(null);
+    try {
+      await confirmPasswordChangeOtp(trimmedOtp, newPasswordInput);
+      setChangePasswordModalVisible(false);
+      setPasswordStep('form');
+      setCurrentPasswordInput('');
+      setNewPasswordInput('');
+      setConfirmPasswordInput('');
+      setPasswordOtpInput('');
+      Alert.alert('Password Updated', 'Your parent account password has been updated successfully.');
+    } catch (err: any) {
+      setPasswordError(err?.message || 'Invalid or expired verification code.');
+    } finally {
+      setUpdatingPassword(false);
+    }
+  };
+
+  // Parent Email Update Action (Step 1: Request OTP to new email)
+  const handleRequestEmailOtp = async () => {
     const trimmed = newEmailInput.trim().toLowerCase();
     const confirmTrimmed = confirmEmailInput.trim().toLowerCase();
     if (!trimmed || !trimmed.includes('@') || !trimmed.includes('.')) {
       setEmailError('Please enter a valid email address.');
+      return;
+    }
+    if (
+      trimmed.endsWith('@gmail.cm') ||
+      trimmed.endsWith('@gmai.com') ||
+      trimmed.endsWith('@gamil.com') ||
+      trimmed.endsWith('@gmial.com')
+    ) {
+      setEmailError('Did you mean @gmail.com? Please check your email spelling.');
       return;
     }
     if (trimmed !== confirmTrimmed) {
@@ -534,15 +588,39 @@ export default function ParentsHub({
     setUpdatingEmail(true);
     setEmailError(null);
     try {
-      const res = await updateParentEmail(emailPasswordInput, trimmed);
+      await requestEmailChangeOtp(emailPasswordInput, trimmed);
+      setEmailStep('otp');
+      setEmailOtpInput('');
+      setEmailResendTimer(30);
+    } catch (err: any) {
+      setEmailError(err?.message || 'Failed to send verification code.');
+    } finally {
+      setUpdatingEmail(false);
+    }
+  };
+
+  // Parent Email Update Action (Step 2: Verify OTP sent to new email & Commit)
+  const handleConfirmEmailOtp = async () => {
+    const trimmed = newEmailInput.trim().toLowerCase();
+    const trimmedOtp = emailOtpInput.trim();
+    if (!trimmedOtp || trimmedOtp.length < 6) {
+      setEmailError('Please enter the verification code sent to your new email.');
+      return;
+    }
+    setUpdatingEmail(true);
+    setEmailError(null);
+    try {
+      const res = await confirmEmailChangeOtp(trimmed, trimmedOtp);
       setParentEmail(res.email);
       setChangeEmailModalVisible(false);
+      setEmailStep('form');
       setNewEmailInput('');
       setConfirmEmailInput('');
       setEmailPasswordInput('');
+      setEmailOtpInput('');
       Alert.alert('Email Updated', `Your account email has been updated to ${res.email}.`);
     } catch (err: any) {
-      setEmailError(err?.message || 'Failed to update email.');
+      setEmailError(err?.message || 'Invalid or expired verification code.');
     } finally {
       setUpdatingEmail(false);
     }
@@ -1346,6 +1424,8 @@ export default function ParentsHub({
                   setNewEmailInput('');
                   setConfirmEmailInput('');
                   setEmailPasswordInput('');
+                  setEmailOtpInput('');
+                  setEmailStep('form');
                   setEmailError(null);
                   setChangeEmailModalVisible(true);
                 }}
@@ -1369,6 +1449,8 @@ export default function ParentsHub({
                   setCurrentPasswordInput('');
                   setNewPasswordInput('');
                   setConfirmPasswordInput('');
+                  setPasswordOtpInput('');
+                  setPasswordStep('form');
                   setPasswordError(null);
                   setChangePasswordModalVisible(true);
                 }}
@@ -1697,70 +1779,150 @@ export default function ParentsHub({
               </TouchableOpacity>
             </View>
 
-            <Text style={{ fontSize: 13, fontFamily: fontFamilies.regular, color: colors.subtext, marginBottom: 14 }}>
-              Update your registered email / Gmail for parent sign-in and reports.
-            </Text>
+            {emailStep === 'form' ? (
+              <>
+                <Text style={{ fontSize: 13, fontFamily: fontFamilies.regular, color: colors.subtext, marginBottom: 14 }}>
+                  Enter your new email address and current password. We will send a verification code to verify the new email.
+                </Text>
 
-            <Text style={styles.modalFieldLabel}>New Email Address</Text>
-            <TextInput
-              style={styles.modalTextInput}
-              value={newEmailInput}
-              onChangeText={(t) => {
-                setNewEmailInput(t);
-                if (emailError) setEmailError(null);
-              }}
-              placeholder="e.g. parent@gmail.com"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              placeholderTextColor={colors.subtext}
-              editable={!updatingEmail}
-            />
+                <Text style={styles.modalFieldLabel}>New Email Address</Text>
+                <TextInput
+                  style={styles.modalTextInput}
+                  value={newEmailInput}
+                  onChangeText={(t) => {
+                    setNewEmailInput(t);
+                    if (emailError) setEmailError(null);
+                  }}
+                  placeholder="e.g. parent@gmail.com"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  placeholderTextColor={colors.subtext}
+                  editable={!updatingEmail}
+                />
 
-            <Text style={styles.modalFieldLabel}>Confirm New Email Address</Text>
-            <TextInput
-              style={styles.modalTextInput}
-              value={confirmEmailInput}
-              onChangeText={(t) => {
-                setConfirmEmailInput(t);
-                if (emailError) setEmailError(null);
-              }}
-              placeholder="Re-type new email"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              placeholderTextColor={colors.subtext}
-              editable={!updatingEmail}
-            />
+                <Text style={styles.modalFieldLabel}>Confirm New Email Address</Text>
+                <TextInput
+                  style={styles.modalTextInput}
+                  value={confirmEmailInput}
+                  onChangeText={(t) => {
+                    setConfirmEmailInput(t);
+                    if (emailError) setEmailError(null);
+                  }}
+                  placeholder="Re-type new email"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  placeholderTextColor={colors.subtext}
+                  editable={!updatingEmail}
+                />
 
-            <Text style={styles.modalFieldLabel}>Current Account Password</Text>
-            <TextInput
-              style={styles.modalTextInput}
-              value={emailPasswordInput}
-              onChangeText={(t) => {
-                setEmailPasswordInput(t);
-                if (emailError) setEmailError(null);
-              }}
-              placeholder="Enter password to confirm"
-              secureTextEntry
-              autoCapitalize="none"
-              placeholderTextColor={colors.subtext}
-              editable={!updatingEmail}
-            />
+                <Text style={styles.modalFieldLabel}>Current Account Password</Text>
+                <TextInput
+                  style={styles.modalTextInput}
+                  value={emailPasswordInput}
+                  onChangeText={(t) => {
+                    setEmailPasswordInput(t);
+                    if (emailError) setEmailError(null);
+                  }}
+                  placeholder="Enter password to confirm"
+                  secureTextEntry
+                  autoCapitalize="none"
+                  placeholderTextColor={colors.subtext}
+                  editable={!updatingEmail}
+                />
 
-            {emailError ? (
-              <Text style={styles.modalErrorText}>{emailError}</Text>
-            ) : null}
+                {emailError ? (
+                  <Text style={styles.modalErrorText}>{emailError}</Text>
+                ) : null}
 
-            <TouchableOpacity
-              onPress={handleUpdateEmail}
-              style={[styles.modalPrimaryBtn, updatingEmail && { opacity: 0.6 }]}
-              disabled={updatingEmail}
-            >
-              {updatingEmail ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <Text style={styles.modalPrimaryBtnText}>Update Email</Text>
-              )}
-            </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleRequestEmailOtp}
+                  style={[styles.modalPrimaryBtn, updatingEmail && { opacity: 0.6 }]}
+                  disabled={updatingEmail}
+                >
+                  {updatingEmail ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                  ) : (
+                    <Text style={styles.modalPrimaryBtnText}>Send Verification Code 📩</Text>
+                  )}
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <View style={{ alignItems: 'center', marginVertical: 10 }}>
+                  <Text style={{ fontSize: 36, marginBottom: 6 }}>📬</Text>
+                  <Text style={{ fontSize: 16, fontFamily: fontFamilies.bold, color: colors.text, textAlign: 'center' }}>
+                    Verify Your New Email
+                  </Text>
+                  <Text style={{ fontSize: 13, fontFamily: fontFamilies.regular, color: colors.subtext, textAlign: 'center', marginTop: 4 }}>
+                    Enter the code sent to{'\n'}
+                    <Text style={{ fontFamily: fontFamilies.bold, color: colors.text }}>{newEmailInput.trim().toLowerCase()}</Text>
+                  </Text>
+                </View>
+
+                <Text style={styles.modalFieldLabel}>Verification Code</Text>
+                <TextInput
+                  style={[styles.modalTextInput, { textAlign: 'center', fontSize: 24, letterSpacing: 6, fontFamily: fontFamilies.bold }]}
+                  value={emailOtpInput}
+                  onChangeText={(t) => {
+                    setEmailOtpInput(t);
+                    if (emailError) setEmailError(null);
+                  }}
+                  placeholder="••••••"
+                  keyboardType="number-pad"
+                  maxLength={8}
+                  placeholderTextColor={colors.subtext}
+                  editable={!updatingEmail}
+                  autoFocus
+                />
+
+                <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 12 }}>
+                  <Text style={{ fontSize: 12, color: colors.subtext, fontFamily: fontFamilies.regular }}>
+                    Didn't receive code?{' '}
+                  </Text>
+                  {emailResendTimer > 0 ? (
+                    <Text style={{ fontSize: 12, color: colors.subtext, fontFamily: fontFamilies.semiBold }}>
+                      Resend in {emailResendTimer}s
+                    </Text>
+                  ) : (
+                    <TouchableOpacity onPress={handleRequestEmailOtp} disabled={updatingEmail}>
+                      <Text style={{ fontSize: 12, color: colors.coral, fontFamily: fontFamilies.bold }}>
+                        Resend Code
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {emailError ? (
+                  <Text style={styles.modalErrorText}>{emailError}</Text>
+                ) : null}
+
+                <TouchableOpacity
+                  onPress={handleConfirmEmailOtp}
+                  style={[styles.modalPrimaryBtn, updatingEmail && { opacity: 0.6 }]}
+                  disabled={updatingEmail}
+                >
+                  {updatingEmail ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                  ) : (
+                    <Text style={styles.modalPrimaryBtnText}>Verify & Update Email</Text>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => {
+                    setEmailStep('form');
+                    setEmailOtpInput('');
+                    setEmailError(null);
+                  }}
+                  style={{ marginTop: 12, alignItems: 'center', paddingVertical: 8 }}
+                  disabled={updatingEmail}
+                >
+                  <Text style={{ fontSize: 13, color: colors.subtext, fontFamily: fontFamilies.semiBold }}>
+                    ← Change Email Address
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </View>
       </Modal>
@@ -1785,70 +1947,150 @@ export default function ParentsHub({
               </TouchableOpacity>
             </View>
 
-            <Text style={{ fontSize: 13, fontFamily: fontFamilies.regular, color: colors.subtext, marginBottom: 14 }}>
-              Enter your current password and choose a secure new password.
-            </Text>
+            {passwordStep === 'form' ? (
+              <>
+                <Text style={{ fontSize: 13, fontFamily: fontFamilies.regular, color: colors.subtext, marginBottom: 14 }}>
+                  Enter your current password and choose a new password. We will send a verification code to your registered email.
+                </Text>
 
-            <Text style={styles.modalFieldLabel}>Current Password</Text>
-            <TextInput
-              style={styles.modalTextInput}
-              value={currentPasswordInput}
-              onChangeText={(t) => {
-                setCurrentPasswordInput(t);
-                if (passwordError) setPasswordError(null);
-              }}
-              placeholder="Current password"
-              secureTextEntry
-              autoCapitalize="none"
-              placeholderTextColor={colors.subtext}
-              editable={!updatingPassword}
-            />
+                <Text style={styles.modalFieldLabel}>Current Password</Text>
+                <TextInput
+                  style={styles.modalTextInput}
+                  value={currentPasswordInput}
+                  onChangeText={(t) => {
+                    setCurrentPasswordInput(t);
+                    if (passwordError) setPasswordError(null);
+                  }}
+                  placeholder="Current password"
+                  secureTextEntry
+                  autoCapitalize="none"
+                  placeholderTextColor={colors.subtext}
+                  editable={!updatingPassword}
+                />
 
-            <Text style={styles.modalFieldLabel}>New Password</Text>
-            <TextInput
-              style={styles.modalTextInput}
-              value={newPasswordInput}
-              onChangeText={(t) => {
-                setNewPasswordInput(t);
-                if (passwordError) setPasswordError(null);
-              }}
-              placeholder="At least 6 characters"
-              secureTextEntry
-              autoCapitalize="none"
-              placeholderTextColor={colors.subtext}
-              editable={!updatingPassword}
-            />
+                <Text style={styles.modalFieldLabel}>New Password</Text>
+                <TextInput
+                  style={styles.modalTextInput}
+                  value={newPasswordInput}
+                  onChangeText={(t) => {
+                    setNewPasswordInput(t);
+                    if (passwordError) setPasswordError(null);
+                  }}
+                  placeholder="At least 8 characters"
+                  secureTextEntry
+                  autoCapitalize="none"
+                  placeholderTextColor={colors.subtext}
+                  editable={!updatingPassword}
+                />
 
-            <Text style={styles.modalFieldLabel}>Confirm New Password</Text>
-            <TextInput
-              style={styles.modalTextInput}
-              value={confirmPasswordInput}
-              onChangeText={(t) => {
-                setConfirmPasswordInput(t);
-                if (passwordError) setPasswordError(null);
-              }}
-              placeholder="Re-type new password"
-              secureTextEntry
-              autoCapitalize="none"
-              placeholderTextColor={colors.subtext}
-              editable={!updatingPassword}
-            />
+                <Text style={styles.modalFieldLabel}>Confirm New Password</Text>
+                <TextInput
+                  style={styles.modalTextInput}
+                  value={confirmPasswordInput}
+                  onChangeText={(t) => {
+                    setConfirmPasswordInput(t);
+                    if (passwordError) setPasswordError(null);
+                  }}
+                  placeholder="Re-type new password"
+                  secureTextEntry
+                  autoCapitalize="none"
+                  placeholderTextColor={colors.subtext}
+                  editable={!updatingPassword}
+                />
 
-            {passwordError ? (
-              <Text style={styles.modalErrorText}>{passwordError}</Text>
-            ) : null}
+                {passwordError ? (
+                  <Text style={styles.modalErrorText}>{passwordError}</Text>
+                ) : null}
 
-            <TouchableOpacity
-              onPress={handleUpdatePassword}
-              style={[styles.modalPrimaryBtn, updatingPassword && { opacity: 0.6 }]}
-              disabled={updatingPassword}
-            >
-              {updatingPassword ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <Text style={styles.modalPrimaryBtnText}>Update Password</Text>
-              )}
-            </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleRequestPasswordOtp}
+                  style={[styles.modalPrimaryBtn, updatingPassword && { opacity: 0.6 }]}
+                  disabled={updatingPassword}
+                >
+                  {updatingPassword ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                  ) : (
+                    <Text style={styles.modalPrimaryBtnText}>Send Verification Code 🔐</Text>
+                  )}
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <View style={{ alignItems: 'center', marginVertical: 10 }}>
+                  <Text style={{ fontSize: 36, marginBottom: 6 }}>🔐</Text>
+                  <Text style={{ fontSize: 16, fontFamily: fontFamilies.bold, color: colors.text, textAlign: 'center' }}>
+                    Enter Security Code
+                  </Text>
+                  <Text style={{ fontSize: 13, fontFamily: fontFamilies.regular, color: colors.subtext, textAlign: 'center', marginTop: 4 }}>
+                    Enter the verification code sent to{'\n'}
+                    <Text style={{ fontFamily: fontFamilies.bold, color: colors.text }}>{parentEmail || 'your email'}</Text>
+                  </Text>
+                </View>
+
+                <Text style={styles.modalFieldLabel}>Verification Code</Text>
+                <TextInput
+                  style={[styles.modalTextInput, { textAlign: 'center', fontSize: 24, letterSpacing: 6, fontFamily: fontFamilies.bold }]}
+                  value={passwordOtpInput}
+                  onChangeText={(t) => {
+                    setPasswordOtpInput(t);
+                    if (passwordError) setPasswordError(null);
+                  }}
+                  placeholder="••••••"
+                  keyboardType="number-pad"
+                  maxLength={8}
+                  placeholderTextColor={colors.subtext}
+                  editable={!updatingPassword}
+                  autoFocus
+                />
+
+                <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 12 }}>
+                  <Text style={{ fontSize: 12, color: colors.subtext, fontFamily: fontFamilies.regular }}>
+                    Didn't receive code?{' '}
+                  </Text>
+                  {passwordResendTimer > 0 ? (
+                    <Text style={{ fontSize: 12, color: colors.subtext, fontFamily: fontFamilies.semiBold }}>
+                      Resend in {passwordResendTimer}s
+                    </Text>
+                  ) : (
+                    <TouchableOpacity onPress={handleRequestPasswordOtp} disabled={updatingPassword}>
+                      <Text style={{ fontSize: 12, color: colors.coral, fontFamily: fontFamilies.bold }}>
+                        Resend Code
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {passwordError ? (
+                  <Text style={styles.modalErrorText}>{passwordError}</Text>
+                ) : null}
+
+                <TouchableOpacity
+                  onPress={handleConfirmPasswordOtp}
+                  style={[styles.modalPrimaryBtn, updatingPassword && { opacity: 0.6 }]}
+                  disabled={updatingPassword}
+                >
+                  {updatingPassword ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                  ) : (
+                    <Text style={styles.modalPrimaryBtnText}>Verify & Update Password</Text>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => {
+                    setPasswordStep('form');
+                    setPasswordOtpInput('');
+                    setPasswordError(null);
+                  }}
+                  style={{ marginTop: 12, alignItems: 'center', paddingVertical: 8 }}
+                  disabled={updatingPassword}
+                >
+                  <Text style={{ fontSize: 13, color: colors.subtext, fontFamily: fontFamilies.semiBold }}>
+                    ← Edit Password
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </View>
       </Modal>

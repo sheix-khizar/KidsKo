@@ -480,3 +480,70 @@ export async function updateParentEmail(password: string, newEmail: string): Pro
   return data as { success: boolean; email: string; message: string };
 }
 
+// Request OTP to change parent password
+export async function requestPasswordChangeOtp(currentPassword: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+  const token = await getToken();
+  const res = await fetchWithTimeout(`${getApiUrl()}/api/auth/password/request-otp`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Could not send verification code');
+  return data as { success: boolean; message: string };
+}
+
+// Confirm OTP to change parent password
+export async function confirmPasswordChangeOtp(otpToken: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+  const token = await getToken();
+  const res = await fetchWithTimeout(`${getApiUrl()}/api/auth/password/confirm-otp`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ token: otpToken, newPassword }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Could not update password');
+  return data as { success: boolean; message: string };
+}
+
+// Request OTP to change parent email
+export async function requestEmailChangeOtp(password: string, newEmail: string): Promise<{ success: boolean; message: string }> {
+  const token = await getToken();
+  const res = await fetchWithTimeout(`${getApiUrl()}/api/auth/email/request-otp`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ password, newEmail }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Could not send verification code');
+  return data as { success: boolean; message: string };
+}
+
+// Confirm OTP to change parent email
+export async function confirmEmailChangeOtp(newEmail: string, otpToken: string): Promise<{ success: boolean; email: string; message: string }> {
+  const token = await getToken();
+  const res = await fetchWithTimeout(`${getApiUrl()}/api/auth/email/confirm-otp`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ newEmail, token: otpToken }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Could not update email');
+  if (data?.email) {
+    await SecureStore.setItemAsync(EMAIL_KEY, data.email);
+  }
+  return data as { success: boolean; email: string; message: string };
+}
+

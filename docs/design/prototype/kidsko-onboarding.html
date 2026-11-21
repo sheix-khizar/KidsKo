@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kidsko.ai — Onboarding</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --coral:#FF6B6B;--orange:#FF9F43;--sun:#FFE66D;
+  --sky:#4ECDC4;--mint:#95E1A3;--blue:#74B9FF;
+  --purple:#A78BFA;--pink:#FD79A8;--green:#00B894;
+  --white:#fff;--bg:#FFF8F0;--text:#2D3436;--sub:#636E72;
+  --border:#F0E6D3;--pnavy:#1E3A5F;--pblue:#2980B9;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:'Nunito',sans-serif;background:linear-gradient(135deg,#1a0a2e,#2d1b69,#11998e);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:32px 16px 56px}
+input,select,button{font-family:'Nunito',sans-serif}
+::-webkit-scrollbar{width:0;height:0}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--sky);outline-offset:2px}
+
+/* page chrome */
+.ph{text-align:center;margin-bottom:20px}
+.ph h1{font-size:22px;font-weight:900;color:#fff;letter-spacing:-.5px}
+.ph h1 span{color:var(--sun)}
+.ph p{color:rgba(255,255,255,.4);font-size:12px;font-weight:700;margin-top:4px}
+.pills{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:22px;max-width:620px}
+.pill{padding:5px 13px;border-radius:20px;border:1px solid rgba(255,255,255,.12);background:transparent;color:rgba(255,255,255,.45);font-size:12px;font-weight:800;cursor:pointer;transition:all .15s}
+.pill.active{border-color:rgba(255,107,107,.6);background:rgba(255,107,107,.2);color:#FF6B6B}
+
+/* phone */
+.phone{width:375px;height:812px;border-radius:50px;overflow:hidden;position:relative;background:var(--bg);box-shadow:0 0 0 2px rgba(0,0,0,.06),0 0 0 10px #1a1a1a,0 0 0 12px #2a2a2a,0 32px 80px rgba(0,0,0,.5)}
+.notch{position:absolute;top:0;left:50%;transform:translateX(-50%);width:120px;height:32px;background:#111;border-radius:0 0 20px 20px;z-index:300}
+.screen{position:absolute;inset:0;display:flex;flex-direction:column;background:var(--bg);opacity:0;pointer-events:none;transform:translateX(24px);transition:opacity .25s,transform .25s;overflow:hidden}
+.screen.active{opacity:1;pointer-events:all;transform:none}
+.sbar{height:46px;padding:16px 24px 0;display:flex;justify-content:space-between;align-items:center;font-size:11px;font-weight:800;flex-shrink:0;color:var(--text);position:relative;z-index:5}
+.sbar.light{color:rgba(255,255,255,.7)}
+
+/* buttons */
+.btn-main{width:100%;background:linear-gradient(135deg,var(--coral),var(--orange));border:none;border-radius:24px;padding:18px;font-size:18px;font-weight:900;color:#fff;cursor:pointer;box-shadow:0 8px 28px rgba(255,107,107,.45);transition:transform .12s}
+.btn-main:active{transform:scale(.97)}
+.btn-main.off{background:#E0E0E0;box-shadow:none;cursor:not-allowed}
+.btn-main.parent{background:linear-gradient(135deg,var(--pnavy),var(--pblue));box-shadow:0 8px 24px rgba(30,58,95,.4)}
+.btn-ghost{width:100%;background:rgba(255,107,107,.08);border:2px solid rgba(255,107,107,.25);border-radius:24px;padding:16px;font-size:15px;font-weight:800;color:var(--coral);cursor:pointer}
+.btn-back{flex:0 0 auto;padding:0 22px;border-radius:24px;border:2px solid var(--border);background:#fff;font-weight:800;font-size:15px;color:var(--sub);cursor:pointer}
+.link{background:none;border:none;font-size:14px;font-weight:800;color:var(--sub);cursor:pointer;padding:10px}
+
+/* setup layout */
+.shdr{display:flex;align-items:center;gap:12px;padding:6px 18px 10px;flex-shrink:0}
+.back{width:40px;height:40px;border-radius:14px;border:none;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.08);font-size:22px;cursor:pointer;color:var(--text);font-weight:900;line-height:1}
+.prog{flex:1;height:10px;background:var(--border);border-radius:6px;overflow:hidden}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--coral),var(--orange));border-radius:6px}
+.stepn{font-size:12px;font-weight:800;color:var(--sub);min-width:28px;text-align:right}
+.sbody{flex:1;overflow-y:auto;padding:8px 22px 16px}
+.sfoot{padding:12px 22px 26px;flex-shrink:0}
+.h1{font-size:26px;font-weight:900;color:var(--text);line-height:1.2;letter-spacing:-.5px}
+.sub{font-size:14px;font-weight:700;color:var(--sub);line-height:1.55;margin-top:6px}
+.mascot-row{display:flex;align-items:flex-end;gap:10px;margin-bottom:18px}
+.m-owl{width:58px;height:58px;border-radius:20px;background:linear-gradient(135deg,var(--coral),var(--orange));display:flex;align-items:center;justify-content:center;font-size:32px;flex-shrink:0;box-shadow:0 6px 18px rgba(255,107,107,.35)}
+.m-bub{background:#fff;border:2px solid var(--border);border-radius:20px 20px 20px 6px;padding:11px 15px;font-size:14px;font-weight:800;color:var(--text);line-height:1.45}
+.field-label{display:block;font-size:13px;font-weight:800;color:var(--sub);margin-bottom:8px}
+.input{width:100%;background:#fff;border:2px solid var(--border);border-radius:18px;padding:16px 18px;font-size:20px;font-weight:800;color:var(--text);outline:none}
+.input:focus{border-color:var(--coral)}
+.select{width:100%;background:#fff;border:2px solid var(--border);border-radius:16px;padding:14px 16px;font-size:15px;font-weight:700;color:var(--text);outline:none}
+.card{background:#fff;border-radius:20px;padding:16px;box-shadow:0 3px 12px rgba(0,0,0,.06)}
+
+/* avatar grid */
+.av-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:6px}
+.av{aspect-ratio:1;border-radius:24px;display:flex;align-items:center;justify-content:center;font-size:46px;cursor:pointer;border:4px solid transparent;transition:transform .15s,border .15s;position:relative}
+.av.sel{border-color:var(--text);transform:scale(1.06)}
+.av.sel::after{content:'✓';position:absolute;top:-6px;right:-6px;width:24px;height:24px;border-radius:50%;background:var(--text);color:#fff;font-size:13px;font-weight:900;display:flex;align-items:center;justify-content:center}
+
+/* age */
+.age-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:18px 0}
+.age{height:78px;border-radius:24px;border:3px solid var(--border);background:#fff;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:all .15s}
+.age b{font-size:30px;font-weight:900;color:var(--text);line-height:1}
+.age span{font-size:11px;font-weight:800;color:var(--sub);margin-top:2px}
+.age.sel{border-color:var(--coral);background:rgba(255,107,107,.1);transform:scale(1.04)}
+.age.sel b{color:var(--coral)}
+
+/* chips */
+.chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+.chip{padding:12px 16px;border-radius:22px;border:3px solid var(--border);background:#fff;font-size:15px;font-weight:800;color:var(--text);cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:7px}
+.chip.sel{border-color:var(--coral);background:rgba(255,107,107,.1);color:var(--coral)}
+.chip.lim{padding:12px 0;flex:1;justify-content:center}
+
+/* pin */
+.pin-dots{display:flex;justify-content:center;gap:16px;margin:22px 0 26px}
+.pdot{width:18px;height:18px;border-radius:50%;background:#E0D6C6;transition:all .2s}
+.pdot.on{background:var(--coral);box-shadow:0 0 0 5px rgba(255,107,107,.2)}
+.pin-dots.shake{animation:shake .45s}
+.pin-dots.shake .pdot{background:#EF4444}
+.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:290px;margin:0 auto}
+.key{height:62px;border-radius:20px;border:none;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.07);font-size:24px;font-weight:900;color:var(--text);cursor:pointer;transition:transform .1s}
+.key:active{transform:scale(.93);background:var(--bg)}
+.key.ghost{background:transparent;box-shadow:none}
+
+/* toggles + rows */
+.tog{width:46px;height:26px;border-radius:13px;position:relative;cursor:pointer;border:none;background:#E5E7EB;transition:background .22s;flex-shrink:0}
+.tog.on{background:var(--mint)}
+.tog::after{content:'';position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:left .22s;box-shadow:0 1px 4px rgba(0,0,0,.2)}
+.tog.on::after{left:23px}
+.row{display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid #F5EFE6}
+.row:last-child{border-bottom:none}
+.row .ic{width:40px;height:40px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.row .tx{flex:1}
+.row .tx b{display:block;font-size:14px;font-weight:800;color:var(--text)}
+.row .tx span{font-size:12px;font-weight:700;color:var(--sub);line-height:1.4}
+.btn-allow{padding:9px 16px;border-radius:14px;border:none;background:linear-gradient(135deg,var(--coral),var(--orange));color:#fff;font-size:13px;font-weight:900;cursor:pointer;flex-shrink:0}
+.btn-allow.ok{background:#E8F8F0;color:var(--green)}
+.check{display:flex;gap:12px;align-items:flex-start;background:#fff;border:2px solid var(--border);border-radius:18px;padding:14px;cursor:pointer;margin-top:18px}
+.check .box{width:26px;height:26px;border-radius:9px;border:3px solid #D8CDBB;display:flex;align-items:center;justify-content:center;font-size:15px;color:#fff;flex-shrink:0;transition:all .15s}
+.check.on .box{background:var(--coral);border-color:var(--coral)}
+.check p{font-size:13px;font-weight:700;color:var(--sub);line-height:1.5}
+.check p b{color:var(--text)}
+
+/* carousel */
+.car-top{display:flex;justify-content:flex-end;align-items:center;padding:0 14px;flex-shrink:0;height:44px}
+.car-stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 24px}
+.slide-in{animation:slideIn .35s ease;width:100%;text-align:center}
+.car-dots{display:flex;justify-content:center;gap:8px;padding:8px 0 16px}
+.dot{width:8px;height:8px;border-radius:50%;background:#E0D6C6;transition:all .3s}
+.dot.on{width:26px;border-radius:5px;background:var(--coral)}
+.parent-theme .dot.on{background:var(--pblue)}
+.car-foot{display:flex;gap:10px;padding:0 22px 28px;flex-shrink:0}
+.car-foot .btn-main{flex:1}
+.illus{width:100%;height:280px;border-radius:32px;display:flex;align-items:center;justify-content:center;margin-bottom:24px;position:relative;overflow:hidden}
+.av-sm{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--coral),var(--orange));display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+.stat{background:#fff;border-radius:18px;padding:14px 8px;box-shadow:0 3px 10px rgba(0,0,0,.06)}
+.stat .n{font-size:26px;font-weight:900;line-height:1}
+.stat .l{font-size:11px;font-weight:800;color:var(--sub);margin-top:4px}
+
+/* splash */
+#splash{background:linear-gradient(160deg,#FFF0F5,#FFF8F0,#F0FFF4)}
+.blob{position:absolute;border-radius:50%;filter:blur(50px);pointer-events:none}
+.load{width:160px;height:8px;border-radius:5px;background:rgba(255,107,107,.15);overflow:hidden;margin-top:34px}
+.load i{display:block;height:100%;width:0;border-radius:5px;background:linear-gradient(90deg,var(--coral),var(--orange))}
+#splash.active .load i{animation:loadBar 2.6s ease-out forwards}
+
+/* workflow */
+.flow{position:relative;padding-left:4px}
+.flow::before{content:'';position:absolute;left:29px;top:30px;bottom:30px;width:3px;background:repeating-linear-gradient(180deg,#D8CDBB 0 6px,transparent 6px 12px)}
+.fstep{display:flex;gap:14px;align-items:flex-start;margin-bottom:14px;position:relative;opacity:0}
+.screen.active .fstep{animation:fadeUp .5s ease forwards}
+.fico{width:52px;height:52px;border-radius:18px;display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;box-shadow:0 4px 14px rgba(0,0,0,.12);position:relative;z-index:1}
+.fcard{flex:1;background:#fff;border-radius:18px;padding:12px 14px;box-shadow:0 3px 10px rgba(0,0,0,.06)}
+.fcard b{display:block;font-size:14px;font-weight:900;color:var(--text)}
+.fcard span{font-size:12px;font-weight:700;color:var(--sub);line-height:1.5}
+
+/* confetti */
+#confetti{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:2}
+#confetti span{position:absolute;top:-30px;font-size:22px;animation:fall linear forwards}
+
+/* animations */
+.bounce{animation:owlBounce 3s ease-in-out infinite}
+@keyframes owlBounce{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-12px) rotate(3deg)}}
+@keyframes starFloat{0%{transform:translateY(0) rotate(0)}100%{transform:translateY(-8px) rotate(15deg)}}
+@keyframes slideIn{from{opacity:0;transform:translateX(30px)}to{opacity:1;transform:none}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes loadBar{from{width:0}to{width:100%}}
+@keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-10px)}40%,80%{transform:translateX(10px)}}
+@keyframes wave{0%,100%{transform:rotate(0)}50%{transform:rotate(22deg)}}
+@keyframes ringPulse{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.05)}}
+@keyframes waveBar{0%,100%{transform:scaleY(1);opacity:.9}50%{transform:scaleY(.25);opacity:.4}}
+@keyframes scan{0%{top:18%;opacity:0}20%{opacity:1}80%{opacity:1}100%{top:80%;opacity:0}}
+@keyframes fall{to{transform:translateY(860px) rotate(540deg);opacity:.9}}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+</style>
+</head>
+<body>
+
+<div class="ph">
+  <h1>Kidsko<span>.ai</span> — Onboarding</h1>
+  <p>Splash · Welcome · Child setup · Parent PIN · Safety · Tutorials · Workflow</p>
+</div>
+<div class="pills" id="pills"></div>
+
+<div class="phone" id="phone">
+<div class="notch"></div>
+
+<!-- ═══ SPLASH ═══ -->
+<div class="screen active" id="splash" onclick="go('welcome')">
+  <div class="sbar"><span>9:41</span><span>⚡ 100%</span></div>
+  <div class="blob" style="width:220px;height:220px;background:rgba(255,107,107,.16);top:-50px;right:-50px"></div>
+  <div class="blob" style="width:180px;height:180px;background:rgba(78,205,196,.16);bottom:100px;left:-40px"></div>
+  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 32px 60px;position:relative">
+    <div style="position:absolute;font-size:26px;top:90px;left:34px;animation:starFloat 2s ease-in-out infinite alternate;opacity:.7">✨</div>
+    <div style="position:absolute;font-size:26px;top:140px;right:34px;animation:starFloat 2.5s ease-in-out infinite alternate;opacity:.7">⭐</div>
+    <div style="position:absolute;font-size:26px;top:70px;right:80px;animation:starFloat 3s ease-in-out infinite alternate;opacity:.7">🌟</div>
+    <div class="bounce" style="width:130px;height:130px;border-radius:44px;background:linear-gradient(135deg,var(--coral),var(--orange));display:flex;align-items:center;justify-content:center;font-size:70px;margin-bottom:22px;box-shadow:0 14px 44px rgba(255,107,107,.4)">🦉</div>
+    <div style="font-size:44px;font-weight:900;color:var(--text);letter-spacing:-1px;line-height:1">Kidsko<span style="color:var(--coral)">.ai</span></div>
+    <p style="font-size:15px;font-weight:700;color:var(--sub);text-align:center;line-height:1.65;margin-top:10px">Your friendly AI teacher!<br>Ask me anything, anytime.</p>
+    <div class="load"><i></i></div>
+    <p style="font-size:12px;font-weight:800;color:#B2BEC3;margin-top:12px">Getting ready…</p>
+  </div>
+  <p style="text-align:center;font-size:11px;font-weight:700;color:#B2BEC3;padding-bottom:26px">Tap anywhere to skip · Version 1.0</p>
+</div>
+
+<!-- ═══ WELCOME CAROUSEL ═══ -->
+<div class="screen" id="welcome">
+  <div class="sbar"><span>9:41</span><span>⚡ 100%</span></div>
+  <div class="car-top"><button class="link" onclick="go('setup-intro')">Skip</button></div>
+  <div class="car-stage" id="welcome-stage"></div>
+  <div class="car-dots" id="welcome-dots"></div>
+  <div class="car-foot"><button class="btn-back" id="welcome-back" onclick="carBack('welcome')">Back</button><button class="btn-main" id="welcome-next" onclick="carNext('welcome')">Next</button></div>
+</div>
+
+<!-- ═══ SETUP INTRO ═══ -->
+<div class="screen" id="setup-intro">
+  <div class="sbar"><span>9:41</span><span>⚡ 100%</span></div>
+  <div class="shdr"><button class="back" onclick="go('welcome')" aria-label="Back">‹</button><div style="flex:1"></div></div>
+  <div class="sbody">
+    <div class="mascot-row"><div class="m-owl bounce">🦉</div><div class="m-bub">Hi, grown-up! Let's set up Kidsko for your child.</div></div>
+    <div class="h1">Quick setup</div>
+    <p class="sub">It takes about 2 minutes. You can change everything later in the Parents area.</p>
+    <div class="card" style="margin-top:18px;padding:6px 16px">
+      <div class="row"><div class="ic" style="background:#FFE8E8">👧</div><div class="tx"><b>Child profile</b><span>Name and avatar</span></div></div>
+      <div class="row"><div class="ic" style="background:#FFF4E0">🎂</div><div class="tx"><b>Age and grade</b><span>So answers match their level</span></div></div>
+      <div class="row"><div class="ic" style="background:#E0FAFB">🚀</div><div class="tx"><b>Interests</b><span>Topics they love</span></div></div>
+      <div class="row"><div class="ic" style="background:#EBF5FB">🔒</div><div class="tx"><b>Parent PIN</b><span>Keeps the Parents area private</span></div></div>
+      <div class="row"><div class="ic" style="background:#E8F8F0">🛡️</div><div class="tx"><b>Safety and limits</b><span>Daily limit and content filter</span></div></div>
+    </div>
+    <div class="check" id="consent" onclick="toggleConsent()" role="checkbox" aria-checked="false" tabindex="0">
+      <div class="box">✓</div>
+      <p>I'm a <b>parent or legal guardian</b> and I agree to the <b>Terms</b> and <b>Privacy Policy</b>.</p>
+    </div>
+  </div>
+  <div class="sfoot"><button class="btn-main off" id="intro-next" onclick="introNext()">Start setup</button></div>
+</div>
+
+<!-- ═══ STEP 1: NAME ═══ -->
+<div class="screen" id="c-name">
+  <div class="sbar"><span>9:41</span><span>⚡ 100%</span></div>
+  <div class="shdr"><button class="back" onclick="go('setup-intro')" aria-label="Back">‹</button><div class="prog"><div class="prog-fill" style="width:20%"></div></div><span class="stepn">1/5</span></div>
+  <div class="sbody">
+    <div class="mascot-row"><div class="m-owl">🦉</div><div class="m-bub" id="name-bub">What's your child's name?</div></div>
+    <label class="field-label" for="name-input">Child's first name</label>
+    <input class="input" id="name-input" type="text" maxlength="20" placeholder="e.g. Aisha" autocomplete="off" oninput="onName(this.value)" onkeydown="if(event.key==='Enter')nameNext()">
+    <label class="field-label" style="margin-top:22px">Pick an avatar</label>
+    <div class="av-grid" id="av-grid"></div>
+  </div>
+  <div class="sfoot"><button class="btn-main off" id="name-next" onclick="nameNext()">Next</button></div>
+</div>
+
+<!-- ═══ STEP 2: AGE ═══ -->
+<div class="screen" id="c-age">
+  <div class="sbar"><span>9:41</span><span>⚡ 100%</span></div>
+  <div class="shdr"><button class="back" onclick="go('c-name')" aria-label="Back">‹</button><div class="prog"><div class="prog-fill" style="width:40%"></div></div><span class="stepn">2/5</span></div>
+  <div class="sbody">
+    <div class="mascot-row"><div class="m-owl">🦉</div><div class="m-bub">How old is <span class="nm">your child</span>?</div></div>
+    <div class="age-grid" id="age-grid"></div>
+    <label class="field-label" for="grade-sel">Grade</label>
+    <select class="select" id="grade-sel" onchange="S.grade=this.value"></select>
+    <div class="card" style="margin-top:16px;display:flex;gap:12px;align-items:center;background:#E0FAFB;box-shadow:none">
+      <span style="font-size:26px">💡</span>
+      <p style="font-size:13px;font-weight:700;color:var(--sub);line-height:1.5">Kidsko picks simpler words and shorter answers for younger children.</p>
+    </div>
+  </div>
+  <div class="sfoot"><button class="btn-main off" id="age-next" onclick="ageNext()">Next</button></div>
+</div>
+
+<!-- ═══ STEP 3: INTERESTS ═══ -->
+<div class="screen" id="c-interest">
+  <div class="sbar"><span>9:41</span><span>⚡ 100%</span></div>
+  <div class="shdr"><button class="back" onclick="go('c-age')" aria-label="Back">‹</button><div class="prog"><div class="prog-fill" style="width:60%"></div></div><span class="stepn">3/5</span></div>
+  <div class="sbody">
+    <div class="mascot-row"><div class="m-owl">🦉</div><div class="m-bub">What does <span class="nm">your child</span> love learning about?</div></div>
+    <p class="sub" style="margin-top:0">Pick as many as you like. We'll suggest questions from these.</p>
+    <div class="chips" id="chips"></div>
+  </div>
+  <div class="sfoot"><button class="btn-main off" id="int-next" onclick="intNext()">Pick at least 1</button></div>
+</div>
+
+<!-- ═══ STEP 4: PIN ═══ -->
+<div class="screen" id="c-pin">
+  <div class="sbar"><span>9:41</span><span>⚡ 100%</span></div>
+  <div class="shdr"><button class="back" onclick="go('c-interest')" aria-label="Back">‹</button><div class="prog"><div class="prog-fill" style="width:80%"></div></div><span class="stepn">4/5</span></div>
+  <div class="sbody" style="text-align:center">
+    <div style="width:84px;height:84px;border-radius:28px;background:linear-gradient(135deg,var(--pnavy),var(--pblue));display:flex;align-items:center;justify-content:center;font-size:44px;margin:6px auto 16px;box-shadow:0 10px 28px rgba(30,58,95,.35)">🔐</div>
+    <div class="h1" id="pin-title">Create a parent PIN</div>
+    <p class="sub" id="pin-sub">You'll need this 4-digit PIN to open the Parents area. Keep it secret from the kids!</p>
+    <div class="pin-dots" id="pin-dots"><div class="pdot"></div><div class="pdot"></div><div class="pdot"></div><div class="pdot"></div></div>
+    <div class="keypad" id="keypad"></div>
+    <p id="pin-err" style="font-size:13px;font-weight:800;color:#EF4444;margin-top:14px;min-height:18px"></p>
+  </div>
+</div>
+
+<!-- ═══ STEP 5: SAFETY ═══ -->
+<div class="screen" id="c-safety">
+  <div class="sbar"><span>9:41</span><span>⚡ 100%</span></div>
+  <div class="shdr"><button class="back" onclick="go('c-pin')" aria-label="Back">‹</button><div class="prog"><div class="prog-fill" style="width:100%"></div></div><span class="stepn">5/5</span></div>
+  <div class="sbody">
+    <div class="h1">Safety and limits</div>
+    <p class="sub">Set how much and how safely <span class="nm">your child</span> can use Kidsko.</p>
+    <div class="card" style="margin-top:18px">
+      <div style="font-size:15px;font-weight:900;color:var(--text)">Daily question limit</div>
+      <p style="font-size:12px;font-weight:700;color:var(--sub);margin-top:2px">Kidsko pauses when the limit is reached.</p>
+      <div class="chips" id="limit-chips" style="margin-top:12px;flex-wrap:nowrap;gap:8px"></div>
+    </div>
+    <div class="card" style="margin-top:14px;padding:6px 16px">
+      <div class="row"><div class="ic" style="background:#FFE8E8">🚫</div><div class="tx"><b>Strict content filter</b><span>Blocks unsafe topics and words</span></div><button class="tog on" onclick="this.classList.toggle('on')" aria-label="Strict content filter"></button></div>
+      <div class="row"><div class="ic" style="background:#FFF4E0">⏰</div><div class="tx"><b>Study hours only</b><span>8am–3pm and 5pm–7pm</span></div><button class="tog" onclick="this.classList.toggle('on')" aria-label="Study hours only"></button></div>
+      <div class="row"><div class="ic" style="background:#E8F8F0">📊</div><div class="tx"><b>Daily report</b><span>Summary sent every evening</span></div><button class="tog on" onclick="this.classList.toggle('on')" aria-label="Daily report"></button></div>
+    </div>
+  </div>
+  <div class="sfoot"><button class="btn-main" onclick="go('perm')">Save and continue</button></div>
+</div>
+
+<!-- ═══ PERMISSIONS ═══ -->
+<div class="screen" id="perm">
+  <div class="sbar"><span>9:41</span><span>⚡ 100%</span></div>
+  <div class="shdr"><button class="back" onclick="go('c-safety')" aria-label="Back">‹</button><div style="flex:1"></div></div>
+  <div class="sbody">
+    <div class="mascot-row"><div class="m-owl">🦉</div><div class="m-bub">I need a few permissions to help in all the ways!</div></div>
+    <div class="h1">Allow access</div>
+    <p class="sub">You can change these anytime in your phone settings.</p>
+    <div class="card" style="margin-top:18px;padding:6px 16px" id="perm-list"></div>
+    <p style="font-size:12px;font-weight:700;color:#B2BEC3;text-align:center;margin-top:14px;line-height:1.5">Camera and microphone are only used while a call is on. Nothing is recorded or shared.</p>
+  </div>
+  <div class="sfoot"><button class="btn-main" onclick="go('done')">Continue</button></div>
+</div>
+
+<!-- ═══ DONE ═══ -->
+<div class="screen" id="done" style="background:linear-gradient(160deg,#FFF0F5,#FFF8F0,#F0FFF4)">
+  <div id="confetti"></div>
+  <div class="sbar"><span>9:41</span><span>⚡ 100%</span></div>
+  <div class="sbody" style="display:flex;flex-direction:column;align-items:center;text-align:center;padding-top:10px;position:relative;z-index:3">
+    <div class="bounce" style="width:110px;height:110px;border-radius:38px;background:linear-gradient(135deg,var(--coral),var(--orange));display:flex;align-items:center;justify-content:center;font-size:60px;margin-bottom:14px;box-shadow:0 12px 36px rgba(255,107,107,.4)">🦉</div>
+    <div class="h1">All set!</div>
+    <p class="sub"><span class="nm">Your child</span>'s Kidsko is ready.</p>
+    <div class="card" style="width:100%;margin-top:20px;text-align:left">
+      <div style="display:flex;align-items:center;gap:14px">
+        <div id="sum-av" style="width:64px;height:64px;border-radius:22px;display:flex;align-items:center;justify-content:center;font-size:34px;flex-shrink:0"></div>
+        <div style="flex:1;min-width:0"><div id="sum-name" style="font-size:18px;font-weight:900;color:var(--text)"></div><div id="sum-meta" style="font-size:13px;font-weight:700;color:var(--sub);margin-top:2px"></div></div>
+      </div>
+      <div style="height:1px;background:var(--border);margin:14px 0"></div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:800;color:var(--sub)"><span>Loves</span><span id="sum-int" style="font-size:18px;letter-spacing:3px"></span></div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:800;color:var(--sub);margin-top:10px"><span>Daily limit</span><span id="sum-lim" style="color:var(--text)"></span></div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:800;color:var(--sub);margin-top:10px"><span>Parent PIN</span><span style="color:var(--text);letter-spacing:2px">••••</span></div>
+    </div>
+  </div>
+  <div class="sfoot" style="position:relative;z-index:3"><button class="btn-main" onclick="go('tour-choice')">Take a quick tour</button><button class="link" style="width:100%;margin-top:6px" onclick="go('finish')">Skip the tour</button></div>
+</div>
+
+<!-- ═══ TOUR CHOICE ═══ -->
+<div class="screen" id="tour-choice">
+  <div class="sbar"><span>9:41</span><span>⚡ 100%</span></div>
+  <div class="sbody" style="padding-top:14px">
+    <div class="h1">Who's taking the tour?</div>
+    <p class="sub">Each tour takes about a minute.</p>
+    <div class="card" onclick="startTour('kid-tour')" style="margin-top:22px;cursor:pointer;display:flex;gap:14px;align-items:center;border:3px solid rgba(255,107,107,.3)">
+      <div style="width:64px;height:64px;border-radius:22px;background:linear-gradient(135deg,var(--coral),var(--orange));display:flex;align-items:center;justify-content:center;font-size:34px;flex-shrink:0">🦉</div>
+      <div style="flex:1"><div style="font-size:17px;font-weight:900;color:var(--text)"><span class="nm">Your child</span>'s tour</div><p style="font-size:12px;font-weight:700;color:var(--sub);line-height:1.45;margin-top:2px">Hand over the phone. Kidsko shows how to chat, call and use AI Vision.</p></div>
+      <div id="badge-kid" style="font-size:20px"></div>
+    </div>
+    <div class="card" onclick="startTour('parent-tour')" style="margin-top:14px;cursor:pointer;display:flex;gap:14px;align-items:center;border:3px solid rgba(41,128,185,.3)">
+      <div style="width:64px;height:64px;border-radius:22px;background:linear-gradient(135deg,var(--pnavy),var(--pblue));display:flex;align-items:center;justify-content:center;font-size:32px;flex-shrink:0">👨‍👩‍👧</div>
+      <div style="flex:1"><div style="font-size:17px;font-weight:900;color:var(--text)">Parent guide</div><p style="font-size:12px;font-weight:700;color:var(--sub);line-height:1.45;margin-top:2px">Learn the dashboard, limits and how Kidsko keeps children safe.</p></div>
+      <div id="badge-parent" style="font-size:20px"></div>
+    </div>
+  </div>
+  <div class="sfoot"><button class="btn-main" id="tour-finish" onclick="go('finish')">Skip for now</button></div>
+</div>
+
+<!-- ═══ KID TOUR ═══ -->
+<div class="screen" id="kid-tour">
+  <div class="sbar"><span>9:41</span><span>⚡ 100%</span></div>
+  <div class="car-top"><button class="link" onclick="endTour('kid')">Skip</button></div>
+  <div class="car-stage" id="kid-tour-stage"></div>
+  <div class="car-dots" id="kid-tour-dots"></div>
+  <div class="car-foot"><button class="btn-back" id="kid-tour-back" onclick="carBack('kid-tour')">Back</button><button class="btn-main" id="kid-tour-next" onclick="carNext('kid-tour')">Next</button></div>
+</div>
+
+<!-- ═══ PARENT TOUR ═══ -->
+<div class="screen parent-theme" id="parent-tour">
+  <div class="sbar"><span>9:41</span><span>⚡ 100%</span></div>
+  <div class="car-top"><button class="link" onclick="go('workflow')">Skip</button></div>
+  <div class="car-stage" id="parent-tour-stage"></div>
+  <div class="car-dots" id="parent-tour-dots"></div>
+  <div class="car-foot"><button class="btn-back" id="parent-tour-back" onclick="carBack('parent-tour')">Back</button><button class="btn-main parent" id="parent-tour-next" onclick="carNext('parent-tour')">Next</button></div>
+</div>
+
+<!-- ═══ WORKFLOW ═══ -->
+<div class="screen" id="workflow">
+  <div class="sbar"><span>9:41</span><span>⚡ 100%</span></div>
+  <div class="shdr"><button class="back" onclick="go('parent-tour')" aria-label="Back">‹</button><div style="flex:1"></div></div>
+  <div class="sbody">
+    <div class="h1">How Kidsko works</div>
+    <p class="sub" style="margin-bottom:20px">From question to answer, with you in control.</p>
+    <div class="flow" id="flow"></div>
+  </div>
+  <div class="sfoot"><button class="btn-main parent" onclick="endTour('parent')">Got it</button></div>
+</div>
+
+<!-- ═══ FINISH ═══ -->
+<div class="screen" id="finish" style="background:linear-gradient(160deg,#FFF0F5,#FFF8F0,#F0FFF4)">
+  <div class="sbar"><span>9:41</span><span>⚡ 100%</span></div>
+  <div class="sbody" style="display:flex;flex-direction:column;align-items:center;text-align:center;padding-top:14px">
+    <div style="width:96px;height:96px;border-radius:32px;background:linear-gradient(135deg,var(--mint),var(--sky));display:flex;align-items:center;justify-content:center;font-size:52px;margin-bottom:16px;box-shadow:0 12px 32px rgba(78,205,196,.4)">🎉</div>
+    <div class="h1">Ready to learn!</div>
+    <p class="sub"><span class="nm">Your child</span> can start asking questions now.</p>
+    <div class="card" style="width:100%;margin-top:22px;padding:6px 16px;text-align:left" id="finish-list"></div>
+  </div>
+  <div class="sfoot">
+    <button class="btn-main" onclick="openApp()">Open Kidsko</button>
+    <button class="link" style="width:100%;margin-top:6px" onclick="replay()">Replay onboarding</button>
+  </div>
+</div>
+
+</div><!-- /phone -->
+
+<p style="color:rgba(255,255,255,.2);font-size:11px;font-weight:600;margin-top:18px;text-align:center">Use the buttons above to jump to any screen · "Open Kidsko" opens kidsko-final.html when it sits in the same folder</p>
+
+<script>
+const $=id=>document.getElementById(id);
+const AV=[
+  {bg:'linear-gradient(135deg,#FF6B6B,#FF9F43)',e:'👧'},
+  {bg:'linear-gradient(135deg,#4ECDC4,#74B9FF)',e:'👦'},
+  {bg:'linear-gradient(135deg,#A78BFA,#FD79A8)',e:'🧒'},
+  {bg:'linear-gradient(135deg,#95E1A3,#4ECDC4)',e:'👩‍🚀'},
+  {bg:'linear-gradient(135deg,#FFE66D,#FF9F43)',e:'🦸'},
+  {bg:'linear-gradient(135deg,#FD79A8,#A78BFA)',e:'🧚'}
+];
+const INTERESTS=[['🔬','Science'],['🔢','Maths'],['🦁','Animals'],['🚀','Space'],['🦕','Dinosaurs'],['🎨','Art'],['🎵','Music'],['📚','Stories'],['⚽','Sports'],['💻','Coding'],['🌍','Geography'],['🧪','Experiments']];
+const LIMITS=[10,20,30,50,'∞'];
+const fresh=()=>({consent:false,name:'',av:0,age:null,grade:'Grade 5',interests:new Set(),pin:'',limit:30,perms:{mic:false,cam:false,notif:false},tours:{kid:false,parent:false}});
+let S=fresh();
+const first=()=>S.name.trim().split(' ')[0]||'';
+const who=()=>first()||'your child';
+
+/* ── navigation ── */
+const SCREENS=[['Splash','splash'],['Welcome','welcome'],['Intro','setup-intro'],['Name','c-name'],['Age','c-age'],['Interests','c-interest'],['PIN','c-pin'],['Safety','c-safety'],['Permissions','perm'],['Done','done'],['Tour choice','tour-choice'],['Kid tour','kid-tour'],['Parent tour','parent-tour'],['Workflow','workflow'],['Finish','finish']];
+let splashTimer=null;
+const HOOKS={
+  splash:()=>{clearTimeout(splashTimer);splashTimer=setTimeout(()=>{if(cur==='splash')go('welcome')},2900)},
+  welcome:()=>{CARS.welcome.i=0;renderCar('welcome')},
+  'c-name':renderAvatars,
+  'c-age':renderAges,
+  'c-interest':renderChips,
+  'c-pin':initPin,
+  'c-safety':renderLimits,
+  perm:renderPerms,
+  done:renderDone,
+  'tour-choice':renderChoice,
+  'kid-tour':()=>{CARS['kid-tour'].i=0;renderCar('kid-tour')},
+  'parent-tour':()=>{CARS['parent-tour'].i=0;renderCar('parent-tour')},
+  workflow:renderFlow,
+  finish:renderFinish
+};
+let cur='splash';
+function go(id){
+  cur=id;
+  if(id!=='splash')clearTimeout(splashTimer);
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  $(id).classList.add('active');
+  document.querySelectorAll('.nm').forEach(el=>el.textContent=who());
+  if(HOOKS[id])HOOKS[id]();
+  document.querySelectorAll('.pill').forEach(p=>p.classList.toggle('active',p.dataset.id===id));
+}
+$('pills').innerHTML=SCREENS.map(([l,id])=>`<button class="pill" data-id="${id}" onclick="go('${id}')">${l}</button>`).join('');
+
+/* ── consent / intro ── */
+function toggleConsent(){
+  S.consent=!S.consent;
+  const c=$('consent');c.classList.toggle('on',S.consent);c.setAttribute('aria-checked',S.consent);
+  $('intro-next').classList.toggle('off',!S.consent);
+}
+document.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&document.activeElement===$('consent')){e.preventDefault();toggleConsent()}});
+function introNext(){if(S.consent)go('c-name')}
+
+/* ── step 1: name + avatar ── */
+function renderAvatars(){
+  $('av-grid').innerHTML=AV.map((a,i)=>`<div class="av ${S.av===i?'sel':''}" style="background:${a.bg}" onclick="pickAv(${i})" role="button" aria-label="Avatar ${i+1}">${a.e}</div>`).join('');
+  $('name-input').value=S.name;
+  onName(S.name);
+}
+function pickAv(i){S.av=i;renderAvatars()}
+function onName(v){
+  S.name=v;
+  const ok=v.trim().length>=2;
+  $('name-next').classList.toggle('off',!ok);
+  $('name-bub').textContent=ok?`Nice to meet you, ${first()}! 🎉`:"What's your child's name?";
+}
+function nameNext(){if(S.name.trim().length>=2)go('c-age')}
+
+/* ── step 2: age + grade ── */
+function gradeFor(a){const g=a-5;return g<=0?'Kindergarten':'Grade '+g}
+function renderAges(){
+  const labels={5:'Little learner',6:'',7:'',8:'',9:'',10:'',11:'',12:'',13:'Big kid'};
+  $('age-grid').innerHTML=[5,6,7,8,9,10,11,12,13].map(a=>`<div class="age ${S.age===a?'sel':''}" onclick="pickAge(${a})" role="button"><b>${a}</b><span>years</span></div>`).join('');
+  const opts=['Kindergarten','Grade 1','Grade 2','Grade 3','Grade 4','Grade 5','Grade 6','Grade 7','Grade 8'];
+  $('grade-sel').innerHTML=opts.map(o=>`<option ${o===S.grade?'selected':''}>${o}</option>`).join('');
+  $('age-next').classList.toggle('off',!S.age);
+}
+function pickAge(a){
+  S.age=a;
+  const g=gradeFor(a);
+  S.grade=['Kindergarten','Grade 1','Grade 2','Grade 3','Grade 4','Grade 5','Grade 6','Grade 7','Grade 8'].includes(g)?g:'Grade 8';
+  renderAges();
+}
+function ageNext(){if(S.age)go('c-interest')}
+
+/* ── step 3: interests ── */
+function renderChips(){
+  $('chips').innerHTML=INTERESTS.map(([e,l])=>`<div class="chip ${S.interests.has(l)?'sel':''}" onclick="toggleInt('${l}')" role="button">${e} ${l}</div>`).join('');
+  updInt();
+}
+function toggleInt(l){S.interests.has(l)?S.interests.delete(l):S.interests.add(l);renderChips()}
+function updInt(){
+  const n=S.interests.size,b=$('int-next');
+  b.classList.toggle('off',n===0);
+  b.textContent=n===0?'Pick at least 1':`Next · ${n} picked`;
+}
+function intNext(){if(S.interests.size)go('c-pin')}
+
+/* ── step 4: PIN ── */
+let pinBuf='',pinTemp='',pinStage='create';
+function initPin(){
+  pinBuf='';pinTemp='';pinStage='create';
+  $('pin-title').textContent='Create a parent PIN';
+  $('pin-sub').textContent="You'll need this 4-digit PIN to open the Parents area. Keep it secret from the kids!";
+  $('pin-err').textContent='';
+  $('keypad').innerHTML=['1','2','3','4','5','6','7','8','9','','0','⌫'].map(k=>k===''?'<div></div>':`<button class="key ${k==='⌫'?'ghost':''}" onclick="${k==='⌫'?'pinBack()':`pinKey('${k}')`}" aria-label="${k==='⌫'?'Delete':k}">${k}</button>`).join('');
+  drawPin();
+}
+function drawPin(){document.querySelectorAll('#pin-dots .pdot').forEach((d,i)=>d.classList.toggle('on',i<pinBuf.length))}
+function pinKey(d){
+  if(pinBuf.length>=4)return;
+  pinBuf+=d;drawPin();
+  if(pinBuf.length===4)setTimeout(pinDone,220);
+}
+function pinBack(){pinBuf=pinBuf.slice(0,-1);drawPin()}
+function pinFail(msg,reset){
+  const box=$('pin-dots');box.classList.add('shake');$('pin-err').textContent=msg;
+  setTimeout(()=>{box.classList.remove('shake');pinBuf='';drawPin();if(reset)initPinKeepMsg(msg)},480);
+}
+function initPinKeepMsg(msg){pinTemp='';pinStage='create';$('pin-title').textContent='Create a parent PIN';$('pin-sub').textContent='Choose 4 digits you can remember.';$('pin-err').textContent=msg}
+function pinDone(){
+  if(pinStage==='create'){
+    if(/^(\d)\1{3}$/.test(pinBuf)){pinFail('Too easy to guess. Try different digits.',false);return}
+    pinTemp=pinBuf;pinBuf='';pinStage='confirm';drawPin();
+    $('pin-title').textContent='Confirm your PIN';
+    $('pin-sub').textContent='Enter the same 4 digits again.';
+    $('pin-err').textContent='';
+  }else{
+    if(pinBuf===pinTemp){S.pin=pinBuf;go('c-safety')}
+    else pinFail("PINs don't match. Start again.",true);
+  }
+}
+
+/* ── step 5: limits ── */
+function renderLimits(){
+  $('limit-chips').innerHTML=LIMITS.map(l=>`<div class="chip lim ${S.limit===l?'sel':''}" onclick="setLimit('${l}')" role="button">${l}</div>`).join('');
+}
+function setLimit(l){S.limit=l==='∞'?'∞':parseInt(l);renderLimits()}
+
+/* ── permissions ── */
+const PERMS=[['mic','🎤','#FFE8E8','Microphone','So you can talk to Kidsko in voice calls'],['cam','📷','#E0FAFB','Camera','So Kidsko can see homework with AI Vision'],['notif','🔔','#FFF4E0','Notifications','Study reminders and daily reports']];
+function renderPerms(){
+  $('perm-list').innerHTML=PERMS.map(([k,e,bg,t,d])=>`<div class="row"><div class="ic" style="background:${bg}">${e}</div><div class="tx"><b>${t}</b><span>${d}</span></div><button class="btn-allow ${S.perms[k]?'ok':''}" onclick="allow('${k}')">${S.perms[k]?'Allowed ✓':'Allow'}</button></div>`).join('');
+}
+function allow(k){S.perms[k]=!S.perms[k];renderPerms()}
+
+/* ── done ── */
+function limText(){return S.limit==='∞'?'No limit':S.limit+' questions'}
+function renderDone(){
+  const a=AV[S.av];
+  $('sum-av').style.background=a.bg;$('sum-av').textContent=a.e;
+  $('sum-name').textContent=S.name.trim()||'Your child';
+  $('sum-meta').textContent=`Age ${S.age||'—'} · ${S.grade}`;
+  $('sum-int').textContent=[...S.interests].slice(0,5).map(l=>INTERESTS.find(i=>i[1]===l)[0]).join(' ')||'—';
+  $('sum-lim').textContent=limText();
+  const box=$('confetti');box.innerHTML='';
+  const em=['🎉','⭐','✨','🎈','💛','🌟'];
+  for(let i=0;i<26;i++){
+    const s=document.createElement('span');
+    s.textContent=em[i%em.length];
+    s.style.left=(Math.random()*95)+'%';
+    s.style.animationDuration=(3+Math.random()*3)+'s';
+    s.style.animationDelay=(Math.random()*1.6)+'s';
+    s.style.fontSize=(16+Math.random()*14)+'px';
+    box.appendChild(s);
+  }
+}
+
+/* ── tour choice ── */
+function renderChoice(){
+  $('badge-kid').textContent=S.tours.kid?'✅':'›';
+  $('badge-parent').textContent=S.tours.parent?'✅':'›';
+  const any=S.tours.kid||S.tours.parent;
+  $('tour-finish').textContent=any?'Finish setup':'Skip for now';
+}
+function startTour(id){go(id)}
+function endTour(who){S.tours[who]=true;go('tour-choice')}
+
+/* ── carousels ── */
+const dark=(inner,bg)=>`<div class="illus" style="background:${bg};flex-direction:column">${inner}</div>`;
+const CARS={
+  welcome:{i:0,last:'Get started',done:()=>go('setup-intro'),slides:[
+    {ill:()=>`<div class="illus" style="background:linear-gradient(135deg,#FFE8E8,#FFF4E0)"><div class="bounce" style="font-size:120px">🦉</div><div style="position:absolute;top:26px;left:30px;font-size:34px;animation:starFloat 2s ease-in-out infinite alternate">📚</div><div style="position:absolute;top:34px;right:34px;font-size:30px;animation:starFloat 2.6s ease-in-out infinite alternate">✨</div><div style="position:absolute;bottom:26px;right:40px;font-size:32px;animation:starFloat 2.2s ease-in-out infinite alternate">🎓</div></div>`,
+     t:()=>'Meet your AI study buddy',d:()=>'Ask Kidsko anything about maths, science or stories and get easy, fun answers.'},
+    {ill:()=>`<div class="illus" style="background:linear-gradient(135deg,#E0FAFB,#EAF4FF);gap:14px"><div style="background:#fff;border-radius:22px;padding:14px 18px;font-size:34px;box-shadow:0 6px 18px rgba(0,0,0,.08)">💬</div><div style="display:flex;gap:14px"><div style="background:#fff;border-radius:22px;padding:14px 18px;font-size:34px;box-shadow:0 6px 18px rgba(0,0,0,.08)">🎤</div><div style="background:#fff;border-radius:22px;padding:14px 18px;font-size:34px;box-shadow:0 6px 18px rgba(0,0,0,.08)">👁️</div></div></div>`,
+     t:()=>'Chat, talk and show',d:()=>'Type a question, speak out loud, or point the camera at homework. Kidsko understands all three.'},
+    {ill:()=>`<div class="illus" style="background:linear-gradient(135deg,#E8F8F0,#E0FAFB)"><div style="font-size:110px;filter:drop-shadow(0 10px 20px rgba(0,184,148,.3))">🛡️</div><div style="position:absolute;bottom:26px;display:flex;gap:8px"><span style="background:#fff;border-radius:14px;padding:6px 12px;font-size:12px;font-weight:800;color:var(--sub)">No ads</span><span style="background:#fff;border-radius:14px;padding:6px 12px;font-size:12px;font-weight:800;color:var(--sub)">Child filter</span><span style="background:#fff;border-radius:14px;padding:6px 12px;font-size:12px;font-weight:800;color:var(--sub)">Parent PIN</span></div></div>`,
+     t:()=>'Safe and made for kids',d:()=>'Strict filters, no ads and a secret PIN keep you in control the whole time.'}
+  ]},
+  'kid-tour':{i:0,last:"Let's go! 🚀",done:()=>endTour('kid'),slides:[
+    {ill:()=>`<div class="illus" style="background:linear-gradient(135deg,#FFE8E8,#FFF4E0)"><div class="bounce" style="font-size:120px">🦉</div><div style="position:absolute;top:22px;right:34px;font-size:46px;animation:wave 1.2s ease-in-out infinite;transform-origin:70% 70%">👋</div><div style="position:absolute;top:30px;left:30px;font-size:30px;animation:starFloat 2.4s ease-in-out infinite alternate">✨</div></div>`,
+     t:()=>`Hi ${who()==='your child'?'there':who()}! I'm Kidsko!`,d:()=>"I'm your friendly AI teacher. Ask me anything and I'll explain it in a fun, easy way."},
+    {ill:()=>`<div class="illus" style="background:linear-gradient(135deg,#E0FAFB,#EAF4FF);align-items:stretch;justify-content:center;flex-direction:column;gap:14px;padding:22px"><div style="align-self:flex-end;background:linear-gradient(135deg,#4ECDC4,#74B9FF);color:#fff;padding:12px 16px;border-radius:22px 22px 6px 22px;font-weight:800;font-size:14px;box-shadow:0 4px 14px rgba(0,0,0,.1)">Why is the sky blue? 🌍</div><div style="align-self:flex-start;display:flex;gap:8px;align-items:flex-end;max-width:92%"><div class="av-sm">🦉</div><div style="background:#fff;padding:12px 16px;border-radius:22px 22px 22px 6px;font-weight:700;font-size:14px;color:var(--text);line-height:1.5;box-shadow:0 4px 14px rgba(0,0,0,.08)">Great question! Blue light bounces around the most in the air 🌈</div></div><div style="align-self:center;background:#fff;border-radius:24px;padding:8px 16px;font-size:13px;font-weight:800;color:var(--sub);display:flex;gap:10px;align-items:center">Type here <span style="font-size:18px">📷</span></div></div>`,
+     t:()=>'💬 Chat with me',d:()=>'Type your question, or tap 📷 to show me your homework.'},
+    {ill:()=>`<div class="illus" style="background:linear-gradient(160deg,#1a1a2e,#0f3460)"><div style="position:absolute;width:230px;height:230px;border-radius:50%;border:2px solid rgba(255,107,107,.25);animation:ringPulse 2.5s ease-in-out infinite"></div><div style="position:absolute;width:180px;height:180px;border-radius:50%;border:2px solid rgba(255,107,107,.4);animation:ringPulse 2.5s .35s ease-in-out infinite"></div><div style="width:110px;height:110px;border-radius:50%;background:linear-gradient(135deg,#FF6B6B,#FF9F43);display:flex;align-items:center;justify-content:center;font-size:58px;box-shadow:0 10px 40px rgba(255,107,107,.55);position:relative">🦉</div><div style="position:absolute;bottom:26px;display:flex;align-items:flex-end;gap:4px;height:34px">${[8,14,22,30,20,30,18,12,6].map((h,i)=>`<div style="width:4px;height:${h}px;border-radius:4px;background:#FF6B6B;animation:waveBar 1s ${i*.1}s ease-in-out infinite"></div>`).join('')}</div></div>`,
+     t:()=>'📞 Talk to me',d:()=>'Tap Call and just speak. I answer out loud, like a phone call!'},
+    {ill:()=>`<div class="illus" style="background:#0a0a14"><div style="position:absolute;inset:34px;pointer-events:none"><i style="position:absolute;top:0;left:0;width:34px;height:34px;border-top:4px solid #4ECDC4;border-left:4px solid #4ECDC4;border-radius:8px 0 0 0"></i><i style="position:absolute;top:0;right:0;width:34px;height:34px;border-top:4px solid #4ECDC4;border-right:4px solid #4ECDC4;border-radius:0 8px 0 0"></i><i style="position:absolute;bottom:0;left:0;width:34px;height:34px;border-bottom:4px solid #4ECDC4;border-left:4px solid #4ECDC4;border-radius:0 0 0 8px"></i><i style="position:absolute;bottom:0;right:0;width:34px;height:34px;border-bottom:4px solid #4ECDC4;border-right:4px solid #4ECDC4;border-radius:0 0 8px 0"></i></div><div style="position:absolute;left:34px;right:34px;height:2px;background:linear-gradient(90deg,transparent,#4ECDC4,transparent);animation:scan 2.4s ease-in-out infinite"></div><div style="font-size:92px;margin-bottom:34px">🌱</div><div style="position:absolute;bottom:42px;background:rgba(10,10,20,.85);border:1px solid rgba(78,205,196,.35);border-radius:16px;padding:9px 14px;font-size:13px;font-weight:800;color:#fff">🦉 It's a plant! It makes food from sunlight.</div></div>`,
+     t:()=>'👁️ AI Vision',d:()=>"Point the camera at anything and I'll tell you what it is!"},
+    {ill:()=>`<div class="illus" style="background:linear-gradient(135deg,#F3EEFF,#EBF5FB)"><div style="width:120px;height:120px;border-radius:38px;background:linear-gradient(135deg,var(--pnavy),var(--pblue));display:flex;align-items:center;justify-content:center;font-size:62px;box-shadow:0 14px 36px rgba(30,58,95,.35)">🔒</div><div style="position:absolute;bottom:34px;display:flex;gap:10px">${[0,1,2,3].map(()=>'<div style="width:16px;height:16px;border-radius:50%;background:#C8CCE0"></div>').join('')}</div></div>`,
+     t:()=>'🔒 Grown-ups only',d:()=>'The Parents button needs a secret PIN. It keeps your learning safe!'}
+  ]},
+  'parent-tour':{i:0,last:'See how it works',done:()=>go('workflow'),slides:[
+    {ill:()=>`<div class="illus" style="background:linear-gradient(135deg,#EBF5FB,#F0F4F8);padding:22px"><div style="width:100%"><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;text-align:center"><div class="stat"><div class="n" style="color:var(--coral)">23</div><div class="l">Questions today</div></div><div class="stat"><div class="n" style="color:var(--orange)">7</div><div class="l">Day streak</div></div><div class="stat"><div class="n" style="color:var(--sky)">34m</div><div class="l">Time today</div></div><div class="stat"><div class="n" style="color:var(--purple)">12</div><div class="l">Topics</div></div></div></div></div>`,
+     t:()=>'See what they learn',d:()=>'The dashboard shows questions asked, time spent, topics explored and every conversation.'},
+    {ill:()=>`<div class="illus" style="background:linear-gradient(135deg,#EBF5FB,#F0F4F8);padding:24px"><div class="card" style="width:100%;text-align:center"><div style="font-size:52px;font-weight:900;color:var(--coral);line-height:1">30</div><div style="font-size:13px;font-weight:800;color:var(--sub);margin-top:2px">questions per day</div><div style="background:#F0F4F8;border-radius:10px;height:10px;margin:14px 0 6px;overflow:hidden"><div style="height:100%;width:76%;background:linear-gradient(90deg,var(--coral),var(--orange));border-radius:10px"></div></div><div style="font-size:11px;font-weight:800;color:var(--sub)">23 used · 7 left</div><div style="display:flex;gap:6px;margin-top:14px">${[10,20,30,50,'∞'].map(v=>`<div style="flex:1;padding:8px 0;border-radius:11px;border:2px solid ${v===30?'var(--coral)':'var(--border)'};background:${v===30?'rgba(255,107,107,.1)':'#F8F9FA'};font-size:12px;font-weight:900;color:${v===30?'var(--coral)':'var(--sub)'}">${v}</div>`).join('')}</div></div></div>`,
+     t:()=>'Set healthy limits',d:()=>'Choose a daily question limit and study hours. Kidsko pauses politely when time is up.'},
+    {ill:()=>`<div class="illus" style="background:linear-gradient(135deg,#EBF5FB,#F0F4F8);flex-direction:column;gap:18px"><div style="display:flex;gap:16px"><div style="text-align:center"><div style="width:68px;height:68px;border-radius:24px;background:${AV[S.av].bg};display:flex;align-items:center;justify-content:center;font-size:36px;border:3px solid #fff;box-shadow:0 6px 16px rgba(0,0,0,.12)">${AV[S.av].e}</div><div style="font-size:12px;font-weight:800;color:var(--text);margin-top:6px">${first()||'Child 1'}</div></div><div style="text-align:center"><div style="width:68px;height:68px;border-radius:24px;background:linear-gradient(135deg,#4ECDC4,#74B9FF);display:flex;align-items:center;justify-content:center;font-size:36px;border:3px solid #fff;box-shadow:0 6px 16px rgba(0,0,0,.12)">👦</div><div style="font-size:12px;font-weight:800;color:var(--text);margin-top:6px">Child 2</div></div><div style="text-align:center"><div style="width:68px;height:68px;border-radius:24px;background:rgba(41,128,185,.1);border:3px dashed var(--pblue);display:flex;align-items:center;justify-content:center;font-size:28px">➕</div><div style="font-size:12px;font-weight:800;color:var(--pblue);margin-top:6px">Add</div></div></div><div style="background:#fff;border-radius:16px;padding:10px 16px;font-size:12px;font-weight:800;color:var(--sub)">Each child gets their own history and limits</div></div>`,
+     t:()=>'One account, many children',d:()=>'Add each child with their own age, grade, chat history and daily limit.'},
+    {ill:()=>`<div class="illus" style="background:linear-gradient(135deg,#E8F8F0,#EBF5FB);padding:24px"><div class="card" style="width:100%;padding:6px 16px;text-align:left">${[['🚫','Strict content filter'],['📵','No ads, ever'],['🔐','Parent PIN lock'],['🙈','Data is never sold']].map(([e,t])=>`<div class="row" style="padding:10px 0"><div class="ic" style="background:#E8F8F0;width:34px;height:34px;font-size:17px">${e}</div><div class="tx"><b style="font-size:13px">${t}</b></div><span style="color:var(--green);font-weight:900;font-size:18px">✓</span></div>`).join('')}</div></div>`,
+     t:()=>'Safe by design',d:()=>'Every question is checked before Kidsko answers. You can review all chats anytime.'}
+  ]}
+};
+function renderCar(id){
+  const c=CARS[id],s=c.slides[c.i];
+  $(id+'-stage').innerHTML=`<div class="slide-in">${s.ill()}<div class="h1">${s.t()}</div><p class="sub">${s.d()}</p></div>`;
+  $(id+'-dots').innerHTML=c.slides.map((_,i)=>`<div class="dot ${i===c.i?'on':''}"></div>`).join('');
+  $(id+'-back').style.display=c.i===0?'none':'block';
+  $(id+'-next').textContent=c.i===c.slides.length-1?c.last:'Next';
+}
+function carNext(id){const c=CARS[id];if(c.i<c.slides.length-1){c.i++;renderCar(id)}else c.done()}
+function carBack(id){const c=CARS[id];if(c.i>0){c.i--;renderCar(id)}}
+
+/* ── workflow ── */
+const FLOW=[
+  ['🙋','linear-gradient(135deg,#FF6B6B,#FF9F43)','Your child asks','By typing, speaking in a call, or showing something with AI Vision.'],
+  ['🛡️','linear-gradient(135deg,#4ECDC4,#74B9FF)','Safety check','Kidsko filters the question and blocks anything unsafe for children.'],
+  ['🦉','linear-gradient(135deg,#A78BFA,#FD79A8)','Kidsko explains','The answer uses simple words that match your child\'s age and grade.'],
+  ['📊','linear-gradient(135deg,#1E3A5F,#2980B9)','You stay informed','Open the Parents area with your PIN to see activity, topics and limits.']
+];
+function renderFlow(){
+  $('flow').innerHTML=FLOW.map(([e,bg,t,d],i)=>`<div class="fstep" style="animation-delay:${i*.18}s"><div class="fico" style="background:${bg}">${e}</div><div class="fcard"><b>${t}</b><span>${d}</span></div></div>`).join('');
+}
+
+/* ── finish ── */
+function renderFinish(){
+  const items=[['👧','#FFE8E8',`${S.name.trim()||'Child'}'s profile`,`Age ${S.age||'—'} · ${S.grade}`],['🔐','#EBF5FB','Parent PIN','Set and ready'],['🛡️','#E8F8F0','Safety and limits',limText()+' per day'],['🧭','#FFF4E0','Tutorials',S.tours.kid||S.tours.parent?'Completed':'Skipped. Replay anytime in Settings']];
+  $('finish-list').innerHTML=items.map(([e,bg,t,d])=>`<div class="row"><div class="ic" style="background:${bg}">${e}</div><div class="tx"><b>${t}</b><span>${d}</span></div><span style="color:var(--green);font-weight:900;font-size:18px">✓</span></div>`).join('');
+}
+function openApp(){window.location.href='kidsko-final.html'}
+function replay(){S=fresh();go('splash')}
+
+/* init */
+go('splash');
+</script>
+</body>
+</html>
