@@ -29,6 +29,8 @@ import {
   confirmPasswordChangeOtp,
   requestEmailChangeOtp,
   confirmEmailChangeOtp,
+  forgotPassword,
+  resetPasswordWithOtp,
   getCurrentUserEmail,
   StudentMemoryData,
   getStudentActivity,
@@ -100,6 +102,7 @@ export default function ParentsHub({
   const [parentEmail, setParentEmail] = useState<string>('');
   const [changePasswordModalVisible, setChangePasswordModalVisible] = useState<boolean>(false);
   const [passwordStep, setPasswordStep] = useState<'form' | 'otp'>('form');
+  const [isForgotPasswordMode, setIsForgotPasswordMode] = useState<boolean>(false);
   const [currentPasswordInput, setCurrentPasswordInput] = useState<string>('');
   const [newPasswordInput, setNewPasswordInput] = useState<string>('');
   const [confirmPasswordInput, setConfirmPasswordInput] = useState<string>('');
@@ -505,10 +508,24 @@ export default function ParentsHub({
 
   // Parent Password Update Action (Step 1: Request OTP)
   const handleRequestPasswordOtp = async () => {
-    if (!currentPasswordInput) {
-      setPasswordError('Please enter your current password.');
-      return;
+    let emailToUse = parentEmail;
+    if (!emailToUse) {
+      try {
+        const fetched = await getCurrentUserEmail();
+        if (fetched) {
+          emailToUse = fetched;
+          setParentEmail(fetched);
+        }
+      } catch {}
     }
+
+    if (!isForgotPasswordMode) {
+      if (!currentPasswordInput) {
+        setPasswordError('Please enter your current password.');
+        return;
+      }
+    }
+
     if (!newPasswordInput || newPasswordInput.length < 8) {
       setPasswordError('New password must be at least 8 characters.');
       return;
@@ -520,7 +537,14 @@ export default function ParentsHub({
     setUpdatingPassword(true);
     setPasswordError(null);
     try {
-      await requestPasswordChangeOtp(currentPasswordInput, newPasswordInput);
+      if (isForgotPasswordMode) {
+        if (!emailToUse) {
+          throw new Error('Could not identify parent email. Please try logging in again.');
+        }
+        await forgotPassword(emailToUse);
+      } else {
+        await requestPasswordChangeOtp(currentPasswordInput, newPasswordInput);
+      }
       setPasswordStep('otp');
       setPasswordOtpInput('');
       setPasswordResendTimer(30);
@@ -538,17 +562,37 @@ export default function ParentsHub({
       setPasswordError('Please enter the verification code sent to your email.');
       return;
     }
+    let emailToUse = parentEmail;
+    if (!emailToUse) {
+      try {
+        const fetched = await getCurrentUserEmail();
+        if (fetched) {
+          emailToUse = fetched;
+          setParentEmail(fetched);
+        }
+      } catch {}
+    }
+
     setUpdatingPassword(true);
     setPasswordError(null);
     try {
-      await confirmPasswordChangeOtp(trimmedOtp, newPasswordInput);
+      if (isForgotPasswordMode) {
+        if (!emailToUse) throw new Error('Could not identify parent email.');
+        await resetPasswordWithOtp(emailToUse, trimmedOtp, newPasswordInput);
+      } else {
+        await confirmPasswordChangeOtp(trimmedOtp, newPasswordInput);
+      }
       setChangePasswordModalVisible(false);
       setPasswordStep('form');
+      setIsForgotPasswordMode(false);
       setCurrentPasswordInput('');
       setNewPasswordInput('');
       setConfirmPasswordInput('');
       setPasswordOtpInput('');
-      Alert.alert('Password Updated', 'Your parent account password has been updated successfully.');
+      Alert.alert(
+        isForgotPasswordMode ? 'Password Reset Successful' : 'Password Updated',
+        'Your parent account password has been updated successfully.'
+      );
     } catch (err: any) {
       setPasswordError(err?.message || 'Invalid or expired verification code.');
     } finally {
@@ -1451,6 +1495,7 @@ export default function ParentsHub({
                   setConfirmPasswordInput('');
                   setPasswordOtpInput('');
                   setPasswordStep('form');
+                  setIsForgotPasswordMode(false);
                   setPasswordError(null);
                   setChangePasswordModalVisible(true);
                 }}
@@ -1950,23 +1995,42 @@ export default function ParentsHub({
             {passwordStep === 'form' ? (
               <>
                 <Text style={{ fontSize: 13, fontFamily: fontFamilies.regular, color: colors.subtext, marginBottom: 14 }}>
-                  Enter your current password and choose a new password. We will send a verification code to your registered email.
+                  {isForgotPasswordMode
+                    ? `Forgot your current password? We will send a security code to ${parentEmail || 'your email'} to reset it.`
+                    : 'Enter your current password and choose a new password. We will send a verification code to your registered email.'}
                 </Text>
 
-                <Text style={styles.modalFieldLabel}>Current Password</Text>
-                <TextInput
-                  style={styles.modalTextInput}
-                  value={currentPasswordInput}
-                  onChangeText={(t) => {
-                    setCurrentPasswordInput(t);
-                    if (passwordError) setPasswordError(null);
-                  }}
-                  placeholder="Current password"
-                  secureTextEntry
-                  autoCapitalize="none"
-                  placeholderTextColor={colors.subtext}
-                  editable={!updatingPassword}
-                />
+                {!isForgotPasswordMode ? (
+                  <>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text style={styles.modalFieldLabel}>Current Password</Text>
+                      <TouchableOpacity
+                        onPress={() => {
+                          setIsForgotPasswordMode(true);
+                          setPasswordError(null);
+                        }}
+                        disabled={updatingPassword}
+                      >
+                        <Text style={{ fontSize: 12, color: colors.coral, fontFamily: fontFamilies.bold }}>
+                          Forgot Password?
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                    <TextInput
+                      style={styles.modalTextInput}
+                      value={currentPasswordInput}
+                      onChangeText={(t) => {
+                        setCurrentPasswordInput(t);
+                        if (passwordError) setPasswordError(null);
+                      }}
+                      placeholder="Current password"
+                      secureTextEntry
+                      autoCapitalize="none"
+                      placeholderTextColor={colors.subtext}
+                      editable={!updatingPassword}
+                    />
+                  </>
+                ) : null}
 
                 <Text style={styles.modalFieldLabel}>New Password</Text>
                 <TextInput
@@ -2010,16 +2074,33 @@ export default function ParentsHub({
                   {updatingPassword ? (
                     <ActivityIndicator color="#FFFFFF" size="small" />
                   ) : (
-                    <Text style={styles.modalPrimaryBtnText}>Send Verification Code 🔐</Text>
+                    <Text style={styles.modalPrimaryBtnText}>
+                      {isForgotPasswordMode ? 'Send Reset Code 📩' : 'Send Verification Code 🔐'}
+                    </Text>
                   )}
                 </TouchableOpacity>
+
+                {isForgotPasswordMode ? (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setIsForgotPasswordMode(false);
+                      setPasswordError(null);
+                    }}
+                    style={{ marginTop: 12, alignItems: 'center', paddingVertical: 8 }}
+                    disabled={updatingPassword}
+                  >
+                    <Text style={{ fontSize: 13, color: colors.subtext, fontFamily: fontFamilies.semiBold }}>
+                      ← I remember my password
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
               </>
             ) : (
               <>
                 <View style={{ alignItems: 'center', marginVertical: 10 }}>
                   <Text style={{ fontSize: 36, marginBottom: 6 }}>🔐</Text>
                   <Text style={{ fontSize: 16, fontFamily: fontFamilies.bold, color: colors.text, textAlign: 'center' }}>
-                    Enter Security Code
+                    {isForgotPasswordMode ? 'Reset Password Security Code' : 'Enter Security Code'}
                   </Text>
                   <Text style={{ fontSize: 13, fontFamily: fontFamilies.regular, color: colors.subtext, textAlign: 'center', marginTop: 4 }}>
                     Enter the verification code sent to{'\n'}
@@ -2072,7 +2153,9 @@ export default function ParentsHub({
                   {updatingPassword ? (
                     <ActivityIndicator color="#FFFFFF" size="small" />
                   ) : (
-                    <Text style={styles.modalPrimaryBtnText}>Verify & Update Password</Text>
+                    <Text style={styles.modalPrimaryBtnText}>
+                      {isForgotPasswordMode ? 'Verify & Reset Password' : 'Verify & Update Password'}
+                    </Text>
                   )}
                 </TouchableOpacity>
 
@@ -2086,7 +2169,7 @@ export default function ParentsHub({
                   disabled={updatingPassword}
                 >
                   <Text style={{ fontSize: 13, color: colors.subtext, fontFamily: fontFamilies.semiBold }}>
-                    ← Edit Password
+                    {isForgotPasswordMode ? '← Change New Password' : '← Edit Password'}
                   </Text>
                 </TouchableOpacity>
               </>
