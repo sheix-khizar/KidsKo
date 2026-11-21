@@ -19,6 +19,7 @@ import {
   PressScale,
   FadeSlideIn,
   useSafeAreaInsets,
+  AskieCompanion,
 } from '../ui';
 import { colors, fontFamilies, gradients } from '../theme';
 
@@ -127,11 +128,7 @@ export default function RegisterScreen({ onRegistered, onRequireVerification, on
         <FadeSlideIn delay={0}>
           <View style={styles.headerTopRow}>
             <View style={styles.brandRow}>
-              <Image
-                source={require('../../assets/header-logo.png')}
-                style={{ width: 110, height: 44, borderRadius: 12 }}
-                resizeMode="contain"
-              />
+              <AskieCompanion size="s" state="idle" />
             </View>
 
             {/* Server settings button */}
