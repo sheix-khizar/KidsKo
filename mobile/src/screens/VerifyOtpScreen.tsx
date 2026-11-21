@@ -30,14 +30,14 @@ type Props = {
 
 export default function VerifyOtpScreen({ email, onVerified, onBack }: Props) {
   const insets = useSafeAreaInsets();
-  const [digits, setDigits] = useState(['', '', '', '', '', '']);
-  const [focusedIndex, setFocusedIndex] = useState(0);
+  const [code, setCode] = useState('');
+  const [codeLength, setCodeLength] = useState<6 | 8>(8);
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [resendTimer, setResendTimer] = useState(30);
 
-  const inputRefs = useRef<Array<TextInput | null>>([]);
+  const hiddenInputRef = useRef<TextInput | null>(null);
 
   // Countdown timer for code resend
   useEffect(() => {
@@ -52,51 +52,16 @@ export default function VerifyOtpScreen({ email, onVerified, onBack }: Props) {
     };
   }, [resendTimer]);
 
-  const handleDigitChange = (text: string, index: number) => {
-    setErrorMsg(null);
-
-    // Handle full 6-digit code paste
-    const cleanNumbers = text.replace(/[^0-9]/g, '');
-    if (cleanNumbers.length > 1) {
-      const pasted = cleanNumbers.slice(0, 6).split('');
-      const newDigits = [...digits];
-      for (let i = 0; i < 6; i++) {
-        newDigits[i] = pasted[i] || '';
-      }
-      setDigits(newDigits);
-      const nextFocus = Math.min(cleanNumbers.length, 5);
-      inputRefs.current[nextFocus]?.focus();
-      return;
-    }
-
-    const newDigits = [...digits];
-    newDigits[index] = cleanNumbers;
-    setDigits(newDigits);
-
-    // Auto-advance to next box
-    if (cleanNumbers && index < 5) {
-      inputRefs.current[index + 1]?.focus();
-    }
-  };
-
-  const handleKeyPress = (e: any, index: number) => {
-    if (e.nativeEvent.key === 'Backspace' && !digits[index] && index > 0) {
-      inputRefs.current[index - 1]?.focus();
-    }
-  };
-
-  const code = digits.join('');
-
   const handleVerify = async () => {
     setErrorMsg(null);
-    if (code.length < 6) {
-      setErrorMsg('Please enter the complete 6-digit code sent to your email.');
+    if (code.length < codeLength) {
+      setErrorMsg(`Please enter the complete ${codeLength}-digit code sent to your email.`);
       return;
     }
 
     setLoading(true);
     try {
-      const result = await verifyOtp(email.trim(), code, 'signup');
+      const result = await verifyOtp(email.trim(), code.trim(), 'signup');
       if (result.session) {
         await saveToken(
           result.session.access_token,
@@ -120,9 +85,9 @@ export default function VerifyOtpScreen({ email, onVerified, onBack }: Props) {
     try {
       await resendOtp(email.trim(), 'signup');
       setResendTimer(30);
-      setDigits(['', '', '', '', '', '']);
-      inputRefs.current[0]?.focus();
-      Alert.alert('Code Sent', `A new 6-digit verification code has been sent to ${email}.`);
+      setCode('');
+      hiddenInputRef.current?.focus();
+      Alert.alert('Code Sent', `A new verification code has been sent to ${email}.`);
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to resend code. Please try again.');
     } finally {
@@ -154,7 +119,7 @@ export default function VerifyOtpScreen({ email, onVerified, onBack }: Props) {
 
           <Text style={styles.headline}>Check your Gmail 📬</Text>
           <Text style={styles.subheadline}>
-            Enter the 6-digit code sent to{'\n'}
+            Enter the {codeLength}-digit code sent to{'\n'}
             <Text style={styles.emailHighlight}>{email}</Text>
           </Text>
         </FadeSlideIn>
@@ -174,38 +139,67 @@ export default function VerifyOtpScreen({ email, onVerified, onBack }: Props) {
           showsVerticalScrollIndicator={false}
         >
           <FadeSlideIn delay={80}>
-            <Text style={styles.otpLabel}>Verification Code</Text>
-            <View style={styles.otpRow}>
-              {digits.map((digit, index) => {
-                const isFocused = focusedIndex === index;
+            <View style={styles.codeHeaderRow}>
+              <Text style={styles.otpLabel}>Verification Code</Text>
+              <Pressable
+                onPress={() => {
+                  setCode('');
+                  setCodeLength((prev) => (prev === 6 ? 8 : 6));
+                }}
+                style={styles.lengthSwitchBadge}
+                accessibilityRole="button"
+                accessibilityLabel="Switch code length"
+              >
+                <Text style={styles.lengthSwitchText}>
+                  {codeLength === 8 ? '8 digits (Tap for 6)' : '6 digits (Tap for 8)'}
+                </Text>
+              </Pressable>
+            </View>
+
+            {/* Seamless unified pressable row */}
+            <Pressable
+              style={styles.otpRow}
+              onPress={() => hiddenInputRef.current?.focus()}
+            >
+              {/* Invisible master TextInput that captures all typing without focus jumping */}
+              <TextInput
+                ref={hiddenInputRef}
+                style={styles.hiddenInput}
+                value={code}
+                onChangeText={(t) => {
+                  setErrorMsg(null);
+                  const clean = t.replace(/[^0-9]/g, '').slice(0, codeLength);
+                  setCode(clean);
+                }}
+                keyboardType="number-pad"
+                maxLength={codeLength}
+                autoFocus
+                caretHidden
+              />
+
+              {Array.from({ length: codeLength }).map((_, index) => {
+                const char = code[index] || '';
+                const isCurrent = index === code.length;
+                const isLastFilled = index === codeLength - 1 && code.length === codeLength;
+                const isFocused = isCurrent || isLastFilled;
+
                 return (
                   <View
                     key={index}
                     style={[
                       styles.digitBox,
+                      codeLength === 8 && styles.digitBox8,
                       isFocused && styles.digitBoxFocused,
-                      Boolean(digit) && styles.digitBoxFilled,
+                      Boolean(char) && styles.digitBoxFilled,
                     ]}
                   >
-                    <TextInput
-                      ref={(el) => {
-                        inputRefs.current[index] = el;
-                      }}
-                      style={styles.digitInput}
-                      value={digit}
-                      onChangeText={(t) => handleDigitChange(t, index)}
-                      onKeyPress={(e) => handleKeyPress(e, index)}
-                      onFocus={() => setFocusedIndex(index)}
-                      keyboardType="number-pad"
-                      maxLength={6}
-                      selectTextOnFocus
-                      textAlign="center"
-                      autoFocus={index === 0}
-                    />
+                    <Text style={[styles.digitChar, codeLength === 8 && styles.digitChar8]}>
+                      {char}
+                    </Text>
                   </View>
                 );
               })}
-            </View>
+            </Pressable>
           </FadeSlideIn>
 
           {/* Error Banner */}
@@ -320,28 +314,62 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 32,
   },
+  codeHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
   otpLabel: {
     fontSize: 14,
     fontFamily: fontFamilies.bold,
     color: colors.text,
-    textAlign: 'center',
-    marginBottom: 16,
+  },
+  lengthSwitchBadge: {
+    backgroundColor: '#F1F5F9',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  lengthSwitchText: {
+    fontSize: 12,
+    fontFamily: fontFamilies.bold,
+    color: colors.coralStrong,
   },
   otpRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'center',
+    gap: 6,
     marginBottom: 24,
+    position: 'relative',
+    minHeight: 56,
+  },
+  hiddenInput: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    opacity: 0.01,
+    color: 'transparent',
   },
   digitBox: {
-    width: 48,
-    height: 56,
-    borderRadius: 14,
+    width: 44,
+    height: 54,
+    borderRadius: 12,
     backgroundColor: '#F8FAFC',
     borderWidth: 2,
     borderColor: '#E2E8F0',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  digitBox8: {
+    width: 34,
+    height: 48,
+    borderRadius: 10,
   },
   digitBoxFocused: {
     borderColor: colors.coralStrong,
@@ -356,12 +384,14 @@ const styles = StyleSheet.create({
     borderColor: '#94A3B8',
     backgroundColor: '#FFFFFF',
   },
-  digitInput: {
-    width: '100%',
-    height: '100%',
-    fontSize: 24,
+  digitChar: {
+    fontSize: 22,
     fontFamily: fontFamilies.extraBold,
     color: colors.text,
+    textAlign: 'center',
+  },
+  digitChar8: {
+    fontSize: 17,
   },
   errorBanner: {
     flexDirection: 'row',
