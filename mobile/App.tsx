@@ -8,6 +8,7 @@ import WelcomeScreen from './src/screens/WelcomeScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import VerifyOtpScreen from './src/screens/VerifyOtpScreen';
 import LoginScreen from './src/screens/LoginScreen';
+import OnboardingScreen from './src/screens/OnboardingScreen';
 import MainShellScreen from './src/screens/MainShellScreen';
 import PaywallScreen from './src/screens/PaywallScreen';
 import TranscriptScreen from './src/screens/TranscriptScreen';
@@ -22,7 +23,7 @@ import {
   Nunito_800ExtraBold,
   Nunito_900Black,
 } from '@expo-google-fonts/nunito';
-import { getToken } from './src/services/api';
+import { getToken, getStudents } from './src/services/api';
 import { loadSavedApiUrl } from './src/services/config';
 
 // Keep native splash screen visible while JS bundle boots
@@ -35,6 +36,7 @@ type Screen =
   | 'register'
   | 'verifyOtp'
   | 'login'
+  | 'onboarding'
   | 'main'
   | 'paywall'
   | 'transcript'
@@ -83,7 +85,16 @@ export default function App() {
 
       if (isMounted) {
         if (token) {
-          setScreen('main');
+          try {
+            const students = await getStudents();
+            if (students && students.length > 0) {
+              setScreen('main');
+            } else {
+              setScreen('onboarding');
+            }
+          } catch {
+            setScreen('main');
+          }
         } else {
           setScreen('welcome');
         }
@@ -105,6 +116,9 @@ export default function App() {
       }
       if (screen === 'verifyOtp') {
         setScreen('register');
+        return true;
+      }
+      if (screen === 'onboarding') {
         return true;
       }
       if (screen === 'login' || screen === 'register') {
@@ -180,7 +194,15 @@ export default function App() {
       return (
         <FadeSlideIn key='register' duration={220} style={{ flex: 1 }}>
           <RegisterScreen
-            onRegistered={() => setScreen('main')}
+            onRegistered={async () => {
+              try {
+                const students = await getStudents();
+                if (students && students.length > 0) setScreen('main');
+                else setScreen('onboarding');
+              } catch {
+                setScreen('onboarding');
+              }
+            }}
             onRequireVerification={(email) => {
               setPendingVerificationEmail(email);
               setScreen('verifyOtp');
@@ -196,7 +218,15 @@ export default function App() {
         <FadeSlideIn key='verifyOtp' duration={220} style={{ flex: 1 }}>
           <VerifyOtpScreen
             email={pendingVerificationEmail}
-            onVerified={() => setScreen('main')}
+            onVerified={async () => {
+              try {
+                const students = await getStudents();
+                if (students && students.length > 0) setScreen('main');
+                else setScreen('onboarding');
+              } catch {
+                setScreen('onboarding');
+              }
+            }}
             onBack={() => setScreen('register')}
           />
         </FadeSlideIn>
@@ -207,9 +237,30 @@ export default function App() {
       return (
         <FadeSlideIn key='login' duration={220} style={{ flex: 1 }}>
           <LoginScreen
-          onLoggedIn={() => setScreen('main')}
-          onGoToRegister={() => setScreen('register')}
-        />
+            onLoggedIn={async () => {
+              try {
+                const students = await getStudents();
+                if (students && students.length > 0) setScreen('main');
+                else setScreen('onboarding');
+              } catch {
+                setScreen('main');
+              }
+            }}
+            onGoToRegister={() => setScreen('register')}
+          />
+        </FadeSlideIn>
+      );
+    }
+
+    if (screen === 'onboarding') {
+      return (
+        <FadeSlideIn key='onboarding' duration={220} style={{ flex: 1 }}>
+          <OnboardingScreen
+            onFinish={(student) => {
+              setActiveStudent(student);
+              setScreen('main');
+            }}
+          />
         </FadeSlideIn>
       );
     }

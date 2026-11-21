@@ -95,7 +95,6 @@ function generateSalt(): string {
 
 /** Check if parent PIN is configured */
 export async function isPinConfigured(): Promise<boolean> {
-  if (__DEV__) return true;
   try {
     const hash = await SecureStore.getItemAsync(PIN_HASH_KEY);
     return !!hash && hash.length === 64;
