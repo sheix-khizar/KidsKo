@@ -91,6 +91,13 @@ router.post('/register', authAttemptLimiter, async (req: Request, res: Response)
     return res.status(500).json({ error: 'User creation failed unexpectedly' });
   }
 
+  // Supabase security convention: if an account already exists, signUp returns an empty identities array and sends NO email
+  if (data.user.identities && data.user.identities.length === 0) {
+    return res.status(400).json({
+      error: 'An account with this email already exists. Please sign in or reset your password.',
+    });
+  }
+
   // Ensure profiles row exists for FK relationships
   try {
     await supabaseAdmin.from('profiles').upsert({ id: data.user.id, email: trimmedEmail });
