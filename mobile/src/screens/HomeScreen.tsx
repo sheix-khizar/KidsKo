@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,12 +9,14 @@ import {
   Easing,
   Platform,
 } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 import { useSafeAreaInsets } from '../ui/safeArea';
 import { colors, radii, typography, fontFamilies, shadows, gradients } from '../theme';
 import { AskieCompanion } from '../ui/AskieCompanion';
 import { AskieEmoji } from '../ui/AskieEmoji';
 import { triggerAskieReaction } from '../ui/AskieReactions';
 import { FadeSlideIn, PressScale, Bounce } from '../ui/motion';
+import { getStudentActivity } from '../services/api';
 import { Student } from './MainShellScreen';
 
 type HomeScreenProps = {
@@ -82,11 +84,41 @@ export default function HomeScreen({
   const insets = useSafeAreaInsets();
   const firstName = student.student_name ? student.student_name.split(' ')[0] : 'Learner';
 
-  // Gamification state (kid-friendly progression)
-  const [streak] = useState(7);
-  const [stars, setStars] = useState(120);
-  const [goalQuestions, setGoalQuestions] = useState(3);
+  // Gamification state (dynamic, real learning analytics)
+  const [streak, setStreak] = useState(0);
+  const [stars, setStars] = useState(25);
+  const [goalQuestions, setGoalQuestions] = useState(0);
   const goalTotal = 5;
+
+  // Load real student learning analytics and persistent stars
+  const loadStudentStats = useCallback(async () => {
+    try {
+      const [activity, savedStarsStr] = await Promise.all([
+        getStudentActivity(student.id).catch(() => null),
+        SecureStore.getItemAsync(`@kidsko_stars_${student.id}`).catch(() => null),
+      ]);
+
+      if (activity) {
+        setStreak(activity.streak || 0);
+        setGoalQuestions(activity.questionsToday || 0);
+        const baseStars = activity.stars || Math.max(25, ((activity.questionsThisWeek || 0) * 5) + ((activity.streak || 0) * 15));
+        const savedStars = savedStarsStr ? parseInt(savedStarsStr, 10) : 0;
+        const finalStars = Math.max(baseStars, savedStars);
+        setStars(finalStars);
+        if (finalStars > savedStars) {
+          SecureStore.setItemAsync(`@kidsko_stars_${student.id}`, String(finalStars)).catch(() => {});
+        }
+      } else if (savedStarsStr) {
+        setStars(parseInt(savedStarsStr, 10));
+      }
+    } catch (err) {
+      console.warn('[HomeScreen] Failed to load student stats:', err);
+    }
+  }, [student.id]);
+
+  useEffect(() => {
+    loadStudentStats();
+  }, [loadStudentStats]);
 
   // Hero greeting speech bubble rotation
   const [msgIdx, setMsgIdx] = useState(0);
@@ -139,7 +171,11 @@ export default function HomeScreen({
 
   const handleMascotTap = () => {
     triggerAskieReaction('⭐');
-    setStars((s) => s + 5);
+    setStars((s) => {
+      const nextStars = s + 5;
+      SecureStore.setItemAsync(`@kidsko_stars_${student.id}`, String(nextStars)).catch(() => {});
+      return nextStars;
+    });
     Animated.sequence([
       Animated.timing(bubbleScale, { toValue: 1.15, duration: 120, useNativeDriver: true }),
       Animated.timing(bubbleScale, { toValue: 1, duration: 180, useNativeDriver: true }),

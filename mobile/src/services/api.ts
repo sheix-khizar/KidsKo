@@ -399,6 +399,7 @@ export type StudentActivityData = {
   questionsThisWeek: number;
   topicsExplored: number;
   streak: number;
+  stars?: number;
   dailyCounts: Record<string, number>;
   topics?: TopicSummary[];
 };

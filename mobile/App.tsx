@@ -55,6 +55,7 @@ export default function App() {
   const [activeStudent, setActiveStudent] = useState<Student | null>(null);
   const [activeThread, setActiveThread] = useState<{ id: string; title: string } | null>(null);
   const [initialCallMode, setInitialCallMode] = useState<'voice' | 'video'>('voice');
+  const [shellTab, setShellTab] = useState<'home' | 'chat' | 'call' | 'parents'>('home');
   const [gateVisible, setGateVisible] = useState(false);
 
   useEffect(() => {
@@ -275,6 +276,8 @@ export default function App() {
       <View style={{ flex: 1 }}>
         <View style={[{ flex: 1 }, screen !== 'main' && { display: 'none' }]}>
           <MainShellScreen
+            forcedTab={shellTab}
+            onTabChange={setShellTab}
             onLogout={() => setScreen('welcome')}
             onOpenPaywall={() => setScreen('paywall')}
             onOpenTranscript={(student, thread) => {
@@ -320,7 +323,10 @@ export default function App() {
             studentId={activeStudent.id}
             studentName={activeStudent.student_name}
             initialMode={initialCallMode}
-            onBack={() => setScreen('main')}
+            onBack={() => {
+              setShellTab('home');
+              setScreen('main');
+            }}
             onLimitReached={handleLimitReached}
           />
         )}

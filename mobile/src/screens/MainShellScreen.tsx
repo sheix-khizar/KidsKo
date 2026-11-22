@@ -35,6 +35,8 @@ type Props = {
   onStartCall: (student: Student, initialMode?: 'voice' | 'video') => void;
   onLimitReached: () => void;
   billingVersion?: number;
+  forcedTab?: TabKey;
+  onTabChange?: (tab: TabKey) => void;
 };
 
 export default function MainShellScreen({
@@ -44,9 +46,17 @@ export default function MainShellScreen({
   onStartCall,
   onLimitReached,
   billingVersion = 0,
+  forcedTab,
+  onTabChange,
 }: Props) {
   const insets = useSafeAreaInsets();
-  const [tab, setTab] = useState<TabKey>('home');
+  const [tab, setTab] = useState<TabKey>(forcedTab || 'home');
+
+  useEffect(() => {
+    if (forcedTab) {
+      setTab(forcedTab);
+    }
+  }, [forcedTab]);
   const [isPremium, setIsPremium] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
   const [activeStudent, setActiveStudent] = useState<Student | null>(null);
@@ -136,6 +146,7 @@ export default function MainShellScreen({
         .catch(() => {});
     }
     setTab(nextTab);
+    onTabChange?.(nextTab);
   };
 
   const isCurfewActive = () => {
@@ -199,6 +210,7 @@ export default function MainShellScreen({
                 }}
                 onSelectTopic={(prompt) => {
                   setTab('chat');
+                  onTabChange?.('chat');
                 }}
                 onOpenProfile={() => setShowSwitcherModal(true)}
               />
@@ -255,7 +267,10 @@ export default function MainShellScreen({
               studentId={activeStudent.id}
               studentName={activeStudent.student_name}
               embedded={true}
-              onBack={() => {}}
+              onBack={() => {
+                setTab('home');
+                onTabChange?.('home');
+              }}
               onLimitReached={onLimitReached}
               onSwitchStudent={() => setShowSwitcherModal(true)}
             />

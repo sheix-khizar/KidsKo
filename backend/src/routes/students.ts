@@ -101,14 +101,12 @@ router.get('/:id/activity', requireAuth, async (req: Request, res: Response) => 
   const threadIds = (threads || []).map((t: any) => t.id);
 
   let userMessages: { content?: string; created_at: string }[] = [];
-  if (threadIds.length > 0) {
-    const { data: msgs } = await req.supabase!
-      .from('messages')
-      .select('content, created_at')
-      .in('thread_id', threadIds)
-      .eq('role', 'user');
-    userMessages = msgs || [];
-  }
+  const { data: msgs } = await req.supabase!
+    .from('messages')
+    .select('content, created_at')
+    .eq('student_id', id)
+    .eq('role', 'user');
+  userMessages = msgs || [];
 
   // 3. Calculate real metrics
   const now = new Date();
@@ -193,6 +191,9 @@ router.get('/:id/activity', requireAuth, async (req: Request, res: Response) => 
     }
   }
 
+  // Real total stars earned: 5 stars per question + 10 stars per topic + 15 stars per streak day
+  const totalStars = Math.max(25, (userMessages.length * 5) + (topicsExplored * 10) + (streak * 15));
+
   return res.status(200).json({
     studentId: id,
     studentName: student.student_name,
@@ -200,6 +201,7 @@ router.get('/:id/activity', requireAuth, async (req: Request, res: Response) => 
     questionsThisWeek,
     topicsExplored,
     streak,
+    stars: totalStars,
     dailyCounts,
     topics,
   });

@@ -291,13 +291,21 @@ export default function ChatScreen({
     >
       {/* ── Topbar Matching Prototype ── */}
       <View style={styles.topbar}>
-        {!embedded && (
-          <View style={styles.topbarLeft}>
-            <Pressable onPress={onBack} style={styles.backButtonTouch} accessibilityLabel="Back">
-              <Text style={styles.backButton}>‹</Text>
-            </Pressable>
-          </View>
-        )}
+        <View style={styles.topbarLeft}>
+          <Pressable
+            onPress={() => {
+              if (messages.length > 0 || threadId) {
+                handleNewChat();
+              } else {
+                onBack?.();
+              }
+            }}
+            style={styles.backButtonTouch}
+            accessibilityLabel="Back to home"
+          >
+            <Text style={styles.backButton}>‹</Text>
+          </Pressable>
+        </View>
 
         <View style={styles.topbarCenter}>
           <View style={styles.companionAvatarSquircle}>
@@ -308,21 +316,13 @@ export default function ChatScreen({
               {threadId && lastThread?.title ? lastThread.title : 'Chat with Kidsko'}
             </Text>
             <View style={styles.statusRow}>
-              <LiveDot size={6} color={colors.mint} />
+              <LiveDot size={7} color="#00B894" />
               <Text style={styles.statusText}>Online</Text>
             </View>
           </View>
         </View>
 
         <View style={styles.topbarRight}>
-          <Pressable
-            onPress={handleNewChat}
-            style={styles.newChatButton}
-            accessibilityRole="button"
-            accessibilityLabel="Start new chat"
-          >
-            <Text style={styles.newChatIcon}>✏️</Text>
-          </Pressable>
           <Pressable
             onPress={() => setShowDrawer(true)}
             style={styles.historyButton}
@@ -637,27 +637,37 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   topbar: {
-    height: 56,
-    paddingHorizontal: 16,
+    height: 60,
+    paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: colors.white,
+    backgroundColor: '#FFFFFF',
     borderBottomWidth: 2,
-    borderBottomColor: colors.border,
+    borderBottomColor: '#EDE3D8',
   },
   topbarLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   backButtonTouch: {
-    padding: 6,
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: '#FFFDF9',
+    borderWidth: 1.5,
+    borderColor: '#EDE3D8',
+    borderBottomWidth: 3.5,
+    borderBottomColor: '#DCD0C2',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   backButton: {
-    fontSize: 20,
-    fontFamily: fontFamilies.bold,
-    color: colors.coral,
+    fontSize: 24,
+    fontFamily: fontFamilies.black,
+    color: colors.text,
+    textAlign: 'center',
+    marginTop: -2,
   },
   hamburgerButton: {
     width: 40,
@@ -691,13 +701,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     flex: 1,
-    marginRight: 8,
+    marginHorizontal: 10,
   },
   companionAvatarSquircle: {
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
+    borderRadius: 15,
+    backgroundColor: '#FF7675',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#D63031',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   msgReactionsRow: {
     flexDirection: 'row',
@@ -732,13 +749,14 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   studentInfoCol: {
+    flex: 1,
     justifyContent: 'center',
   },
   topbarTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: fontFamilies.black,
     color: colors.text,
-    lineHeight: 16,
+    lineHeight: 18,
   },
   chatHighlight: {
     color: colors.coral,
@@ -746,18 +764,17 @@ const styles = StyleSheet.create({
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
     marginTop: 2,
   },
   statusText: {
-    fontSize: 10,
+    fontSize: 11,
     fontFamily: fontFamilies.bold,
-    color: colors.mint,
+    color: '#00B894',
   },
   topbarRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   newChatButton: {
     width: 38,
@@ -773,14 +790,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   historyButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: colors.background,
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: '#FE5150',
+    borderWidth: 1.5,
+    borderColor: '#FE5150',
+    borderBottomWidth: 3.5,
+    borderBottomColor: '#D93838',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
+    shadowColor: '#FE5150',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
   },
   historyButtonIcon: {
     fontSize: 18,

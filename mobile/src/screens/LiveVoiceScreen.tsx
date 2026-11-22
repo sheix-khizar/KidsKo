@@ -308,6 +308,16 @@ export default function LiveVoiceScreen({
     if (frameIntervalRef.current) clearInterval(frameIntervalRef.current);
     sessionRef.current?.end();
     setIsVideoActive(false);
+
+    // Save earned stars persistently
+    const starsEarned = Math.max(5, questionCount * 2 + 5);
+    SecureStore.getItemAsync(`@kidsko_stars_${studentId}`)
+      .then((saved) => {
+        const cur = saved ? parseInt(saved, 10) : 25;
+        SecureStore.setItemAsync(`@kidsko_stars_${studentId}`, String(cur + starsEarned)).catch(() => {});
+      })
+      .catch(() => {});
+
     setStatus('ended');
   };
 
