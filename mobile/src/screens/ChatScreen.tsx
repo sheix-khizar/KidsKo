@@ -289,21 +289,13 @@ export default function ChatScreen({
       {/* ── Topbar Matching Prototype ── */}
       <View style={styles.topbar}>
         <View style={styles.topbarLeft}>
-          {!embedded && (
+          {!embedded ? (
             <Pressable onPress={onBack} style={styles.backButtonTouch}>
               <Text style={styles.backButton}>←</Text>
             </Pressable>
+          ) : (
+            <AskieCompanion size="xs" state="idle" />
           )}
-          <Pressable
-            onPress={() => setShowDrawer(true)}
-            style={styles.hamburgerButton}
-            accessibilityRole="button"
-            accessibilityLabel="Open chat history drawer"
-          >
-            <View style={styles.hamburgerBar1} />
-            <View style={styles.hamburgerBar2} />
-            <View style={styles.hamburgerBar3} />
-          </Pressable>
         </View>
 
         <Pressable
@@ -332,14 +324,24 @@ export default function ChatScreen({
           </View>
         </Pressable>
 
-        <Pressable
-          onPress={handleNewChat}
-          style={styles.newChatButton}
-          accessibilityRole="button"
-          accessibilityLabel="Start new chat"
-        >
-          <Text style={styles.newChatIcon}>✏️</Text>
-        </Pressable>
+        <View style={styles.topbarRight}>
+          <Pressable
+            onPress={handleNewChat}
+            style={styles.newChatButton}
+            accessibilityRole="button"
+            accessibilityLabel="Start new chat"
+          >
+            <Text style={styles.newChatIcon}>✏️</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setShowDrawer(true)}
+            style={styles.historyButton}
+            accessibilityRole="button"
+            accessibilityLabel="Open chat history drawer"
+          >
+            <Text style={styles.historyButtonIcon}>📜</Text>
+          </Pressable>
+        </View>
       </View>
 
       {/* Usage pill indicator if active */}
@@ -750,15 +752,35 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.bold,
     color: colors.mint,
   },
+  topbarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   newChatButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     backgroundColor: colors.background,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   newChatIcon: {
+    fontSize: 16,
+  },
+  historyButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  historyButtonIcon: {
     fontSize: 18,
   },
   usagePill: {

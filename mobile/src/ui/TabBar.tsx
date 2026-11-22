@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from './safeArea';
 import { colors, typography, fontFamilies } from '../theme';
 import { PressScale } from './motion';
 
-export type TabKey = 'chat' | 'call' | 'parents';
+export type TabKey = 'home' | 'chat' | 'call' | 'parents';
 
 type TabBarProps = {
   activeTab: TabKey;
@@ -12,8 +12,9 @@ type TabBarProps = {
 };
 
 const TABS: { key: TabKey; label: string; icon: string }[] = [
+  { key: 'home', label: 'Home', icon: '🏠' },
   { key: 'chat', label: 'Chat', icon: '💬' },
-  { key: 'call', label: 'Call', icon: '📞' },
+  { key: 'call', label: 'Talk', icon: '🎤' },
   { key: 'parents', label: 'Parents', icon: '🔒' },
 ];
 
@@ -36,7 +37,11 @@ export function TabBar({ activeTab, onSelectTab }: TabBarProps) {
         return (
           <Pressable
             key={tab.key}
-            onPress={() => onSelectTab(tab.key)}
+            onPress={() => {
+              console.log('[TabBar] Pressed tab:', tab.key);
+              onSelectTab(tab.key);
+            }}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             style={styles.tabScale}
             accessibilityRole="tab"
             accessibilityLabel={`${tab.label} tab`}

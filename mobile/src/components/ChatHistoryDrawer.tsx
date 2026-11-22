@@ -199,7 +199,7 @@ export default function ChatHistoryDrawer({
 
   const translateX = slideAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [-DRAWER_WIDTH, 0],
+    outputRange: [DRAWER_WIDTH, 0],
   });
 
   const overlayOpacity = backdropAnim.interpolate({
@@ -385,6 +385,7 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     flexDirection: 'row',
+    justifyContent: 'flex-end',
   },
   backdrop: {
     position: 'absolute',
@@ -399,8 +400,8 @@ const styles = StyleSheet.create({
     maxWidth: DRAWER_WIDTH,
     height: '100%',
     backgroundColor: colors.cardBg,
-    borderRightWidth: 1.5,
-    borderRightColor: colors.border,
+    borderLeftWidth: 1.5,
+    borderLeftColor: colors.border,
     ...shadows.card,
   },
   drawerHeader: {

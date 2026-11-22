@@ -1,5 +1,6 @@
 import { fontFamilies } from '../theme';
 import React, { useState, useEffect } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   View,
   Text,
@@ -13,6 +14,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import ChatScreen from './ChatScreen';
+import HomeScreen from './HomeScreen';
 import ParentalGate from '../components/ParentalGate';
 import ParentsHub from '../components/ParentsHub';
 import * as SecureStore from 'expo-secure-store';
@@ -22,7 +24,7 @@ import { TabBar, TabKey } from '../ui/TabBar';
 import { LinearGradient } from '../ui/LinearGradient';
 import { Screen, Mascot, Button, Card, Pill, FadeSlideIn, Bounce, PressScale } from '../ui';
 import { AskieCompanion } from '../ui/AskieCompanion';
-import { colors, radii, typography, spacing, gradients } from '../theme';
+import { colors, radii, typography, spacing, gradients, shadows } from '../theme';
 
 export type Student = { id: string; student_name: string };
 
@@ -43,7 +45,8 @@ export default function MainShellScreen({
   onLimitReached,
   billingVersion = 0,
 }: Props) {
-  const [tab, setTab] = useState<TabKey>('chat');
+  const insets = useSafeAreaInsets();
+  const [tab, setTab] = useState<TabKey>('home');
   const [isPremium, setIsPremium] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
   const [activeStudent, setActiveStudent] = useState<Student | null>(null);
@@ -179,34 +182,30 @@ export default function MainShellScreen({
   }
 
   return (
-    <Screen safeBottom={false}>
-      {/* Shell Header: Child Switcher Chip (call tab only; chat and parents hub have dedicated headers) */}
-      {tab === 'call' && (
-      <View style={[styles.shellHeader, { paddingTop: spacing.sm }]}>
-        <View style={styles.brandRow}>
-          <AskieCompanion size="xs" state="idle" style={{ marginRight: 8 }} />
-          <Text style={styles.brandText}>Kidsko.ai</Text>
-        </View>
-
-        {activeStudent && (
-          <Pressable
-            style={styles.childChip}
-            onPress={() => setShowSwitcherModal(true)}
-            accessibilityRole="button"
-            accessibilityLabel={`Active child is ${activeStudent.student_name}. Tap to switch.`}
-          >
-            <Text style={styles.childChipIcon}>🧒</Text>
-            <Text style={styles.childChipName} numberOfLines={1}>
-              {activeStudent.student_name}
-            </Text>
-            <Text style={styles.childChipArrow}>▼</Text>
-          </Pressable>
-        )}
-      </View>
-      )}
-
+    <Screen safeBottom={false} edges={tab === 'call' ? ['left', 'right'] : ['top', 'left', 'right']}>
       {/* Main Tab Body */}
       <View style={styles.bodyContainer}>
+        {/* TAB 0: HOME */}
+        {tab === 'home' && (
+          <View style={{ flex: 1 }}>
+            {activeStudent ? (
+              <HomeScreen
+                student={activeStudent}
+                onStartVoice={() => {
+                  onStartCall(activeStudent, 'voice');
+                }}
+                onStartCamera={() => {
+                  onStartCall(activeStudent, 'video');
+                }}
+                onSelectTopic={(prompt) => {
+                  setTab('chat');
+                }}
+                onOpenProfile={() => setShowSwitcherModal(true)}
+              />
+            ) : null}
+          </View>
+        )}
+
         {/* TAB 1: CHAT (Kept mounted to preserve scroll, draft text, and attachments across tabs) */}
         <View style={[{ flex: 1 }, tab !== 'chat' && { display: 'none' }]}>
           {students.length === 0 ? (
@@ -263,152 +262,61 @@ export default function MainShellScreen({
           ) : null}
         </View>
 
-        {/* TAB 2: CALL (Prototype dark call design) */}
+        {/* TAB 2: TALK LOBBY (Image 1) */}
         {tab === 'call' && (
           <FadeSlideIn key="call" duration={180} style={{ flex: 1 }}>
             <LinearGradient
-              colors={gradients.callDark.colors}
-              start={gradients.callDark.start}
-              end={gradients.callDark.end}
+              colors={['#5B7CFA', '#3FA7D6']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0.8, y: 1 }}
               style={StyleSheet.absoluteFill}
             />
 
-            {/* Soft decorative background orb */}
-            <View style={styles.callBackdropOrb} pointerEvents="none" />
-
-            <ScrollView
-              contentContainerStyle={styles.callTabContent}
-              showsVerticalScrollIndicator={false}
-            >
-              <View style={styles.callHeaderCenter}>
-                <Bounce>
-                  <Mascot size="l" shape="squircle" style={{ marginBottom: 12 }} />
-                </Bounce>
-                <Text style={styles.callTitle}>Talk to Kidsko!</Text>
-                <Text style={styles.callSubtitle}>
-                  {activeStudent
-                    ? `Ready to talk with ${activeStudent.student_name}? Speak naturally or show your homework!`
-                    : 'Choose how you want to talk to me today 👇'}
-                </Text>
+            {/* Top Security & Quota Pills Row */}
+            <View style={[styles.lobbyPillRow, { paddingTop: insets.top + 12 }]}>
+              <View style={styles.lobbyPill}>
+                <Text style={styles.lobbyPillText}>🔒 Safe call</Text>
               </View>
+              <View style={styles.lobbyPill}>
+                <Text style={styles.lobbyPillText}>⏱️ 18 min left today</Text>
+              </View>
+            </View>
 
-              {/* Voice & Video Call Cards (Category 3 Phase 2 - Prototype Parity) */}
-              {isCurfewActive() ? (
-                <View style={[styles.callActionCard, { opacity: 0.85, backgroundColor: 'rgba(30, 27, 75, 0.75)' }]}>
-                  <View style={styles.callIconSquircle}>
-                    <Text style={styles.callIconEmoji}>🌙</Text>
-                  </View>
-                  <View style={styles.callActionInfo}>
-                    <Text style={styles.callActionTitle}>Kidsko is Sleeping</Text>
-                    <Text style={styles.callActionSub}>
-                      Bedtime curfew is active (8:00 PM – 7:00 AM). Call hours resume in the morning! 💤
-                    </Text>
-                  </View>
+            {/* Centered Mascot Hero */}
+            <View style={styles.lobbyCenter}>
+              <View style={styles.lobbyMascotWrap}>
+                <AskieCompanion size="xl" state="idle" interactive={true} />
+              </View>
+              <Text style={styles.lobbyTitle}>Let's talk!</Text>
+              <Text style={styles.lobbySub}>Tap the big button and ask me anything 🎉</Text>
+            </View>
+
+            {/* Bottom Big CTA Buttons (No suggestions as requested!) */}
+            <View style={styles.lobbyBottomActions}>
+              <PressScale
+                style={{ width: '100%' }}
+                onPress={() => {
+                  if (activeStudent) onStartCall(activeStudent, 'voice');
+                }}
+              >
+                <View style={styles.lobbyStartVoiceBtn}>
+                  <Text style={styles.lobbyBtnIcon}>🎤</Text>
+                  <Text style={styles.lobbyBtnText}>Start talking</Text>
                 </View>
-              ) : (
-                <>
-                  {/* Card 1: Voice Call */}
-                  <PressScale
-                    style={styles.callActionCardScale}
-                    onPress={() => {
-                      if (activeStudent) {
-                        onStartCall(activeStudent, 'voice');
-                      }
-                    }}
-                    disabled={!activeStudent}
-                  >
-                    <View style={styles.callActionCard}>
-                      <LinearGradient
-                        colors={gradients.primary.colors}
-                        start={gradients.primary.start}
-                        end={gradients.primary.end}
-                        style={styles.callIconSquircle}
-                      >
-                        <Text style={styles.callIconEmoji}>🎤</Text>
-                      </LinearGradient>
-                      <View style={styles.callActionInfo}>
-                        <Text style={styles.callActionTitle}>Voice Call</Text>
-                        <Text style={styles.callActionSub}>
-                          Talk and listen to Kidsko like a phone call 📞
-                        </Text>
-                      </View>
-                      <View style={styles.callArrowCircle}>
-                        <Text style={styles.callArrowText}>›</Text>
-                      </View>
-                    </View>
-                  </PressScale>
+              </PressScale>
 
-                  {/* Card 2: AI Vision */}
-                  <PressScale
-                    style={[styles.callActionCardScale, { marginTop: 4 }]}
-                    onPress={() => {
-                      if (activeStudent) {
-                        onStartCall(activeStudent, 'video');
-                      }
-                    }}
-                    disabled={!activeStudent}
-                  >
-                    <View style={[styles.callActionCard, styles.callVisionCard]}>
-                      <LinearGradient
-                        colors={gradients.teal.colors}
-                        start={gradients.teal.start}
-                        end={gradients.teal.end}
-                        style={[styles.callIconSquircle, styles.callVisionIconSquircle]}
-                      >
-                        <Text style={styles.callIconEmoji}>👁️</Text>
-                      </LinearGradient>
-                      <View style={styles.callActionInfo}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-                          <Text style={styles.callActionTitle}>AI Vision</Text>
-                          <LinearGradient
-                            colors={gradients.teal.colors}
-                            start={gradients.teal.start}
-                            end={gradients.teal.end}
-                            style={styles.newBadge}
-                          >
-                            <Text style={styles.newBadgeText}>NEW ✨</Text>
-                          </LinearGradient>
-                        </View>
-                        <Text style={styles.callActionSub}>
-                          Point camera at anything, Kidsko will explain it! 📷🔍
-                        </Text>
-                      </View>
-                      <View style={styles.callArrowCircle}>
-                        <Text style={styles.callArrowText}>›</Text>
-                      </View>
-                    </View>
-                  </PressScale>
-
-                  {/* Pro-Tip Card */}
-                  <View style={styles.callTipCard}>
-                    <Text style={styles.callTipIcon}>💡</Text>
-                    <Text style={styles.callTipText}>
-                      Tip: Use <Text style={{ color: colors.sky, fontFamily: fontFamilies.bold }}>AI Vision</Text> to point at your homework and Kidsko will help you!
-                    </Text>
-                  </View>
-                </>
-              )}
-
-              {/* Plan usage pill from real billing state */}
-              <View style={styles.callPillContainer}>
-                <View style={styles.callPlanPill}>
-                  <Text style={styles.callPlanIcon}>{isPremium ? '⭐' : '⏱️'}</Text>
-                  <Text style={styles.callPlanText}>
-                    {isPremium
-                      ? 'Premium: 100 mins weekly Voice & Video'
-                      : 'Free: 10 mins weekly Voice & Video'}
-                  </Text>
+              <PressScale
+                style={{ width: '100%', marginTop: 14 }}
+                onPress={() => {
+                  if (activeStudent) onStartCall(activeStudent, 'video');
+                }}
+              >
+                <View style={styles.lobbyStartCamBtn}>
+                  <Text style={styles.lobbyBtnIcon}>📷</Text>
+                  <Text style={styles.lobbyBtnText}>Show me something</Text>
                 </View>
-              </View>
-
-              {/* Tip Card */}
-              <View style={styles.callTipCard}>
-                <Text style={styles.callTipIcon}>💡</Text>
-                <Text style={styles.callTipText}>
-                  Tip: Tap the camera icon anytime in-call to show your worksheet to Kidsko!
-                </Text>
-              </View>
-            </ScrollView>
+              </PressScale>
+            </View>
           </FadeSlideIn>
         )}
 
@@ -892,5 +800,86 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.coralStrong,
     fontFamily: fontFamilies.extraBold,
+  },
+  lobbyPillRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+  lobbyPill: {
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  lobbyPillText: {
+    fontSize: 12,
+    fontFamily: fontFamilies.bold,
+    color: colors.white,
+  },
+  lobbyCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  lobbyMascotWrap: {
+    marginBottom: 20,
+  },
+  lobbyTitle: {
+    fontSize: 32,
+    fontFamily: fontFamilies.black,
+    color: colors.white,
+    letterSpacing: -0.5,
+    textAlign: 'center',
+  },
+  lobbySub: {
+    fontSize: 15,
+    fontFamily: fontFamilies.bold,
+    color: 'rgba(255, 255, 255, 0.92)',
+    textAlign: 'center',
+    marginTop: 6,
+    lineHeight: 20,
+  },
+  lobbyBottomActions: {
+    paddingHorizontal: 20,
+    paddingBottom: 28,
+  },
+  lobbyStartVoiceBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FE5150',
+    borderRadius: 24,
+    height: 68,
+    borderWidth: 2,
+    borderBottomWidth: 6,
+    borderColor: '#D94F4F',
+    gap: 12,
+    ...shadows.button,
+  },
+  lobbyStartCamBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#4ECDC4',
+    borderRadius: 22,
+    height: 60,
+    borderWidth: 2,
+    borderBottomWidth: 6,
+    borderColor: '#2FA9A0',
+    gap: 12,
+    ...shadows.button,
+  },
+  lobbyBtnIcon: {
+    fontSize: 26,
+  },
+  lobbyBtnText: {
+    fontSize: 19,
+    fontFamily: fontFamilies.black,
+    color: colors.white,
   },
 });

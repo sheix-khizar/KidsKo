@@ -1,13 +1,25 @@
-import { colors, fontFamilies, gradients } from '../theme';
-import { LinearGradient } from '../ui/LinearGradient';
-import { Pulse, WaveBars, LiveDot, PressScale } from '../ui/motion';
-import { Mascot } from '../ui/Mascot';
-import { AskieCompanion } from '../ui/AskieCompanion';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, ActivityIndicator, AppState, AppStateStatus } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import {
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  ActivityIndicator,
+  AppState,
+  AppStateStatus,
+  Dimensions,
+  Animated,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Camera, useCameraDevice, useCameraPermission, usePhotoOutput } from 'react-native-vision-camera';
 import * as SecureStore from 'expo-secure-store';
+import { colors, fontFamilies } from '../theme';
+import { LinearGradient } from '../ui/LinearGradient';
+import { WaveBars, PressScale } from '../ui/motion';
+import { AskieCompanion } from '../ui/AskieCompanion';
 import { VoiceSession } from '../services/voiceSocket';
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 type Props = {
   studentId: string;
@@ -36,36 +48,86 @@ const PHOTO_CONFIG = {
   targetResolution: { width: 640, height: 480 },
 };
 
-export default function LiveVoiceScreen({ studentId, studentName, initialMode = 'voice', onBack, onLimitReached }: Props) {
+// Gradient color themes according to voice state
+const GRADIENTS = {
+  idle: ['#8A6BFF', '#5B7CFA', '#3FA7D6'] as const,
+  connecting: ['#8A6BFF', '#5B7CFA', '#3FA7D6'] as const,
+  listening: ['#18B5A8', '#2E86DE', '#3F5EFB'] as const,
+  thinking: ['#8E5CF7', '#6A4CE0', '#4A3DB5'] as const,
+  speaking: ['#FF7A59', '#FF5E7E', '#C84FB8'] as const,
+  ended: ['#8A6BFF', '#5B7CFA', '#3FA7D6'] as const,
+};
+
+export default function LiveVoiceScreen({
+  studentId,
+  studentName,
+  initialMode = 'voice',
+  onBack,
+  onLimitReached,
+}: Props) {
+  const insets = useSafeAreaInsets();
+
+  // Core Call State
   const [status, setStatus] = useState<'connecting' | 'live' | 'ended'>('connecting');
   const [voiceState, setVoiceState] = useState<'listening' | 'thinking' | 'speaking'>('listening');
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  const [callDuration, setCallDuration] = useState<number>(0);
+  const [questionCount, setQuestionCount] = useState<number>(1);
   const [errorReason, setErrorReason] = useState<string | null>(null);
   const [lastSpokenTranscript, setLastSpokenTranscript] = useState<string>('');
   const [networkNotice, setNetworkNotice] = useState<string | null>(null);
+  const [activeReaction, setActiveReaction] = useState<string | null>(null);
 
-  // Live Video State & Camera Hooks (Phase B2)
+  // Live Camera / Vision State
   const [isVideoActive, setIsVideoActive] = useState(initialMode === 'video');
+  const [cameraPosition, setCameraPosition] = useState<'back' | 'front'>('back');
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [isAppForeground, setIsAppForeground] = useState(true);
   const [cameraAllowedByParent, setCameraAllowedByParent] = useState(true);
+
+  // Vision Camera Hooks
   const { hasPermission, requestPermission } = useCameraPermission();
-  const device = useCameraDevice('back');
+  const device = useCameraDevice(cameraPosition);
   const photoOutput = usePhotoOutput(PHOTO_CONFIG);
   const outputs = useMemo(() => [photoOutput], [photoOutput]);
 
   const isCameraActive = status === 'live' && isVideoActive && isAppForeground && hasPermission && !!device;
 
   const sessionRef = useRef<VoiceSession | null>(null);
-  const timerRef = useRef<any>(null);
+  const quotaTimerRef = useRef<any>(null);
+  const durationTimerRef = useRef<any>(null);
   const frameIntervalRef = useRef<any>(null);
   const isCapturingRef = useRef<boolean>(false);
+  const lastInterruptTapRef = useRef<number>(0);
 
-  // AppState listener for lifecycle safety (Ticket B2.4)
+  // Pulse animation for soundwave rings around mascot
+  const ringScale = useRef(new Animated.Value(1)).current;
   useEffect(() => {
-    SecureStore.getItemAsync('kidsko_parent_allow_camera').then((val) => {
-      if (val !== null) setCameraAllowedByParent(val === 'true');
-    }).catch(() => {});
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(ringScale, {
+          toValue: 1.12,
+          duration: 1200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(ringScale, {
+          toValue: 1,
+          duration: 1200,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [ringScale]);
+
+  // AppState listener for camera lifecycle safety
+  useEffect(() => {
+    SecureStore.getItemAsync('kidsko_parent_allow_camera')
+      .then((val) => {
+        if (val !== null) setCameraAllowedByParent(val === 'true');
+      })
+      .catch(() => {});
 
     const subscription = AppState.addEventListener('change', (nextState: AppStateStatus) => {
       setIsAppForeground(nextState === 'active');
@@ -75,7 +137,7 @@ export default function LiveVoiceScreen({ studentId, studentName, initialMode = 
     };
   }, []);
 
-  // Frame sampling loop (Ticket B2.2 & B2.4)
+  // Frame sampling loop for Vision AI
   useEffect(() => {
     if (!isCameraActive || !isCameraReady || !photoOutput) {
       if (frameIntervalRef.current) {
@@ -118,7 +180,11 @@ export default function LiveVoiceScreen({ studentId, studentName, initialMode = 
     };
   }, [isCameraActive, isCameraReady, photoOutput]);
 
-  useEffect(() => {
+  // Start Voice Session
+  const startSession = useCallback(() => {
+    setStatus('connecting');
+    setCallDuration(0);
+
     const session = new VoiceSession();
     sessionRef.current = session;
 
@@ -127,34 +193,39 @@ export default function LiveVoiceScreen({ studentId, studentName, initialMode = 
         onReady: (capSeconds) => {
           setStatus('live');
           setSecondsLeft(capSeconds);
-          timerRef.current = setInterval(() => {
+
+          // Quota countdown timer
+          quotaTimerRef.current = setInterval(() => {
             setSecondsLeft((s) => (s !== null && s > 0 ? s - 1 : 0));
+          }, 1000);
+
+          // Call duration counter
+          durationTimerRef.current = setInterval(() => {
+            setCallDuration((d) => d + 1);
           }, 1000);
         },
         onCapReached: () => {
-          setStatus('ended');
+          handleEnd();
           setErrorReason('Voice & video limit reached for this session.');
-          if (timerRef.current) clearInterval(timerRef.current);
         },
         onError: (reason) => {
           if (reason && reason.toString().toLowerCase().includes('limit')) onLimitReached();
           setErrorReason(reason?.toString() || 'Connection error');
-          setStatus('ended');
+          handleEnd();
         },
         onClose: (reason) => {
           if (reason) setErrorReason(reason.toString());
-          setStatus('ended');
+          handleEnd();
         },
         onTranscript: (text) => {
           if (text && text.trim().length > 0) {
-            console.log('[LiveVoiceScreen] Captured student spoken transcript:', text);
             setLastSpokenTranscript(text.trim());
+            setQuestionCount((prev) => prev + 1);
           }
         },
         onStateChange: (state) => {
           setVoiceState((prevState) => {
             if (prevState !== state) {
-              console.log('[LiveVoiceScreen] Voice state changed:', state);
               if (state === 'speaking' || state === 'thinking') {
                 setNetworkNotice(null);
               }
@@ -170,540 +241,919 @@ export default function LiveVoiceScreen({ studentId, studentName, initialMode = 
       },
       studentId
     );
+  }, [studentId, onLimitReached]);
+
+  useEffect(() => {
+    startSession();
 
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
+      if (quotaTimerRef.current) clearInterval(quotaTimerRef.current);
+      if (durationTimerRef.current) clearInterval(durationTimerRef.current);
       if (frameIntervalRef.current) clearInterval(frameIntervalRef.current);
       sessionRef.current?.end();
     };
-  }, []);
+  }, [startSession]);
 
-  // Category 1 Phase 3: Debounced Stop-Talking handler (~400ms debounce)
-  const lastInterruptTapRef = useRef<number>(0);
+  // Interrupt AI speech (Debounced)
   const handleInterrupt = () => {
     const now = Date.now();
-    if (now - lastInterruptTapRef.current < 400) {
-      return; // ignore rapid double-taps
-    }
+    if (now - lastInterruptTapRef.current < 400) return;
     lastInterruptTapRef.current = now;
-    console.log('[LiveVoiceScreen] Stop talking pressed -> interrupting session');
     sessionRef.current?.interrupt();
   };
 
+  // Toggle Video / Full Screen Camera Mode
   const handleToggleVideo = async () => {
     if (!cameraAllowedByParent) {
       setErrorReason('Camera access is disabled in Parental Controls.');
       return;
     }
-    console.log('[LiveVoiceScreen] handleToggleVideo tapped! Current isVideoActive:', isVideoActive, 'hasPermission:', hasPermission);
     if (isVideoActive) {
       setIsCameraReady(false);
       setIsVideoActive(false);
     } else {
       if (!hasPermission) {
-        console.log('[LiveVoiceScreen] Requesting camera permission...');
         const granted = await requestPermission();
-        console.log('[LiveVoiceScreen] Permission result:', granted);
         if (!granted) {
           setErrorReason('Camera permission is required for live video.');
           return;
         }
       }
-      console.log('[LiveVoiceScreen] Enabling isVideoActive = true, device exists:', !!device);
       setIsVideoActive(true);
     }
   };
 
-  const handleEnd = async () => {
-    if (frameIntervalRef.current) {
-      clearInterval(frameIntervalRef.current);
-      frameIntervalRef.current = null;
-    }
-    setIsVideoActive(false);
-    await sessionRef.current?.end();
-    onBack();
+  // Flip Camera between back and front
+  const handleFlipCamera = () => {
+    setCameraPosition((prev) => (prev === 'back' ? 'front' : 'back'));
   };
 
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>
-        {status === 'connecting'
-          ? 'Connecting to Kidsko Live...'
-          : status === 'live'
-          ? `Talking to Kidsko (${studentName})`
-          : 'Call Ended'}
-      </Text>
+  // End Call -> Transitions to Post-Call Summary Screen (Image 4)
+  const handleEnd = () => {
+    if (quotaTimerRef.current) clearInterval(quotaTimerRef.current);
+    if (durationTimerRef.current) clearInterval(durationTimerRef.current);
+    if (frameIntervalRef.current) clearInterval(frameIntervalRef.current);
+    sessionRef.current?.end();
+    setIsVideoActive(false);
+    setStatus('ended');
+  };
 
-      {secondsLeft !== null && status === 'live' && (
-        <View style={styles.timerPill}>
-          <Text style={styles.timerText}>⏱️ {secondsLeft}s remaining</Text>
-        </View>
-      )}
+  // Restart Call from summary screen
+  const handleRestartCall = () => {
+    setErrorReason(null);
+    setLastSpokenTranscript('');
+    startSession();
+  };
 
-      {networkNotice && status === 'live' && (
-        <Pressable style={styles.noticeBanner} onPress={() => setNetworkNotice(null)}>
-          <Text style={styles.noticeBannerText}>⚡ {networkNotice}</Text>
-          <Text style={styles.noticeDismissText}>Tap to dismiss • Speak anytime</Text>
-        </Pressable>
-      )}
+  // Floating Reaction Handler
+  const handleSendReaction = (emoji: string) => {
+    setActiveReaction(emoji);
+    setTimeout(() => {
+      setActiveReaction(null);
+    }, 1500);
+  };
 
-      {status === 'live' && (
-        <View style={styles.stateCard}>
-          {isVideoActive && isCameraActive && device ? (
-            <View style={styles.cameraContainer}>
-              <Camera
-                style={StyleSheet.absoluteFill}
-                device={device}
-                isActive={isCameraActive}
-                outputs={outputs}
-                resizeMode="cover"
-                onStarted={() => {
-                  console.log('[LiveVoiceScreen] Camera onStarted!');
-                  setIsCameraReady(true);
-                }}
-                onStopped={() => {
-                  console.log('[LiveVoiceScreen] Camera onStopped!');
-                  setIsCameraReady(false);
-                }}
-                onError={(err) => {
-                  console.error('[LiveVoiceScreen] Camera onError:', err);
-                  setIsCameraReady(false);
-                }}
-              />
-              <View style={styles.liveVideoBadge}>
-                <View style={styles.liveDot} />
-                <Text style={styles.liveVideoBadgeText}>LIVE VIDEO</Text>
-              </View>
+  // Format MM:SS for call timer
+  const formatTimer = (totalSeconds: number) => {
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
 
-              {/* Video mode state chip (Category 1 Phase 3) */}
-              <View style={styles.videoStateChip}>
-                {voiceState === 'speaking' ? (
-                  <Text style={styles.videoStateText}>🔊 Kidsko is talking</Text>
-                ) : voiceState === 'thinking' ? (
-                  <Text style={styles.videoStateText}>⏳ Thinking…</Text>
-                ) : (
-                  <Text style={styles.videoStateText}>🎙️ Listening…</Text>
-                )}
-              </View>
+  // Current active gradient
+  const currentGradient: readonly [string, string, ...string[]] =
+    status === 'ended'
+      ? GRADIENTS.ended
+      : status === 'connecting'
+      ? GRADIENTS.connecting
+      : isVideoActive
+      ? ['#0B1B17', '#142E28', '#1F473E']
+      : voiceState === 'speaking'
+      ? GRADIENTS.speaking
+      : voiceState === 'thinking'
+      ? GRADIENTS.thinking
+      : GRADIENTS.listening;
 
+  // ═══════════════════════════════════════════════════════════════
+  // SCREEN 3: POST-CALL SUMMARY SCREEN (IMAGE 4)
+  // ═══════════════════════════════════════════════════════════════
+  if (status === 'ended') {
+    const durationMinutes = Math.max(1, Math.round(callDuration / 60));
+    const starsEarned = Math.max(5, questionCount * 2 + 5);
+
+    return (
+      <LinearGradient colors={GRADIENTS.ended} style={styles.container}>
+        <View style={[styles.summaryInner, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 20 }]}>
+          {/* Celebrating Mascot Hero */}
+          <View style={styles.summaryMascotContainer}>
+            <AskieCompanion size="xl" state="celebrate" />
+          </View>
+
+          {/* Heading */}
+          <Text style={styles.summaryTitle}>Great talking, {studentName}! 🎉</Text>
+          <Text style={styles.summarySubtitle}>You are getting so smart!</Text>
+
+          {/* 3 Stat Cards in a Row */}
+          <View style={styles.statsRow}>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>{durationMinutes}</Text>
+              <Text style={styles.statLabel}>⏱️ Minutes</Text>
+            </View>
+
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>{questionCount}</Text>
+              <Text style={styles.statLabel}>❓ Questions</Text>
+            </View>
+
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>+{starsEarned}</Text>
+              <Text style={styles.statLabel}>⭐ Stars</Text>
+            </View>
+          </View>
+
+          {/* Two Big CTAs */}
+          <View style={styles.summaryButtonsCol}>
+            <PressScale onPress={onBack} style={styles.summaryBtnScale}>
               <Pressable
-                style={styles.cameraOverlayToggle}
+                style={[styles.big3DButton, styles.buttonHome]}
+                onPress={onBack}
+                accessibilityRole="button"
+                accessibilityLabel="Back to home"
+              >
+                <Text style={styles.buttonHomeText}>Back to home 🏠</Text>
+              </Pressable>
+            </PressScale>
+
+            <PressScale onPress={handleRestartCall} style={styles.summaryBtnScale}>
+              <Pressable
+                style={[styles.big3DButton, styles.buttonTalkAgain]}
+                onPress={handleRestartCall}
+                accessibilityRole="button"
+                accessibilityLabel="Talk again"
+              >
+                <Text style={styles.buttonTalkAgainText}>🎤 Talk again</Text>
+              </Pressable>
+            </PressScale>
+          </View>
+        </View>
+      </LinearGradient>
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // SCREEN 2: FULL-SCREEN CAMERA / VISION AI (IMAGE 3)
+  // Controls: Flip on left, Stop in center (no top buttons, no suggestions, no mascot box)
+  // ═══════════════════════════════════════════════════════════════
+  if (isVideoActive) {
+    return (
+      <View style={styles.fullCameraContainer}>
+        {/* Full-Screen Camera Surface */}
+        {hasPermission && device ? (
+          <Camera
+            style={StyleSheet.absoluteFill}
+            device={device}
+            isActive={isCameraActive}
+            outputs={outputs}
+            resizeMode="cover"
+            onStarted={() => setIsCameraReady(true)}
+            onStopped={() => setIsCameraReady(false)}
+            onError={(err) => console.error('[LiveVoiceScreen] Camera error:', err)}
+          />
+        ) : (
+          <View style={[StyleSheet.absoluteFill, styles.cameraPlaceholder]}>
+            <ActivityIndicator size="large" color="#00E676" />
+            <Text style={styles.cameraPlaceholderText}>Connecting camera...</Text>
+          </View>
+        )}
+
+        {/* Minimal Live Pill at Top Center (No top buttons!) */}
+        <View style={[styles.cameraTopHeader, { paddingTop: insets.top + 8 }]}>
+          <View style={styles.liveBadgePill}>
+            <View style={styles.liveBlinkDot} />
+            <Text style={styles.liveBadgeText}>LIVE {formatTimer(callDuration)}</Text>
+          </View>
+        </View>
+
+        {/* Viewfinder Target Reticle [ ] */}
+        <View style={styles.viewfinderBox} pointerEvents="none">
+          <View style={[styles.reticleCorner, styles.reticleTL]} />
+          <View style={[styles.reticleCorner, styles.reticleTR]} />
+          <View style={[styles.reticleCorner, styles.reticleBL]} />
+          <View style={[styles.reticleCorner, styles.reticleBR]} />
+        </View>
+
+        {/* Bottom Dock: Flip on Left, Stop in Center, Talk on Right */}
+        <View style={[styles.cameraBottomDock, { paddingBottom: insets.bottom + 20 }]}>
+          {/* Flip Button (Left side) */}
+          <View style={styles.camDockItem}>
+            <PressScale onPress={handleFlipCamera}>
+              <Pressable
+                style={styles.camRoundBtnSecondary}
+                onPress={handleFlipCamera}
+                accessibilityRole="button"
+                accessibilityLabel="Flip camera"
+              >
+                <Text style={styles.camRoundBtnIcon}>🔄</Text>
+              </Pressable>
+            </PressScale>
+            <Text style={styles.camDockLabel}>Flip</Text>
+          </View>
+
+          {/* Stop Button (Center - Prominent) */}
+          <View style={styles.camDockItem}>
+            <PressScale onPress={() => setIsVideoActive(false)}>
+              <Pressable
+                style={styles.camRoundBtnStop}
+                onPress={() => setIsVideoActive(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Stop camera mode"
+              >
+                <Text style={styles.camRoundBtnStopIcon}>✕</Text>
+              </Pressable>
+            </PressScale>
+            <Text style={styles.camDockLabel}>Stop</Text>
+          </View>
+
+          {/* Talk / Voice Button (Right side) */}
+          <View style={styles.camDockItem}>
+            <PressScale onPress={() => setIsVideoActive(false)}>
+              <Pressable
+                style={styles.camRoundBtnSecondary}
+                onPress={() => setIsVideoActive(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Switch to voice"
+              >
+                <Text style={styles.camRoundBtnIcon}>🎤</Text>
+              </Pressable>
+            </PressScale>
+            <Text style={styles.camDockLabel}>Talk</Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // SCREEN 1: ACTIVE LIVE VOICE CALL (IMAGE 2)
+  // Controls: Interrupt ✋ on left, Show me 📷 in center, Bye! 👋 on right (No suggestions)
+  // ═══════════════════════════════════════════════════════════════
+  const captionText =
+    voiceState === 'speaking'
+      ? lastSpokenTranscript || 'Sunlight is made of many colors! 🌈'
+      : voiceState === 'thinking'
+      ? 'Thinking about the best answer for you... 💭'
+      : lastSpokenTranscript
+      ? `"${lastSpokenTranscript}"`
+      : "I'm listening! Ask me anything about science, animals, or space! ✨";
+
+  return (
+    <LinearGradient colors={currentGradient} style={styles.container}>
+      <View style={[styles.voiceInner, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 16 }]}>
+        {/* Top Header Row: Safe call & Quota */}
+        <View style={styles.topRow}>
+          <View style={styles.headerPill}>
+            <Text style={styles.headerPillText}>🔒 Safe call</Text>
+          </View>
+
+          <View style={styles.headerPill}>
+            <Text style={styles.headerPillText}>
+              ⏱️ {secondsLeft !== null ? `${Math.ceil(secondsLeft / 60)} min left` : '18 min left'}
+            </Text>
+          </View>
+        </View>
+
+        {/* Call Title & Duration Counter */}
+        <View style={styles.callHeader}>
+          <Text style={styles.callHeaderTitle}>Kidsko</Text>
+          <Text style={styles.callHeaderTimer}>{formatTimer(callDuration)}</Text>
+        </View>
+
+        {/* Center Stage: Ripple Soundwave Rings & Animated Companion */}
+        <View style={styles.stageCenter}>
+          {/* Animated Outer Pulse Ring */}
+          <Animated.View
+            style={[
+              styles.soundwaveRing,
+              {
+                transform: [{ scale: ringScale }],
+                borderColor: voiceState === 'speaking' ? '#FFE66D' : 'rgba(255,255,255,0.45)',
+              },
+            ]}
+          />
+
+          {/* Interactive Mascot */}
+          <Pressable
+            style={styles.mascotDisc}
+            onPress={handleInterrupt}
+            accessibilityRole="button"
+            accessibilityLabel="Tap mascot to interrupt"
+          >
+            <AskieCompanion
+              size="xl"
+              state={status === 'connecting' ? 'idle' : voiceState}
+              interactive={true}
+              onPress={handleInterrupt}
+            />
+          </Pressable>
+
+          {/* Tap hint text */}
+          <Text style={styles.tapInterruptHint}>Tap me to interrupt</Text>
+
+          {/* State Pill */}
+          <View style={styles.statePill}>
+            <Text style={styles.statePillText}>
+              {status === 'connecting'
+                ? '⏳ Connecting...'
+                : voiceState === 'speaking'
+                ? '🔊 Kidsko is talking'
+                : voiceState === 'thinking'
+                ? '⏳ Kidsko is thinking...'
+                : '🎙️ Kidsko is listening'}
+            </Text>
+          </View>
+
+          {/* Audio Equalizer Bars */}
+          <View style={styles.equalizerRow}>
+            <WaveBars
+              count={14}
+              color="#FFE66D"
+              active={voiceState === 'speaking' || voiceState === 'listening'}
+            />
+          </View>
+        </View>
+
+        {/* Floating Reaction Animation */}
+        {activeReaction && (
+          <View style={styles.reactionPopWrapper} pointerEvents="none">
+            <Text style={styles.reactionPopEmoji}>{activeReaction}</Text>
+          </View>
+        )}
+
+        {/* Live Caption Card */}
+        <View style={styles.captionCard}>
+          <Text
+            style={[
+              styles.captionSpeaker,
+              { color: voiceState === 'speaking' ? '#FFE66D' : '#C8FFF9' },
+            ]}
+          >
+            ● {voiceState === 'speaking' ? 'KIDSKO' : studentName.toUpperCase()}
+          </Text>
+          <Text style={styles.captionText} numberOfLines={3}>
+            {captionText}
+          </Text>
+        </View>
+
+        {/* Floating Reactions Row */}
+        <View style={styles.reactionsRow}>
+          {['👍', '❤️', '😂', '🤯', '🎉'].map((emoji) => (
+            <Pressable
+              key={emoji}
+              style={styles.reactionButton}
+              onPress={() => handleSendReaction(emoji)}
+              accessibilityRole="button"
+              accessibilityLabel={`React ${emoji}`}
+            >
+              <Text style={styles.reactionEmoji}>{emoji}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {/* Bottom Dock: [Interrupt ✋] [Show me 📷] [Bye! 👋] */}
+        <View style={styles.bottomDock}>
+          {/* Interrupt Button (Replaces Mic On per user rule) */}
+          <View style={styles.dockItem}>
+            <PressScale onPress={handleInterrupt}>
+              <Pressable
+                style={[styles.dockRoundButton, styles.dockBtnInterrupt]}
+                onPress={handleInterrupt}
+                accessibilityRole="button"
+                accessibilityLabel="Interrupt Kidsko"
+              >
+                <Text style={styles.dockBtnIcon}>✋</Text>
+              </Pressable>
+            </PressScale>
+            <Text style={styles.dockBtnLabel}>Interrupt</Text>
+          </View>
+
+          {/* Show Me Button (Toggles Camera Mode) */}
+          <View style={styles.dockItem}>
+            <PressScale onPress={handleToggleVideo}>
+              <Pressable
+                style={[styles.dockRoundButton, styles.dockBtnShowMe]}
                 onPress={handleToggleVideo}
                 accessibilityRole="button"
-                accessibilityLabel="Turn off live camera"
-                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                accessibilityLabel="Show me something"
               >
-                <Text style={styles.cameraOverlayToggleText}>✕ Turn Off</Text>
+                <Text style={styles.dockBtnIcon}>📷</Text>
               </Pressable>
+            </PressScale>
+            <Text style={styles.dockBtnLabel}>Show me</Text>
+          </View>
 
-              {/* Stop-talking button over camera view (Category 1 Phase 3) */}
-              {voiceState === 'speaking' && (
-                <PressScale
-                  style={styles.stopPillVideo}
-                  onPress={handleInterrupt}
-                  accessibilityRole="button"
-                  accessibilityLabel="Stop Kidsko talking"
-                >
-                  <Text style={styles.stopPillText}>✋ Stop</Text>
-                </PressScale>
-              )}
-            </View>
-          ) : (
-            <>
-              {voiceState === 'speaking' ? (
-                <>
-                  <Pressable
-                    style={[styles.avatarCircle, { overflow: 'visible', borderWidth: 0, backgroundColor: 'transparent' }]}
-                    onPress={handleInterrupt}
-                    accessibilityRole="button"
-                    accessibilityLabel="Stop Kidsko talking"
-                  >
-                    <AskieCompanion size="l" state="speaking" />
-                    <View style={styles.speakingBadge}>
-                      <Text style={styles.speakingBadgeText}>Kidsko is talking… (Tap to speak)</Text>
-                    </View>
-                  </Pressable>
-
-                  {/* Stop-talking button in voice mode (Category 1 Phase 3) */}
-                  <PressScale
-                    style={styles.stopPillVoice}
-                    onPress={handleInterrupt}
-                    accessibilityRole="button"
-                    accessibilityLabel="Stop Kidsko talking"
-                  >
-                    <Text style={styles.stopPillText}>✋ Stop</Text>
-                  </PressScale>
-                </>
-              ) : voiceState === 'thinking' ? (
-                <View style={[styles.avatarCircle, { overflow: 'visible', borderWidth: 0, backgroundColor: 'transparent' }]}>
-                  <AskieCompanion size="l" state="thinking" />
-                  <View style={[styles.listeningBadge, { backgroundColor: '#FDCB6E' }]}>
-                    <Text style={[styles.listeningBadgeText, { color: '#2D3436' }]}>Thinking…</Text>
-                  </View>
-                </View>
-              ) : (
-                <View style={[styles.avatarCircle, { overflow: 'visible', borderWidth: 0, backgroundColor: 'transparent' }]}>
-                  <AskieCompanion size="l" state="listening" />
-                  <View style={styles.listeningBadge}>
-                    <Text style={styles.listeningBadgeText}>Listening…</Text>
-                  </View>
-                </View>
-              )}
-            </>
-          )}
-
-          {lastSpokenTranscript ? (
-            <View style={styles.transcriptBox}>
-              <Text style={styles.transcriptLabel}>You said:</Text>
-              <Text style={styles.transcriptText} numberOfLines={2}>
-                "{lastSpokenTranscript}"
-              </Text>
-            </View>
-          ) : (
-            <Text style={styles.promptHint}>
-              {isVideoActive
-                ? 'Live video is on! Kidsko can see your work.'
-                : 'Speak anytime or turn on Live Video to show your work!'}
-            </Text>
-          )}
+          {/* Bye! Button (Ends Call -> Summary Screen) */}
+          <View style={styles.dockItem}>
+            <PressScale onPress={handleEnd}>
+              <Pressable
+                style={[styles.dockRoundButton, styles.dockBtnBye]}
+                onPress={handleEnd}
+                accessibilityRole="button"
+                accessibilityLabel="End call"
+              >
+                <Text style={styles.dockBtnIcon}>👋</Text>
+              </Pressable>
+            </PressScale>
+            <Text style={styles.dockBtnLabel}>Bye!</Text>
+          </View>
         </View>
-      )}
 
-      {/* Live Video Toggle Action */}
-      {status === 'live' && (
-        <View style={styles.actionRow}>
-          {cameraAllowedByParent ? (
-            <Pressable
-              style={[styles.videoToggleButton, isVideoActive && styles.videoToggleButtonActive]}
-              onPress={handleToggleVideo}
-              accessibilityRole="button"
-              accessibilityLabel={isVideoActive ? 'Turn off live video' : 'Start live video'}
-            >
-              <Text style={styles.videoToggleButtonText}>
-                {isVideoActive ? '📹 Turn Off Video' : '📹 Start Live Video'}
-              </Text>
-            </Pressable>
-          ) : (
-            <View
-              style={[styles.videoToggleButton, { opacity: 0.6, backgroundColor: 'rgba(255,255,255,0.08)' }]}
-            >
-              <Text style={styles.videoToggleButtonText}>📷 Camera disabled by parent</Text>
-            </View>
-          )}
-        </View>
-      )}
-
-      {errorReason && <Text style={styles.errorSub}>{errorReason}</Text>}
-
-      <Pressable
-        style={[styles.endButton, status === 'ended' && styles.endButtonEnded]}
-        onPress={handleEnd}
-        accessibilityRole="button"
-        accessibilityLabel={status === 'ended' ? 'Close call' : 'End call'}
-      >
-        <Text style={styles.endButtonText}>{status === 'ended' ? 'Close' : '✕ End'}</Text>
-      </Pressable>
-    </View>
+        {/* Network Notice Toast if active */}
+        {networkNotice && (
+          <Pressable style={styles.noticeToast} onPress={() => setNetworkNotice(null)}>
+            <Text style={styles.noticeToastText}>⚡ {networkNotice}</Text>
+          </Pressable>
+        )}
+      </View>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  pulseContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  waveBarsMargin: {
-    marginTop: 6,
-    marginBottom: 4,
-  },
   container: {
     flex: 1,
+    width: '100%',
+    height: '100%',
+  },
+  voiceInner: {
+    flex: 1,
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+  },
+
+  // Top Header Pills
+  topRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  headerPill: {
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+  },
+  headerPillText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontFamily: fontFamilies.extraBold,
+  },
+
+  // Call Header Title & Ticker
+  callHeader: {
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  callHeaderTitle: {
+    fontSize: 28,
+    color: '#FFFFFF',
+    fontFamily: fontFamilies.black,
+    letterSpacing: -0.4,
+  },
+  callHeaderTimer: {
+    fontSize: 15,
+    color: 'rgba(255, 255, 255, 0.85)',
+    fontFamily: fontFamilies.bold,
+    marginTop: 2,
+    fontVariant: ['tabular-nums'],
+  },
+
+  // Center Stage
+  stageCenter: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    marginVertical: 10,
+  },
+  soundwaveRing: {
+    position: 'absolute',
+    width: 210,
+    height: 210,
+    borderRadius: 105,
+    borderWidth: 4,
+    borderColor: 'rgba(255, 255, 255, 0.45)',
+  },
+  mascotDisc: {
+    width: 175,
+    height: 175,
+    borderRadius: 88,
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    borderWidth: 4,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#1A1D27',
-    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
   },
-  title: {
-    fontSize: 20,
+  tapInterruptHint: {
+    fontSize: 12,
     fontFamily: fontFamilies.extraBold,
+    color: 'rgba(255, 255, 255, 0.75)',
+    marginTop: 12,
+  },
+  statePill: {
+    backgroundColor: 'rgba(255, 255, 255, 0.24)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+    borderBottomWidth: 4,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 22,
+    marginTop: 8,
+  },
+  statePillText: {
     color: '#FFFFFF',
-    marginBottom: 8,
-    textAlign: 'center',
+    fontSize: 16,
+    fontFamily: fontFamilies.black,
   },
-  timerPill: {
-    backgroundColor: '#262A38',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    marginBottom: 16,
+  equalizerRow: {
+    marginTop: 10,
+    height: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  timerText: {
-    fontSize: 13,
-    color: '#FFE66D',
+
+  // Reaction Pop
+  reactionPopWrapper: {
+    position: 'absolute',
+    top: '38%',
+    alignSelf: 'center',
+    zIndex: 99,
+  },
+  reactionPopEmoji: {
+    fontSize: 70,
+  },
+
+  // Live Caption Card
+  captionCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+    borderBottomWidth: 5,
+    borderBottomColor: 'rgba(0, 0, 0, 0.12)',
+    borderRadius: 24,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    minHeight: 100,
+    justifyContent: 'center',
+  },
+  captionSpeaker: {
+    fontSize: 11,
+    fontFamily: fontFamilies.black,
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  captionText: {
+    color: '#FFFFFF',
+    fontSize: 17,
     fontFamily: fontFamilies.extraBold,
+    lineHeight: 24,
   },
-  errorSub: {
-    fontSize: 14,
-    color: '#FF8A80',
-    fontFamily: fontFamilies.semiBold,
-    marginBottom: 16,
-    textAlign: 'center',
+
+  // Reactions Row
+  reactionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 12,
+    marginVertical: 4,
   },
-  endButton: {
-    backgroundColor: '#D94A4A',
-    width: 68,
-    height: 68,
-    borderRadius: 34,
+  reactionButton: {
+    width: 52,
+    height: 48,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+    borderBottomWidth: 4,
+    borderBottomColor: 'rgba(0, 0, 0, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  reactionEmoji: {
+    fontSize: 24,
+  },
+
+  // Bottom Control Dock
+  bottomDock: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingTop: 8,
+  },
+  dockItem: {
+    alignItems: 'center',
+    width: 90,
+  },
+  dockRoundButton: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+    borderBottomWidth: 5,
+    borderBottomColor: 'rgba(0, 0, 0, 0.25)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  dockBtnInterrupt: {
+    backgroundColor: '#FFFFFF',
+  },
+  dockBtnShowMe: {
+    backgroundColor: '#18B5A8',
+  },
+  dockBtnBye: {
+    backgroundColor: '#FF5E7E',
+  },
+  dockBtnIcon: {
+    fontSize: 30,
+  },
+  dockBtnLabel: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontFamily: fontFamilies.black,
+    marginTop: 8,
+  },
+
+  // Network Notice Toast
+  noticeToast: {
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 16,
+    alignSelf: 'center',
+    marginTop: 6,
+  },
+  noticeToastText: {
+    color: '#FFE66D',
+    fontSize: 12,
+    fontFamily: fontFamilies.bold,
+  },
+
+  // ═══════════════════════════════════════════════════════════════
+  // FULL SCREEN CAMERA STYLES (IMAGE 3)
+  // ═══════════════════════════════════════════════════════════════
+  fullCameraContainer: {
+    flex: 1,
+    backgroundColor: '#000000',
+  },
+  cameraPlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#0B1B17',
+  },
+  cameraPlaceholderText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontFamily: fontFamilies.bold,
+    marginTop: 12,
+  },
+  cameraTopHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    alignItems: 'center',
+  },
+  liveBadgePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    gap: 8,
+  },
+  liveBlinkDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: '#FF4D4D',
+  },
+  liveBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontFamily: fontFamilies.black,
+    letterSpacing: 0.5,
+  },
+
+  // Viewfinder Reticle [ ]
+  viewfinderBox: {
+    position: 'absolute',
+    top: SCREEN_HEIGHT * 0.22,
+    left: 40,
+    right: 40,
+    height: SCREEN_HEIGHT * 0.42,
+  },
+  reticleCorner: {
+    position: 'absolute',
+    width: 38,
+    height: 38,
+    borderColor: '#FFFFFF',
+  },
+  reticleTL: {
+    top: 0,
+    left: 0,
+    borderTopWidth: 5,
+    borderLeftWidth: 5,
+    borderTopLeftRadius: 14,
+  },
+  reticleTR: {
+    top: 0,
+    right: 0,
+    borderTopWidth: 5,
+    borderRightWidth: 5,
+    borderTopRightRadius: 14,
+  },
+  reticleBL: {
+    bottom: 0,
+    left: 0,
+    borderBottomWidth: 5,
+    borderLeftWidth: 5,
+    borderBottomLeftRadius: 14,
+  },
+  reticleBR: {
+    bottom: 0,
+    right: 0,
+    borderBottomWidth: 5,
+    borderRightWidth: 5,
+    borderBottomRightRadius: 14,
+  },
+
+  // Camera Bottom Dock
+  cameraBottomDock: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    backgroundColor: 'linear-gradient(0deg, rgba(0,0,0,0.8) 0%, transparent 100%)',
+    zIndex: 10,
+  },
+  camDockItem: {
+    alignItems: 'center',
+    width: 80,
+  },
+  camRoundBtnSecondary: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  camRoundBtnIcon: {
+    fontSize: 26,
+  },
+  camRoundBtnStop: {
+    width: 78,
+    height: 78,
+    borderRadius: 39,
+    backgroundColor: '#FF5E7E',
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#FF5E7E',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  camRoundBtnStopIcon: {
+    color: '#FFFFFF',
+    fontSize: 32,
+    fontFamily: fontFamilies.black,
+  },
+  camDockLabel: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontFamily: fontFamilies.black,
+    marginTop: 6,
+  },
+
+  // ═══════════════════════════════════════════════════════════════
+  // SUMMARY SCREEN STYLES (IMAGE 4)
+  // ═══════════════════════════════════════════════════════════════
+  summaryInner: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+  },
+  summaryMascotContainer: {
+    width: 190,
+    height: 190,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 10,
-    elevation: 4,
-    shadowColor: '#D94A4A',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
   },
-  endButtonEnded: {
-    width: 'auto',
-    minWidth: 140,
-    height: 48,
-    borderRadius: 24,
-    paddingHorizontal: 32,
-  },
-  endButtonText: {
+  summaryTitle: {
+    fontSize: 30,
     color: '#FFFFFF',
     fontFamily: fontFamilies.black,
-    fontSize: 14,
+    textAlign: 'center',
+    letterSpacing: -0.5,
+    marginTop: 8,
   },
-  actionRow: {
+  summarySubtitle: {
+    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontFamily: fontFamilies.extraBold,
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  statsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     gap: 12,
-    marginBottom: 16,
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-  },
-  videoToggleButton: {
-    backgroundColor: '#2E3547',
-    borderRadius: 22,
-    paddingVertical: 12,
-    paddingHorizontal: 22,
-    minHeight: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.15)',
-  },
-  videoToggleButtonActive: {
-    backgroundColor: '#D94A4A',
-    borderColor: '#D94A4A',
-  },
-  videoToggleButtonText: {
-    color: '#FFFFFF',
-    fontFamily: fontFamilies.extraBold,
-    fontSize: 14,
-  },
-
-  // State Card Styles
-  stateCard: {
     width: '100%',
-    maxWidth: 340,
-    backgroundColor: '#232838',
-    borderRadius: 24,
-    padding: 20,
-    alignItems: 'center',
-    marginBottom: 18,
-    borderWidth: 1.5,
-    borderColor: '#333A4D',
+    marginVertical: 20,
   },
-  cameraContainer: {
-    width: '100%',
-    height: 240,
-    borderRadius: 20,
-    overflow: 'hidden',
-    marginBottom: 14,
-    position: 'relative',
-    backgroundColor: '#000',
+  statCard: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.15)',
-  },
-  liveVideoBadge: {
-    position: 'absolute',
-    top: 12,
-    left: 12,
-    flexDirection: 'row',
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+    borderBottomWidth: 5,
+    borderBottomColor: 'rgba(0, 0, 0, 0.15)',
+    borderRadius: 22,
+    paddingVertical: 16,
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-    gap: 6,
+    justifyContent: 'center',
   },
-  liveDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#00E676',
-  },
-  liveVideoBadgeText: {
-    color: '#00E676',
-    fontSize: 10,
-    fontFamily: fontFamilies.extraBold,
-    letterSpacing: 0.5,
-  },
-  cameraOverlayToggle: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-  },
-  cameraOverlayToggleText: {
-    color: '#FF8A80',
-    fontSize: 11,
-    fontFamily: fontFamilies.bold,
-  },
-  videoStateChip: {
-    position: 'absolute',
-    top: 12,
-    alignSelf: 'center',
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
-  },
-  videoStateText: {
+  statValue: {
+    fontSize: 28,
     color: '#FFFFFF',
-    fontSize: 11,
-    fontFamily: fontFamilies.bold,
-  },
-  stopPillVideo: {
-    position: 'absolute',
-    bottom: 14,
-    alignSelf: 'center',
-    backgroundColor: colors.coralStrong,
-    minHeight: 46,
-    paddingHorizontal: 26,
-    paddingVertical: 10,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.5,
-    shadowRadius: 6,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.35)',
-  },
-  stopPillVoice: {
-    backgroundColor: colors.coralStrong,
-    minHeight: 46,
-    paddingHorizontal: 26,
-    paddingVertical: 10,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-    elevation: 4,
-    shadowColor: colors.coralStrong,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.25)',
-  },
-  stopPillText: {
-    color: colors.white,
     fontFamily: fontFamilies.black,
-    fontSize: 15,
-    letterSpacing: 0.5,
+    lineHeight: 32,
   },
-  avatarCircle: {
-    width: 110,
-    height: 110,
-    borderRadius: 55,
+  statLabel: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontFamily: fontFamilies.extraBold,
+    marginTop: 4,
+  },
+  summaryButtonsCol: {
+    width: '100%',
+    gap: 14,
+    marginTop: 10,
+  },
+  summaryBtnScale: {
+    width: '100%',
+  },
+  big3DButton: {
+    width: '100%',
+    height: 64,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 18,
-    position: 'relative',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+    borderBottomWidth: 5,
   },
-  avatarListening: {
-    backgroundColor: '#152E22',
-    borderWidth: 3,
-    borderColor: '#00B894',
+  buttonHome: {
+    backgroundColor: '#FF6B6B',
+    borderBottomColor: '#D94A4A',
   },
-  avatarThinking: {
-    backgroundColor: '#2E2815',
-    borderWidth: 3,
-    borderColor: '#FFE66D',
+  buttonHomeText: {
+    color: '#FFFFFF',
+    fontSize: 19,
+    fontFamily: fontFamilies.black,
   },
-  avatarSpeaking: {
-    backgroundColor: '#2E1C15',
-    borderWidth: 3,
-    borderColor: '#FF9F43',
+  buttonTalkAgain: {
+    backgroundColor: '#5B7CFA',
+    borderBottomColor: '#3F5EFB',
   },
-  avatarEmoji: { fontSize: 50 },
-  thinkingText: { color: '#FFE66D', fontFamily: fontFamilies.extraBold, fontSize: 13, marginTop: 6 },
-
-  listeningBadge: {
-    position: 'absolute',
-    bottom: -10,
-    backgroundColor: '#00B894',
-    paddingHorizontal: 14,
-    paddingVertical: 4,
-    borderRadius: 12,
+  buttonTalkAgainText: {
+    color: '#FFFFFF',
+    fontSize: 19,
+    fontFamily: fontFamilies.black,
   },
-  listeningBadgeText: { color: '#FFFFFF', fontSize: 11, fontFamily: fontFamilies.extraBold },
-
-  speakingBadge: {
-    position: 'absolute',
-    bottom: -10,
-    backgroundColor: '#FF9F43',
-    paddingHorizontal: 14,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  speakingBadgeText: { color: '#FFFFFF', fontSize: 11, fontFamily: fontFamilies.extraBold },
-
-  transcriptBox: {
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    width: '100%',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  transcriptLabel: { color: '#FFE66D', fontSize: 11, fontFamily: fontFamilies.bold, marginBottom: 2 },
-  transcriptText: { color: '#FFFFFF', fontSize: 13, fontFamily: fontFamilies.semiBold, fontStyle: 'italic', textAlign: 'center' },
-  promptHint: { color: 'rgba(255,255,255,0.65)', fontSize: 12, fontFamily: fontFamilies.semiBold, textAlign: 'center' },
-
-  noticeBanner: {
-    backgroundColor: '#35211B',
-    borderColor: '#FF9F43',
-    borderWidth: 1.5,
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginBottom: 14,
-    alignItems: 'center',
-    width: '100%',
-    maxWidth: 340,
-  },
-  noticeBannerText: { color: '#FFE082', fontSize: 13, fontFamily: fontFamilies.extraBold, textAlign: 'center' },
-  noticeDismissText: { color: 'rgba(255,224,130,0.7)', fontSize: 11, fontFamily: fontFamilies.semiBold, marginTop: 3 },
 });
