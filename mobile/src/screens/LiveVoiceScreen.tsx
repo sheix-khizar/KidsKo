@@ -17,6 +17,7 @@ import { colors, fontFamilies } from '../theme';
 import { LinearGradient } from '../ui/LinearGradient';
 import { WaveBars, PressScale } from '../ui/motion';
 import { AskieCompanion } from '../ui/AskieCompanion';
+import { AskieReactionOverlay, triggerAskieReaction } from '../ui/AskieReactions';
 import { VoiceSession } from '../services/voiceSocket';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -88,11 +89,20 @@ export default function LiveVoiceScreen({
 
   // Vision Camera Hooks
   const { hasPermission, requestPermission } = useCameraPermission();
-  const device = useCameraDevice(cameraPosition);
-  const photoOutput = usePhotoOutput(PHOTO_CONFIG);
-  const outputs = useMemo(() => [photoOutput], [photoOutput]);
+  const backDevice = useCameraDevice('back');
+  const frontDevice = useCameraDevice('front');
+  const device = cameraPosition === 'back' ? (backDevice || frontDevice) : (frontDevice || backDevice);
+  const photoOutput = usePhotoOutput();
+  const outputs = useMemo(() => (photoOutput ? [photoOutput] : []), [photoOutput]);
 
-  const isCameraActive = status === 'live' && isVideoActive && isAppForeground && hasPermission && !!device;
+  const isCameraActive = isVideoActive && isAppForeground && hasPermission && !!device;
+
+  // Auto request camera permission if missing when camera mode active
+  useEffect(() => {
+    if (isVideoActive && !hasPermission) {
+      requestPermission();
+    }
+  }, [isVideoActive, hasPermission, requestPermission]);
 
   const sessionRef = useRef<VoiceSession | null>(null);
   const quotaTimerRef = useRef<any>(null);
@@ -140,7 +150,7 @@ export default function LiveVoiceScreen({
 
   // Frame sampling loop for Vision AI
   useEffect(() => {
-    if (!isCameraActive || !isCameraReady || !photoOutput) {
+    if (!isCameraActive || !isCameraReady || !photoOutput || status !== 'live') {
       if (frameIntervalRef.current) {
         clearInterval(frameIntervalRef.current);
         frameIntervalRef.current = null;
@@ -317,12 +327,12 @@ export default function LiveVoiceScreen({
     onBack();
   };
 
-  // Floating Reaction Handler
-  const handleSendReaction = (emoji: string) => {
-    setActiveReaction(emoji);
-    setTimeout(() => {
-      setActiveReaction(null);
-    }, 1500);
+  // Floating Reaction Handler (Google Meet style)
+  const handleSendReaction = (emoji: string, e?: any) => {
+    console.log('[LiveVoiceScreen] handleSendReaction:', emoji, 'pageX:', e?.nativeEvent?.pageX, 'pageY:', e?.nativeEvent?.pageY);
+    const x = e?.nativeEvent?.pageX ?? Math.random() * (SCREEN_WIDTH - 120) + 60;
+    const y = e?.nativeEvent?.pageY ?? SCREEN_HEIGHT * 0.72;
+    triggerAskieReaction(emoji, x, y);
   };
 
   // Format MM:SS for call timer
@@ -356,9 +366,9 @@ export default function LiveVoiceScreen({
     return (
       <LinearGradient colors={GRADIENTS.ended} style={styles.container}>
         <View style={[styles.summaryInner, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 20 }]}>
-          {/* Celebrating Mascot Hero */}
+          {/* Celebrating Mascot Hero - Balanced & Friendly */}
           <View style={styles.summaryMascotContainer}>
-            <AskieCompanion size="xl" state="celebrate" />
+            <AskieCompanion size="l" state="celebrate" standing={true} />
           </View>
 
           {/* Heading */}
@@ -418,7 +428,7 @@ export default function LiveVoiceScreen({
 
   // ═══════════════════════════════════════════════════════════════
   // SCREEN 2: FULL-SCREEN CAMERA / VISION AI (IMAGE 3)
-  // Controls: Flip on left, Stop in center (no top buttons, no suggestions, no mascot box)
+  // Controls: Flip on left, Interrupt in center, Stop on right
   // ═══════════════════════════════════════════════════════════════
   if (isVideoActive) {
     return (
@@ -431,6 +441,7 @@ export default function LiveVoiceScreen({
             isActive={isCameraActive}
             outputs={outputs}
             resizeMode="cover"
+            enableNativeZoomGesture={false}
             onStarted={() => setIsCameraReady(true)}
             onStopped={() => setIsCameraReady(false)}
             onError={(err) => console.error('[LiveVoiceScreen] Camera error:', err)}
@@ -442,12 +453,17 @@ export default function LiveVoiceScreen({
           </View>
         )}
 
-        {/* Minimal Live Pill at Top Center (No top buttons!) */}
+        {/* Minimal Live Pill at Top Center with Speaking / Interrupt Status */}
         <View style={[styles.cameraTopHeader, { paddingTop: insets.top + 8 }]}>
           <View style={styles.liveBadgePill}>
             <View style={styles.liveBlinkDot} />
             <Text style={styles.liveBadgeText}>LIVE {formatTimer(callDuration)}</Text>
           </View>
+          {voiceState === 'speaking' && (
+            <View style={styles.camSpeakingPill}>
+              <Text style={styles.camSpeakingText}>🔊 Kidsko is talking • Tap ✋ to stop</Text>
+            </View>
+          )}
         </View>
 
         {/* Viewfinder Target Reticle [ ] */}
@@ -458,7 +474,7 @@ export default function LiveVoiceScreen({
           <View style={[styles.reticleCorner, styles.reticleBR]} />
         </View>
 
-        {/* Bottom Dock: Flip on Left, Stop in Center, Talk on Right */}
+        {/* Bottom Dock: Flip on Left, Interrupt in Center, Stop on Right */}
         <View style={[styles.cameraBottomDock, { paddingBottom: insets.bottom + 20 }]}>
           {/* Flip Button (Left side) */}
           <View style={styles.camDockItem}>
@@ -476,7 +492,24 @@ export default function LiveVoiceScreen({
             <Text style={styles.camDockLabel}>Flip</Text>
           </View>
 
-          {/* Stop Button (Center - Prominent) */}
+          {/* Interrupt Button (Center - Prominent so kid can stop Kidsko anytime) */}
+          <View style={styles.camDockItem}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.camRoundBtnInterrupt,
+                voiceState === 'speaking' && styles.camRoundBtnInterruptActive,
+                pressed && { transform: [{ scale: 0.93 }] },
+              ]}
+              onPress={handleInterrupt}
+              accessibilityRole="button"
+              accessibilityLabel="Interrupt Kidsko"
+            >
+              <Text style={styles.camRoundBtnInterruptIcon}>✋</Text>
+            </Pressable>
+            <Text style={styles.camDockLabel}>Interrupt</Text>
+          </View>
+
+          {/* Stop Button (Right side - Exits camera mode back to voice) */}
           <View style={styles.camDockItem}>
             <Pressable
               style={({ pressed }) => [
@@ -491,23 +524,10 @@ export default function LiveVoiceScreen({
             </Pressable>
             <Text style={styles.camDockLabel}>Stop</Text>
           </View>
-
-          {/* Talk / Voice Button (Right side) */}
-          <View style={styles.camDockItem}>
-            <Pressable
-              style={({ pressed }) => [
-                styles.camRoundBtnSecondary,
-                pressed && { transform: [{ scale: 0.93 }] },
-              ]}
-              onPress={() => setIsVideoActive(false)}
-              accessibilityRole="button"
-              accessibilityLabel="Switch to voice"
-            >
-              <Text style={styles.camRoundBtnIcon}>🎤</Text>
-            </Pressable>
-            <Text style={styles.camDockLabel}>Talk</Text>
-          </View>
         </View>
+
+        {/* Floating Google Meet Reactions in Camera Mode */}
+        <AskieReactionOverlay />
       </View>
     );
   }
@@ -609,13 +629,6 @@ export default function LiveVoiceScreen({
           </View>
         </View>
 
-        {/* Floating Reaction Animation */}
-        {activeReaction && (
-          <View style={styles.reactionPopWrapper} pointerEvents="none">
-            <Text style={styles.reactionPopEmoji}>{activeReaction}</Text>
-          </View>
-        )}
-
         {/* Live Caption Card */}
         <View style={styles.captionCard}>
           <Text
@@ -637,7 +650,7 @@ export default function LiveVoiceScreen({
             <Pressable
               key={emoji}
               style={styles.reactionButton}
-              onPress={() => handleSendReaction(emoji)}
+              onPress={(e) => handleSendReaction(emoji, e)}
               accessibilityRole="button"
               accessibilityLabel={`React ${emoji}`}
             >
@@ -707,6 +720,9 @@ export default function LiveVoiceScreen({
           </Pressable>
         )}
       </View>
+
+      {/* Floating Google Meet Reactions in Call Screen */}
+      <AskieReactionOverlay />
     </LinearGradient>
   );
 }
@@ -990,6 +1006,20 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.black,
     letterSpacing: 0.5,
   },
+  camSpeakingPill: {
+    backgroundColor: 'rgba(255, 94, 126, 0.92)',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+    marginTop: 8,
+  },
+  camSpeakingText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontFamily: fontFamilies.black,
+  },
 
   // Viewfinder Reticle [ ]
   viewfinderBox: {
@@ -1065,24 +1095,47 @@ const styles = StyleSheet.create({
   camRoundBtnIcon: {
     fontSize: 26,
   },
-  camRoundBtnStop: {
-    width: 78,
-    height: 78,
-    borderRadius: 39,
-    backgroundColor: '#FF5E7E',
+  camRoundBtnInterrupt: {
+    width: 74,
+    height: 74,
+    borderRadius: 37,
+    backgroundColor: '#FFFFFF',
     borderWidth: 3,
+    borderColor: '#FFD08A',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  camRoundBtnInterruptActive: {
+    backgroundColor: '#FFE66D',
+    borderColor: '#FFA502',
+    transform: [{ scale: 1.05 }],
+  },
+  camRoundBtnInterruptIcon: {
+    fontSize: 32,
+  },
+  camRoundBtnStop: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    backgroundColor: '#FF5E7E',
+    borderWidth: 2,
     borderColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#FF5E7E',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 6,
   },
   camRoundBtnStopIcon: {
     color: '#FFFFFF',
-    fontSize: 32,
+    fontSize: 26,
     fontFamily: fontFamilies.black,
   },
   camDockLabel: {
@@ -1102,11 +1155,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   summaryMascotContainer: {
-    width: isCompact ? 130 : 190,
-    height: isCompact ? 130 : 190,
+    width: 135,
+    height: 135,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: isCompact ? 4 : 10,
+    marginTop: 4,
   },
   summaryTitle: {
     fontSize: isCompact ? 24 : 30,

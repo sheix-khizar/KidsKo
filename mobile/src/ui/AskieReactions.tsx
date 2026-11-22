@@ -17,15 +17,21 @@ type ReactionItem = {
   startY: number;
 };
 
-let globalTrigger: ((emoji: string, x?: number, y?: number) => void) | null = null;
+const listeners = new Set<(emoji: string, x?: number, y?: number) => void>();
 
 /**
  * Public trigger to launch floating celebration emoji reactions anywhere in the app!
  */
 export function triggerAskieReaction(emoji: string, x?: number, y?: number) {
-  if (globalTrigger) {
-    globalTrigger(emoji, x, y);
-  }
+  console.log('[AskieReaction] triggerAskieReaction called:', emoji, 'x=', x, 'y=', y, 'listeners count=', listeners.size);
+  listeners.forEach((fn) => fn(emoji, x, y));
+  // Google Meet style: spawn 2 sister bubbles with slight offsets and delays
+  setTimeout(() => {
+    listeners.forEach((fn) => fn(emoji, (x ?? 160) + (Math.random() - 0.5) * 50, (y ?? 550) + 15));
+  }, 110);
+  setTimeout(() => {
+    listeners.forEach((fn) => fn(emoji, (x ?? 160) + (Math.random() - 0.5) * 60, (y ?? 550) + 30));
+  }, 220);
 }
 
 /**
@@ -35,18 +41,19 @@ export function AskieReactionOverlay() {
   const [reactions, setReactions] = useState<ReactionItem[]>([]);
 
   useEffect(() => {
-    globalTrigger = (emoji: string, x?: number, y?: number) => {
+    const handler = (emoji: string, x?: number, y?: number) => {
       const newItem: ReactionItem = {
         id: `${Date.now()}_${Math.random()}`,
         emoji,
-        startX: x ?? Math.random() * 200 + 80,
+        startX: Math.max(20, Math.min(x ?? Math.random() * 200 + 80, 600)),
         startY: y ?? 500,
       };
       setReactions((prev) => [...prev.slice(-12), newItem]);
     };
 
+    listeners.add(handler);
     return () => {
-      globalTrigger = null;
+      listeners.delete(handler);
     };
   }, []);
 
@@ -55,7 +62,7 @@ export function AskieReactionOverlay() {
   };
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+    <View style={[StyleSheet.absoluteFill, { zIndex: 9999, elevation: 999 }]} pointerEvents="none">
       {reactions.map((r) => (
         <FloatingReaction
           key={r.id}
@@ -93,7 +100,7 @@ function FloatingReaction({
 
     Animated.timing(anim, {
       toValue: 1,
-      duration: 1800,
+      duration: 2000,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start(() => onComplete());
@@ -101,22 +108,22 @@ function FloatingReaction({
 
   const translateY = anim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, -220],
+    outputRange: [0, -380],
   });
 
   const translateX = anim.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: [0, drift * 0.6, drift],
+    inputRange: [0, 0.25, 0.6, 1],
+    outputRange: [0, drift * 0.4, -drift * 0.3, drift],
   });
 
   const scale = anim.interpolate({
-    inputRange: [0, 0.2, 0.8, 1],
-    outputRange: [0.3, 1.3, 1.1, 0.8],
+    inputRange: [0, 0.15, 0.7, 1],
+    outputRange: [0.3, 1.35, 1.15, 0.85],
   });
 
   const opacity = anim.interpolate({
-    inputRange: [0, 0.1, 0.7, 1],
-    outputRange: [0, 1, 0.9, 0],
+    inputRange: [0, 0.08, 0.65, 1],
+    outputRange: [0, 1, 0.95, 0],
   });
 
   return (
@@ -126,6 +133,8 @@ function FloatingReaction({
         left: startX,
         top: startY,
         opacity,
+        zIndex: 9999,
+        elevation: 999,
         transform: [
           { translateX },
           { translateY },
@@ -134,7 +143,7 @@ function FloatingReaction({
         ],
       }}
     >
-      <Text style={{ fontSize: 36 }}>{emoji}</Text>
+      <Text style={{ fontSize: 40, textShadowColor: 'rgba(0,0,0,0.25)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 4 }}>{emoji}</Text>
     </Animated.View>
   );
 }

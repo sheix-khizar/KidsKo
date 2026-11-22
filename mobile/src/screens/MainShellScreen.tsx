@@ -284,7 +284,7 @@ export default function MainShellScreen({
               {/* Centered Mascot Hero */}
               <View style={styles.lobbyCenter}>
                 <View style={styles.lobbyMascotWrap}>
-                  <AskieCompanion size="xl" state="idle" interactive={true} />
+                  <AskieCompanion size="l" state="idle" interactive={true} standing={true} />
                 </View>
                 <Text style={styles.lobbyTitle}>Let's talk!</Text>
                 <Text style={styles.lobbySub}>Tap the big button and ask me anything 🎉</Text>
@@ -298,14 +298,14 @@ export default function MainShellScreen({
                     pressed && { transform: [{ scale: 0.97 }], borderBottomWidth: 2, marginTop: 4 },
                   ]}
                   onPress={() => {
-                    console.log('[MainShell] Start talking tapped!');
+                    console.log('[MainShell] Talk to me tapped!');
                     if (activeStudent) onStartCall(activeStudent, 'voice');
                   }}
                   accessibilityRole="button"
-                  accessibilityLabel="Start talking"
+                  accessibilityLabel="Talk to me"
                 >
                   <Text style={styles.lobbyBtnIcon}>🎤</Text>
-                  <Text style={styles.lobbyBtnText}>Start talking</Text>
+                  <Text style={styles.lobbyBtnText}>Talk to me</Text>
                 </Pressable>
 
                 <Pressable
@@ -315,14 +315,14 @@ export default function MainShellScreen({
                     pressed && { transform: [{ scale: 0.97 }], borderBottomWidth: 2, marginTop: 18 },
                   ]}
                   onPress={() => {
-                    console.log('[MainShell] Show me something tapped!');
+                    console.log('[MainShell] Show me tapped!');
                     if (activeStudent) onStartCall(activeStudent, 'video');
                   }}
                   accessibilityRole="button"
-                  accessibilityLabel="Show me something"
+                  accessibilityLabel="Show me"
                 >
                   <Text style={styles.lobbyBtnIcon}>📷</Text>
-                  <Text style={styles.lobbyBtnText}>Show me something</Text>
+                  <Text style={styles.lobbyBtnText}>Show me</Text>
                 </Pressable>
               </View>
             </LinearGradient>

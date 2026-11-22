@@ -52,7 +52,7 @@ export function AskieCompanion({
 
   // Animation values
   const floatAnim = useRef(new Animated.Value(0)).current;
-  const blinkAnim = useRef(new Animated.Value(1)).current;
+  const blinkAnim = useRef(new Animated.Value(0)).current;
   const mouthAnim = useRef(new Animated.Value(0)).current;
   const tiltAnim = useRef(new Animated.Value(0)).current;
   const pulseRing1 = useRef(new Animated.Value(0)).current;
@@ -94,8 +94,8 @@ export function AskieCompanion({
     const doBlink = () => {
       if (!isMounted) return;
       Animated.sequence([
-        Animated.timing(blinkAnim, { toValue: 0.1, duration: 90, useNativeDriver: true }),
-        Animated.timing(blinkAnim, { toValue: 1, duration: 110, useNativeDriver: true }),
+        Animated.timing(blinkAnim, { toValue: 1, duration: 80, useNativeDriver: true }),
+        Animated.timing(blinkAnim, { toValue: 0, duration: 110, useNativeDriver: true }),
       ]).start(() => {
         if (!isMounted) return;
         const nextBlink = Math.random() * 2500 + 2500;
@@ -245,6 +245,11 @@ export function AskieCompanion({
     outputRange: [1, 2.4],
   });
 
+  const eyelidTranslateY = blinkAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-config.eyeSize, 0],
+  });
+
   const ringScale1 = pulseRing1.interpolate({ inputRange: [0, 1], outputRange: [1, 1.45] });
   const ringOpacity1 = pulseRing1.interpolate({ inputRange: [0, 0.7, 1], outputRange: [0.6, 0.3, 0] });
 
@@ -390,14 +395,14 @@ export function AskieCompanion({
             {/* Eyes Row */}
             <View style={styles.eyesRow}>
               {/* Left Eye */}
-              <Animated.View
+              <View
                 style={[
                   styles.eyeOrb,
                   {
                     width: config.eyeSize,
                     height: config.eyeSize,
                     borderRadius: config.eyeSize / 2,
-                    transform: [{ scaleY: state === 'celebrate' ? 0.2 : blinkAnim }],
+                    overflow: 'hidden',
                   },
                 ]}
               >
@@ -405,24 +410,46 @@ export function AskieCompanion({
                 <View style={styles.eyePupil}>
                   <View style={styles.eyeSparkle} />
                 </View>
-              </Animated.View>
+
+                {/* Animated Eyelid - clean downward slide without pupil deformation */}
+                <Animated.View
+                  style={[
+                    styles.eyelid,
+                    {
+                      height: config.eyeSize,
+                      transform: [{ translateY: eyelidTranslateY }],
+                    },
+                  ]}
+                />
+              </View>
 
               {/* Right Eye */}
-              <Animated.View
+              <View
                 style={[
                   styles.eyeOrb,
                   {
                     width: config.eyeSize,
                     height: config.eyeSize,
                     borderRadius: config.eyeSize / 2,
-                    transform: [{ scaleY: state === 'celebrate' ? 0.2 : blinkAnim }],
+                    overflow: 'hidden',
                   },
                 ]}
               >
                 <View style={styles.eyePupil}>
                   <View style={styles.eyeSparkle} />
                 </View>
-              </Animated.View>
+
+                {/* Animated Eyelid */}
+                <Animated.View
+                  style={[
+                    styles.eyelid,
+                    {
+                      height: config.eyeSize,
+                      transform: [{ translateY: eyelidTranslateY }],
+                    },
+                  ]}
+                />
+              </View>
             </View>
 
             {/* Rosy Cheeks */}
@@ -439,7 +466,7 @@ export function AskieCompanion({
                   width: config.beakSize * 1.3,
                   height: config.beakSize * 0.85,
                   borderRadius: config.beakSize * 0.4,
-                  transform: [{ scaleY: mouthScaleY }],
+                  transform: [{ scaleY: state === 'celebrate' ? 1.4 : mouthScaleY }],
                 },
               ]}
             >
@@ -595,6 +622,16 @@ const styles = StyleSheet.create({
     height: '38%',
     borderRadius: 100,
     backgroundColor: '#FFFFFF',
+  },
+  eyelid: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#FF6B6B',
+    borderBottomWidth: 3,
+    borderBottomColor: '#E65555',
+    zIndex: 5,
   },
   cheeksRow: {
     position: 'absolute',

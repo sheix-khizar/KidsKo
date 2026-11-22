@@ -186,7 +186,7 @@ export default function HomeScreen({
         <FadeSlideIn delay={60}>
           <View style={styles.heroRow}>
             <Pressable onPress={handleMascotTap} style={styles.mascotTouch}>
-              <AskieCompanion size="l" state="idle" interactive={true} onPress={handleMascotTap} standing={true} />
+              <AskieCompanion size="m" state="idle" interactive={true} onPress={handleMascotTap} standing={true} />
             </Pressable>
 
             <Animated.View style={[styles.speechBubble, { transform: [{ scale: bubbleScale }] }]}>
@@ -379,8 +379,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   mascotTouch: {
-    width: 125,
-    height: 140,
+    width: 95,
+    height: 105,
     alignItems: 'center',
     justifyContent: 'center',
   },
