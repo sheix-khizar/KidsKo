@@ -607,7 +607,7 @@ export default function LiveVoiceScreen({
           >
             <AskieCompanion
               size={isCompact ? 'l' : 'xl'}
-              state={status === 'connecting' ? 'idle' : voiceState}
+              state={status === 'connecting' ? 'waving' : voiceState}
               interactive={true}
               onPress={handleInterrupt}
             />

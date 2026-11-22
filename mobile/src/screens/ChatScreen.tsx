@@ -362,7 +362,7 @@ export default function ChatScreen({
           <FadeSlideIn delay={0}>
             <View style={styles.emptyContainer}>
               <View style={styles.emptyMascotWrapper}>
-                <AskieCompanion size="l" state="idle" standing={true} />
+                <AskieCompanion size="l" state="waving" standing={true} />
               </View>
               <Text style={styles.emptyTitle}>What do you want to learn?</Text>
               <Text style={styles.emptySubtitle}>Pick one or type your own question 👇</Text>

@@ -122,6 +122,7 @@ export default function HomeScreen({
 
   // Hero greeting speech bubble rotation
   const [msgIdx, setMsgIdx] = useState(0);
+  const [mascotState, setMascotState] = useState<'waving' | 'celebrate'>('waving');
   const bubbleScale = useRef(new Animated.Value(1)).current;
   const ctaPulse = useRef(new Animated.Value(1)).current;
 
@@ -171,6 +172,8 @@ export default function HomeScreen({
 
   const handleMascotTap = () => {
     triggerAskieReaction('⭐');
+    setMascotState('celebrate');
+    setTimeout(() => setMascotState('waving'), 1800);
     setStars((s) => {
       const nextStars = s + 5;
       SecureStore.setItemAsync(`@kidsko_stars_${student.id}`, String(nextStars)).catch(() => {});
@@ -222,7 +225,7 @@ export default function HomeScreen({
         <FadeSlideIn delay={60}>
           <View style={styles.heroRow}>
             <Pressable onPress={handleMascotTap} style={styles.mascotTouch}>
-              <AskieCompanion size="m" state="idle" interactive={true} onPress={handleMascotTap} standing={true} />
+              <AskieCompanion size="m" state={mascotState} interactive={true} onPress={handleMascotTap} standing={true} />
             </Pressable>
 
             <Animated.View style={[styles.speechBubble, { transform: [{ scale: bubbleScale }] }]}>

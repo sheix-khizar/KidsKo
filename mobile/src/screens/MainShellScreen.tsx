@@ -299,7 +299,7 @@ export default function MainShellScreen({
               {/* Centered Mascot Hero */}
               <View style={styles.lobbyCenter}>
                 <View style={styles.lobbyMascotWrap}>
-                  <AskieCompanion size="l" state="idle" interactive={true} standing={true} />
+                  <AskieCompanion size="l" state="waving" interactive={true} standing={true} />
                 </View>
                 <Text style={styles.lobbyTitle}>Let's talk!</Text>
                 <Text style={styles.lobbySub}>Tap the big button and ask me anything 🎉</Text>
