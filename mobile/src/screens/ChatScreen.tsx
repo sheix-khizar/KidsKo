@@ -288,41 +288,28 @@ export default function ChatScreen({
     >
       {/* ── Topbar Matching Prototype ── */}
       <View style={styles.topbar}>
-        <View style={styles.topbarLeft}>
-          {!embedded ? (
+        {!embedded && (
+          <View style={styles.topbarLeft}>
             <Pressable onPress={onBack} style={styles.backButtonTouch}>
               <Text style={styles.backButton}>←</Text>
             </Pressable>
-          ) : (
-            <AskieCompanion size="xs" state="idle" />
-          )}
-        </View>
+          </View>
+        )}
 
-        <Pressable
-          style={styles.topbarCenter}
-          onPress={onSwitchStudent}
-          disabled={!onSwitchStudent}
-          accessibilityRole="button"
-          accessibilityLabel={`Active student is ${studentName}. Tap to switch student.`}
-        >
-          <LinearGradient
-            colors={gradients.primary.colors}
-            start={gradients.primary.start}
-            end={gradients.primary.end}
-            style={styles.studentAvatar}
-          >
-            <Text style={styles.studentAvatarEmoji}>👧</Text>
-          </LinearGradient>
+        <View style={styles.topbarCenter}>
+          <View style={styles.companionAvatarSquircle}>
+            <AskieCompanion size="xs" shape="squircle" state="idle" />
+          </View>
           <View style={styles.studentInfoCol}>
-            <Text style={styles.topbarTitle}>
-              {studentName}'s <Text style={styles.chatHighlight}>Chat</Text>
+            <Text style={styles.topbarTitle} numberOfLines={1}>
+              {lastThread?.title || `${studentName} & Kidsko`}
             </Text>
             <View style={styles.statusRow}>
               <LiveDot size={6} color={colors.mint} />
-              <Text style={styles.statusText}>Kidsko is online</Text>
+              <Text style={styles.statusText}>Online</Text>
             </View>
           </View>
-        </Pressable>
+        </View>
 
         <View style={styles.topbarRight}>
           <Pressable
@@ -461,30 +448,47 @@ export default function ChatScreen({
                     <Mascot size="xs" shape="circle" />
                   )}
                 </View>
-                <View
-                  style={[
-                    styles.bubble,
-                    item.role === 'user' && styles.bubbleUser,
-                  ]}
-                >
-                  <Text
+                <View style={{ flex: 1, alignItems: item.role === 'user' ? 'flex-end' : 'flex-start' }}>
+                  <View
                     style={[
-                      styles.bubbleText,
-                      item.role === 'user' && styles.bubbleTextUser,
+                      styles.bubble,
+                      item.role === 'user' && styles.bubbleUser,
                     ]}
                   >
-                    {parseFormattedText(cleanMessageText(item.content)).map((span, sIdx) => (
-                      <Text
-                        key={sIdx}
-                        style={[
-                          span.bold && styles.bubbleTextBold,
-                          item.role === 'user' && styles.bubbleTextUser,
-                        ]}
-                      >
-                        {span.text}
-                      </Text>
-                    ))}
-                  </Text>
+                    <Text
+                      style={[
+                        styles.bubbleText,
+                        item.role === 'user' && styles.bubbleTextUser,
+                      ]}
+                    >
+                      {parseFormattedText(cleanMessageText(item.content)).map((span, sIdx) => (
+                        <Text
+                          key={sIdx}
+                          style={[
+                            span.bold && styles.bubbleTextBold,
+                            item.role === 'user' && styles.bubbleTextUser,
+                          ]}
+                        >
+                          {span.text}
+                        </Text>
+                      ))}
+                    </Text>
+                  </View>
+                  {item.role === 'assistant' && (
+                    <View style={styles.msgReactionsRow}>
+                      {['👍', '❤️', '🤯'].map((emoji) => (
+                        <Pressable
+                          key={emoji}
+                          style={styles.msgReactionPill}
+                          onPress={() => triggerAskieReaction(emoji)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`React ${emoji}`}
+                        >
+                          <Text style={styles.msgReactionEmoji}>{emoji}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  )}
                 </View>
               </View>
             </FadeSlideIn>
@@ -718,6 +722,36 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    flex: 1,
+    marginRight: 8,
+  },
+  companionAvatarSquircle: {
+    width: 36,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  msgReactionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 6,
+    marginLeft: 6,
+  },
+  msgReactionPill: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#FFE8D6',
+    borderBottomWidth: 3,
+    borderBottomColor: '#FFD7BA',
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  msgReactionEmoji: {
+    fontSize: 14,
   },
   studentAvatar: {
     width: 34,

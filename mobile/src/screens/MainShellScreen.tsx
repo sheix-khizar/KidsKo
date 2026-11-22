@@ -269,54 +269,63 @@ export default function MainShellScreen({
               colors={['#5B7CFA', '#3FA7D6']}
               start={{ x: 0, y: 0 }}
               end={{ x: 0.8, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
-
-            {/* Top Security & Quota Pills Row */}
-            <View style={[styles.lobbyPillRow, { paddingTop: insets.top + 12 }]}>
-              <View style={styles.lobbyPill}>
-                <Text style={styles.lobbyPillText}>🔒 Safe call</Text>
+              style={{ flex: 1 }}
+            >
+              {/* Top Security & Quota Pills Row */}
+              <View style={[styles.lobbyPillRow, { paddingTop: insets.top + 12 }]}>
+                <View style={styles.lobbyPill}>
+                  <Text style={styles.lobbyPillText}>🔒 Safe call</Text>
+                </View>
+                <View style={styles.lobbyPill}>
+                  <Text style={styles.lobbyPillText}>⏱️ 18 min left today</Text>
+                </View>
               </View>
-              <View style={styles.lobbyPill}>
-                <Text style={styles.lobbyPillText}>⏱️ 18 min left today</Text>
-              </View>
-            </View>
 
-            {/* Centered Mascot Hero */}
-            <View style={styles.lobbyCenter}>
-              <View style={styles.lobbyMascotWrap}>
-                <AskieCompanion size="xl" state="idle" interactive={true} />
+              {/* Centered Mascot Hero */}
+              <View style={styles.lobbyCenter}>
+                <View style={styles.lobbyMascotWrap}>
+                  <AskieCompanion size="xl" state="idle" interactive={true} />
+                </View>
+                <Text style={styles.lobbyTitle}>Let's talk!</Text>
+                <Text style={styles.lobbySub}>Tap the big button and ask me anything 🎉</Text>
               </View>
-              <Text style={styles.lobbyTitle}>Let's talk!</Text>
-              <Text style={styles.lobbySub}>Tap the big button and ask me anything 🎉</Text>
-            </View>
 
-            {/* Bottom Big CTA Buttons (No suggestions as requested!) */}
-            <View style={styles.lobbyBottomActions}>
-              <PressScale
-                style={{ width: '100%' }}
-                onPress={() => {
-                  if (activeStudent) onStartCall(activeStudent, 'voice');
-                }}
-              >
-                <View style={styles.lobbyStartVoiceBtn}>
+              {/* Bottom Big CTA Buttons (No suggestions as requested!) */}
+              <View style={styles.lobbyBottomActions}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.lobbyStartVoiceBtn,
+                    pressed && { transform: [{ scale: 0.97 }], borderBottomWidth: 2, marginTop: 4 },
+                  ]}
+                  onPress={() => {
+                    console.log('[MainShell] Start talking tapped!');
+                    if (activeStudent) onStartCall(activeStudent, 'voice');
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Start talking"
+                >
                   <Text style={styles.lobbyBtnIcon}>🎤</Text>
                   <Text style={styles.lobbyBtnText}>Start talking</Text>
-                </View>
-              </PressScale>
+                </Pressable>
 
-              <PressScale
-                style={{ width: '100%', marginTop: 14 }}
-                onPress={() => {
-                  if (activeStudent) onStartCall(activeStudent, 'video');
-                }}
-              >
-                <View style={styles.lobbyStartCamBtn}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.lobbyStartCamBtn,
+                    { marginTop: 14 },
+                    pressed && { transform: [{ scale: 0.97 }], borderBottomWidth: 2, marginTop: 18 },
+                  ]}
+                  onPress={() => {
+                    console.log('[MainShell] Show me something tapped!');
+                    if (activeStudent) onStartCall(activeStudent, 'video');
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Show me something"
+                >
                   <Text style={styles.lobbyBtnIcon}>📷</Text>
                   <Text style={styles.lobbyBtnText}>Show me something</Text>
-                </View>
-              </PressScale>
-            </View>
+                </Pressable>
+              </View>
+            </LinearGradient>
           </FadeSlideIn>
         )}
 

@@ -56,6 +56,10 @@ export default function App() {
   const [activeThread, setActiveThread] = useState<{ id: string; title: string } | null>(null);
   const [initialCallMode, setInitialCallMode] = useState<'voice' | 'video'>('voice');
   const [gateVisible, setGateVisible] = useState(false);
+
+  useEffect(() => {
+    console.log('[App.tsx] screen state:', screen, 'activeStudent:', activeStudent?.id);
+  }, [screen, activeStudent]);
   // Bumped after a successful purchase so mounted screens re-check the plan.
   const [billingVersion, setBillingVersion] = useState(0);
 

@@ -20,6 +20,7 @@ import { AskieCompanion } from '../ui/AskieCompanion';
 import { VoiceSession } from '../services/voiceSocket';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const isCompact = SCREEN_HEIGHT < 720;
 
 type Props = {
   studentId: string;
@@ -148,9 +149,10 @@ export default function LiveVoiceScreen({
     }
 
     const captureFrame = async () => {
-      if (isCapturingRef.current || !isCameraActive || !isCameraReady) return;
+      if (isCapturingRef.current || !isCameraActive || !isCameraReady || !isVideoActive) return;
       isCapturingRef.current = true;
       try {
+        if (!isCameraReady || !isCameraActive) return;
         const photo = await photoOutput.capturePhoto({ enableShutterSound: false }, {});
         try {
           const fileData = await photo.getFileDataAsync();
@@ -260,6 +262,7 @@ export default function LiveVoiceScreen({
     if (now - lastInterruptTapRef.current < 400) return;
     lastInterruptTapRef.current = now;
     sessionRef.current?.interrupt();
+    setVoiceState('listening');
   };
 
   // Toggle Video / Full Screen Camera Mode
@@ -303,6 +306,15 @@ export default function LiveVoiceScreen({
     setErrorReason(null);
     setLastSpokenTranscript('');
     startSession();
+  };
+
+  // Return to home from summary screen
+  const handleGoHome = () => {
+    if (quotaTimerRef.current) clearInterval(quotaTimerRef.current);
+    if (durationTimerRef.current) clearInterval(durationTimerRef.current);
+    if (frameIntervalRef.current) clearInterval(frameIntervalRef.current);
+    sessionRef.current?.end();
+    onBack();
   };
 
   // Floating Reaction Handler
@@ -373,27 +385,31 @@ export default function LiveVoiceScreen({
 
           {/* Two Big CTAs */}
           <View style={styles.summaryButtonsCol}>
-            <PressScale onPress={onBack} style={styles.summaryBtnScale}>
-              <Pressable
-                style={[styles.big3DButton, styles.buttonHome]}
-                onPress={onBack}
-                accessibilityRole="button"
-                accessibilityLabel="Back to home"
-              >
-                <Text style={styles.buttonHomeText}>Back to home 🏠</Text>
-              </Pressable>
-            </PressScale>
+            <Pressable
+              style={({ pressed }) => [
+                styles.big3DButton,
+                styles.buttonHome,
+                pressed && { transform: [{ scale: 0.98 }], borderBottomWidth: 2, marginTop: 3 },
+              ]}
+              onPress={handleGoHome}
+              accessibilityRole="button"
+              accessibilityLabel="Back to home"
+            >
+              <Text style={styles.buttonHomeText}>Back to home 🏠</Text>
+            </Pressable>
 
-            <PressScale onPress={handleRestartCall} style={styles.summaryBtnScale}>
-              <Pressable
-                style={[styles.big3DButton, styles.buttonTalkAgain]}
-                onPress={handleRestartCall}
-                accessibilityRole="button"
-                accessibilityLabel="Talk again"
-              >
-                <Text style={styles.buttonTalkAgainText}>🎤 Talk again</Text>
-              </Pressable>
-            </PressScale>
+            <Pressable
+              style={({ pressed }) => [
+                styles.big3DButton,
+                styles.buttonTalkAgain,
+                pressed && { transform: [{ scale: 0.98 }], borderBottomWidth: 2, marginTop: 3 },
+              ]}
+              onPress={handleRestartCall}
+              accessibilityRole="button"
+              accessibilityLabel="Talk again"
+            >
+              <Text style={styles.buttonTalkAgainText}>🎤 Talk again</Text>
+            </Pressable>
           </View>
         </View>
       </LinearGradient>
@@ -446,46 +462,49 @@ export default function LiveVoiceScreen({
         <View style={[styles.cameraBottomDock, { paddingBottom: insets.bottom + 20 }]}>
           {/* Flip Button (Left side) */}
           <View style={styles.camDockItem}>
-            <PressScale onPress={handleFlipCamera}>
-              <Pressable
-                style={styles.camRoundBtnSecondary}
-                onPress={handleFlipCamera}
-                accessibilityRole="button"
-                accessibilityLabel="Flip camera"
-              >
-                <Text style={styles.camRoundBtnIcon}>🔄</Text>
-              </Pressable>
-            </PressScale>
+            <Pressable
+              style={({ pressed }) => [
+                styles.camRoundBtnSecondary,
+                pressed && { transform: [{ scale: 0.93 }] },
+              ]}
+              onPress={handleFlipCamera}
+              accessibilityRole="button"
+              accessibilityLabel="Flip camera"
+            >
+              <Text style={styles.camRoundBtnIcon}>🔄</Text>
+            </Pressable>
             <Text style={styles.camDockLabel}>Flip</Text>
           </View>
 
           {/* Stop Button (Center - Prominent) */}
           <View style={styles.camDockItem}>
-            <PressScale onPress={() => setIsVideoActive(false)}>
-              <Pressable
-                style={styles.camRoundBtnStop}
-                onPress={() => setIsVideoActive(false)}
-                accessibilityRole="button"
-                accessibilityLabel="Stop camera mode"
-              >
-                <Text style={styles.camRoundBtnStopIcon}>✕</Text>
-              </Pressable>
-            </PressScale>
+            <Pressable
+              style={({ pressed }) => [
+                styles.camRoundBtnStop,
+                pressed && { transform: [{ scale: 0.93 }] },
+              ]}
+              onPress={() => setIsVideoActive(false)}
+              accessibilityRole="button"
+              accessibilityLabel="Stop camera mode"
+            >
+              <Text style={styles.camRoundBtnStopIcon}>✕</Text>
+            </Pressable>
             <Text style={styles.camDockLabel}>Stop</Text>
           </View>
 
           {/* Talk / Voice Button (Right side) */}
           <View style={styles.camDockItem}>
-            <PressScale onPress={() => setIsVideoActive(false)}>
-              <Pressable
-                style={styles.camRoundBtnSecondary}
-                onPress={() => setIsVideoActive(false)}
-                accessibilityRole="button"
-                accessibilityLabel="Switch to voice"
-              >
-                <Text style={styles.camRoundBtnIcon}>🎤</Text>
-              </Pressable>
-            </PressScale>
+            <Pressable
+              style={({ pressed }) => [
+                styles.camRoundBtnSecondary,
+                pressed && { transform: [{ scale: 0.93 }] },
+              ]}
+              onPress={() => setIsVideoActive(false)}
+              accessibilityRole="button"
+              accessibilityLabel="Switch to voice"
+            >
+              <Text style={styles.camRoundBtnIcon}>🎤</Text>
+            </Pressable>
             <Text style={styles.camDockLabel}>Talk</Text>
           </View>
         </View>
@@ -508,7 +527,15 @@ export default function LiveVoiceScreen({
 
   return (
     <LinearGradient colors={currentGradient} style={styles.container}>
-      <View style={[styles.voiceInner, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 16 }]}>
+      <View
+        style={[
+          styles.voiceInner,
+          {
+            paddingTop: insets.top + (isCompact ? 4 : 8),
+            paddingBottom: isCompact ? Math.max(insets.bottom, 10) : insets.bottom + 16,
+          },
+        ]}
+      >
         {/* Top Header Row: Safe call & Quota */}
         <View style={styles.topRow}>
           <View style={styles.headerPill}>
@@ -549,7 +576,7 @@ export default function LiveVoiceScreen({
             accessibilityLabel="Tap mascot to interrupt"
           >
             <AskieCompanion
-              size="xl"
+              size={isCompact ? 'l' : 'xl'}
               state={status === 'connecting' ? 'idle' : voiceState}
               interactive={true}
               onPress={handleInterrupt}
@@ -623,46 +650,52 @@ export default function LiveVoiceScreen({
         <View style={styles.bottomDock}>
           {/* Interrupt Button (Replaces Mic On per user rule) */}
           <View style={styles.dockItem}>
-            <PressScale onPress={handleInterrupt}>
-              <Pressable
-                style={[styles.dockRoundButton, styles.dockBtnInterrupt]}
-                onPress={handleInterrupt}
-                accessibilityRole="button"
-                accessibilityLabel="Interrupt Kidsko"
-              >
-                <Text style={styles.dockBtnIcon}>✋</Text>
-              </Pressable>
-            </PressScale>
+            <Pressable
+              style={({ pressed }) => [
+                styles.dockRoundButton,
+                styles.dockBtnInterrupt,
+                pressed && { transform: [{ scale: 0.93 }], borderBottomWidth: 2, marginTop: 3 },
+              ]}
+              onPress={handleInterrupt}
+              accessibilityRole="button"
+              accessibilityLabel="Interrupt Kidsko"
+            >
+              <Text style={styles.dockBtnIcon}>✋</Text>
+            </Pressable>
             <Text style={styles.dockBtnLabel}>Interrupt</Text>
           </View>
 
           {/* Show Me Button (Toggles Camera Mode) */}
           <View style={styles.dockItem}>
-            <PressScale onPress={handleToggleVideo}>
-              <Pressable
-                style={[styles.dockRoundButton, styles.dockBtnShowMe]}
-                onPress={handleToggleVideo}
-                accessibilityRole="button"
-                accessibilityLabel="Show me something"
-              >
-                <Text style={styles.dockBtnIcon}>📷</Text>
-              </Pressable>
-            </PressScale>
+            <Pressable
+              style={({ pressed }) => [
+                styles.dockRoundButton,
+                styles.dockBtnShowMe,
+                pressed && { transform: [{ scale: 0.93 }], borderBottomWidth: 2, marginTop: 3 },
+              ]}
+              onPress={handleToggleVideo}
+              accessibilityRole="button"
+              accessibilityLabel="Show me something"
+            >
+              <Text style={styles.dockBtnIcon}>📷</Text>
+            </Pressable>
             <Text style={styles.dockBtnLabel}>Show me</Text>
           </View>
 
           {/* Bye! Button (Ends Call -> Summary Screen) */}
           <View style={styles.dockItem}>
-            <PressScale onPress={handleEnd}>
-              <Pressable
-                style={[styles.dockRoundButton, styles.dockBtnBye]}
-                onPress={handleEnd}
-                accessibilityRole="button"
-                accessibilityLabel="End call"
-              >
-                <Text style={styles.dockBtnIcon}>👋</Text>
-              </Pressable>
-            </PressScale>
+            <Pressable
+              style={({ pressed }) => [
+                styles.dockRoundButton,
+                styles.dockBtnBye,
+                pressed && { transform: [{ scale: 0.93 }], borderBottomWidth: 2, marginTop: 3 },
+              ]}
+              onPress={handleEnd}
+              accessibilityRole="button"
+              accessibilityLabel="End call"
+            >
+              <Text style={styles.dockBtnIcon}>👋</Text>
+            </Pressable>
             <Text style={styles.dockBtnLabel}>Bye!</Text>
           </View>
         </View>
@@ -734,20 +767,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
-    marginVertical: 10,
+    marginVertical: isCompact ? 4 : 10,
   },
   soundwaveRing: {
     position: 'absolute',
-    width: 210,
-    height: 210,
-    borderRadius: 105,
+    width: isCompact ? 165 : 210,
+    height: isCompact ? 165 : 210,
+    borderRadius: isCompact ? 83 : 105,
     borderWidth: 4,
     borderColor: 'rgba(255, 255, 255, 0.45)',
   },
   mascotDisc: {
-    width: 175,
-    height: 175,
-    borderRadius: 88,
+    width: isCompact ? 135 : 175,
+    height: isCompact ? 135 : 175,
+    borderRadius: isCompact ? 68 : 88,
     backgroundColor: 'rgba(255, 255, 255, 0.18)',
     borderWidth: 4,
     borderColor: 'rgba(255, 255, 255, 0.35)',
@@ -760,29 +793,29 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   tapInterruptHint: {
-    fontSize: 12,
+    fontSize: isCompact ? 11 : 12,
     fontFamily: fontFamilies.extraBold,
     color: 'rgba(255, 255, 255, 0.75)',
-    marginTop: 12,
+    marginTop: isCompact ? 6 : 12,
   },
   statePill: {
     backgroundColor: 'rgba(255, 255, 255, 0.24)',
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.4)',
     borderBottomWidth: 4,
-    paddingHorizontal: 20,
-    paddingVertical: 8,
+    paddingHorizontal: isCompact ? 16 : 20,
+    paddingVertical: isCompact ? 6 : 8,
     borderRadius: 22,
-    marginTop: 8,
+    marginTop: isCompact ? 6 : 8,
   },
   statePillText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: isCompact ? 14 : 16,
     fontFamily: fontFamilies.black,
   },
   equalizerRow: {
-    marginTop: 10,
-    height: 28,
+    marginTop: isCompact ? 6 : 10,
+    height: isCompact ? 22 : 28,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -806,9 +839,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 5,
     borderBottomColor: 'rgba(0, 0, 0, 0.12)',
     borderRadius: 24,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    minHeight: 100,
+    paddingHorizontal: isCompact ? 14 : 18,
+    paddingVertical: isCompact ? 8 : 14,
+    minHeight: isCompact ? 68 : 100,
     justifyContent: 'center',
   },
   captionSpeaker: {
@@ -819,22 +852,22 @@ const styles = StyleSheet.create({
   },
   captionText: {
     color: '#FFFFFF',
-    fontSize: 17,
+    fontSize: isCompact ? 14 : 17,
     fontFamily: fontFamilies.extraBold,
-    lineHeight: 24,
+    lineHeight: isCompact ? 19 : 24,
   },
 
   // Reactions Row
   reactionsRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 12,
-    marginVertical: 4,
+    gap: isCompact ? 8 : 12,
+    marginVertical: isCompact ? 2 : 4,
   },
   reactionButton: {
-    width: 52,
-    height: 48,
-    borderRadius: 18,
+    width: isCompact ? 44 : 52,
+    height: isCompact ? 40 : 48,
+    borderRadius: isCompact ? 14 : 18,
     backgroundColor: 'rgba(255, 255, 255, 0.22)',
     borderWidth: 1.5,
     borderColor: 'rgba(255, 255, 255, 0.35)',
@@ -844,7 +877,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   reactionEmoji: {
-    fontSize: 24,
+    fontSize: isCompact ? 20 : 24,
   },
 
   // Bottom Control Dock
@@ -852,16 +885,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    paddingTop: 8,
+    paddingTop: isCompact ? 4 : 8,
   },
   dockItem: {
     alignItems: 'center',
-    width: 90,
+    width: isCompact ? 76 : 90,
   },
   dockRoundButton: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: isCompact ? 60 : 72,
+    height: isCompact ? 60 : 72,
+    borderRadius: isCompact ? 30 : 36,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
@@ -884,13 +917,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF5E7E',
   },
   dockBtnIcon: {
-    fontSize: 30,
+    fontSize: isCompact ? 24 : 30,
   },
   dockBtnLabel: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: isCompact ? 12 : 13,
     fontFamily: fontFamilies.black,
-    marginTop: 8,
+    marginTop: isCompact ? 4 : 8,
   },
 
   // Network Notice Toast
@@ -1012,7 +1045,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 16,
-    backgroundColor: 'linear-gradient(0deg, rgba(0,0,0,0.8) 0%, transparent 100%)',
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
     zIndex: 10,
   },
   camDockItem: {
@@ -1069,74 +1102,74 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   summaryMascotContainer: {
-    width: 190,
-    height: 190,
+    width: isCompact ? 130 : 190,
+    height: isCompact ? 130 : 190,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 10,
+    marginTop: isCompact ? 4 : 10,
   },
   summaryTitle: {
-    fontSize: 30,
+    fontSize: isCompact ? 24 : 30,
     color: '#FFFFFF',
     fontFamily: fontFamilies.black,
     textAlign: 'center',
     letterSpacing: -0.5,
-    marginTop: 8,
+    marginTop: isCompact ? 4 : 8,
   },
   summarySubtitle: {
-    fontSize: 16,
+    fontSize: isCompact ? 14 : 16,
     color: 'rgba(255, 255, 255, 0.9)',
     fontFamily: fontFamilies.extraBold,
     textAlign: 'center',
-    marginTop: 4,
+    marginTop: 2,
   },
   statsRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: isCompact ? 8 : 12,
     width: '100%',
-    marginVertical: 20,
+    marginVertical: isCompact ? 8 : 20,
   },
   statCard: {
     flex: 1,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.35)',
-    borderBottomWidth: 5,
+    borderBottomWidth: 4,
     borderBottomColor: 'rgba(0, 0, 0, 0.15)',
-    borderRadius: 22,
-    paddingVertical: 16,
+    borderRadius: 20,
+    paddingVertical: isCompact ? 10 : 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
   statValue: {
-    fontSize: 28,
+    fontSize: isCompact ? 22 : 28,
     color: '#FFFFFF',
     fontFamily: fontFamilies.black,
-    lineHeight: 32,
+    lineHeight: isCompact ? 26 : 32,
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: isCompact ? 11 : 12,
     color: 'rgba(255, 255, 255, 0.9)',
     fontFamily: fontFamilies.extraBold,
-    marginTop: 4,
+    marginTop: 2,
   },
   summaryButtonsCol: {
     width: '100%',
-    gap: 14,
-    marginTop: 10,
+    gap: isCompact ? 8 : 14,
+    marginTop: isCompact ? 4 : 10,
   },
   summaryBtnScale: {
     width: '100%',
   },
   big3DButton: {
     width: '100%',
-    height: 64,
-    borderRadius: 22,
+    height: isCompact ? 54 : 64,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.4)',
-    borderBottomWidth: 5,
+    borderBottomWidth: 4,
   },
   buttonHome: {
     backgroundColor: '#FF6B6B',
@@ -1144,7 +1177,7 @@ const styles = StyleSheet.create({
   },
   buttonHomeText: {
     color: '#FFFFFF',
-    fontSize: 19,
+    fontSize: isCompact ? 17 : 19,
     fontFamily: fontFamilies.black,
   },
   buttonTalkAgain: {
@@ -1153,7 +1186,7 @@ const styles = StyleSheet.create({
   },
   buttonTalkAgainText: {
     color: '#FFFFFF',
-    fontSize: 19,
+    fontSize: isCompact ? 17 : 19,
     fontFamily: fontFamilies.black,
   },
 });

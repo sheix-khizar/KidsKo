@@ -180,6 +180,7 @@ export default function HomeScreen({
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {/* ── Hero Greeting & Interactive Companion ── */}
         <FadeSlideIn delay={60}>
@@ -200,37 +201,46 @@ export default function HomeScreen({
           <View style={styles.ctaContainer}>
             {/* 1. Talk to me! Button */}
             <Animated.View style={{ transform: [{ scale: ctaPulse }] }}>
-              <PressScale onPress={onStartVoice}>
-                <Pressable
-                  style={styles.talkBigBtn}
-                  onPress={onStartVoice}
-                  accessibilityRole="button"
-                  accessibilityLabel="Talk to me"
-                >
-                  <Text style={styles.talkBigEmoji}>🎤</Text>
-                  <View style={styles.talkBigTextCol}>
-                    <Text style={styles.talkBigTitle}>Talk to me!</Text>
-                    <Text style={styles.talkBigSub}>Speak naturally like a phone call</Text>
-                  </View>
-                </Pressable>
-              </PressScale>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.talkBigBtn,
+                  pressed && { transform: [{ scale: 0.97 }], borderBottomWidth: 2, marginTop: 4 },
+                ]}
+                onPress={() => {
+                  console.log('[HomeScreen] Talk to me tapped!');
+                  onStartVoice();
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Talk to me"
+              >
+                <Text style={styles.talkBigEmoji}>🎤</Text>
+                <View style={styles.talkBigTextCol}>
+                  <Text style={styles.talkBigTitle}>Talk to me!</Text>
+                  <Text style={styles.talkBigSub}>Speak naturally like a phone call</Text>
+                </View>
+              </Pressable>
             </Animated.View>
 
             {/* 2. Show me! Button */}
-            <PressScale onPress={onStartCamera} style={{ marginTop: 12 }}>
-              <Pressable
-                style={styles.showBigBtn}
-                onPress={onStartCamera}
-                accessibilityRole="button"
-                accessibilityLabel="Show me"
-              >
-                <Text style={styles.showBigEmoji}>📷</Text>
-                <View style={styles.talkBigTextCol}>
-                  <Text style={styles.showBigTitle}>Show me!</Text>
-                  <Text style={styles.showBigSub}>Camera & AI Vision for homework</Text>
-                </View>
-              </Pressable>
-            </PressScale>
+            <Pressable
+              style={({ pressed }) => [
+                styles.showBigBtn,
+                { marginTop: 12 },
+                pressed && { transform: [{ scale: 0.97 }], borderBottomWidth: 2, marginTop: 16 },
+              ]}
+              onPress={() => {
+                console.log('[HomeScreen] Show me tapped!');
+                onStartCamera();
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Show me"
+            >
+              <Text style={styles.showBigEmoji}>📷</Text>
+              <View style={styles.talkBigTextCol}>
+                <Text style={styles.showBigTitle}>Show me!</Text>
+                <Text style={styles.showBigSub}>Camera & AI Vision for homework</Text>
+              </View>
+            </Pressable>
           </View>
         </FadeSlideIn>
 
