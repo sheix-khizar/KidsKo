@@ -21,6 +21,7 @@ type Props = {
   interactive?: boolean;
   onPress?: () => void;
   style?: ViewStyle;
+  standing?: boolean;
 };
 
 const SIZE_CONFIG: Record<CompanionSize, { container: number; radius: number; eyeSize: number; beakSize: number }> = {
@@ -42,10 +43,12 @@ export function AskieCompanion({
   interactive = true,
   onPress,
   style,
+  standing,
 }: Props) {
   const reduceMotion = useReduceMotion();
   const config = SIZE_CONFIG[size] || SIZE_CONFIG.m;
   const effectiveRadius = shape === 'circle' ? config.container / 2 : config.radius;
+  const isStanding = standing !== undefined ? standing : (size === 'm' || size === 'l' || size === 'xl');
 
   // Animation values
   const floatAnim = useRef(new Animated.Value(0)).current;
@@ -248,6 +251,24 @@ export function AskieCompanion({
   const ringScale2 = pulseRing2.interpolate({ inputRange: [0, 1], outputRange: [1, 1.45] });
   const ringOpacity2 = pulseRing2.interpolate({ inputRange: [0, 0.7, 1], outputRange: [0.6, 0.3, 0] });
 
+  // Wing & Standing Shadow Animations
+  const leftWingRotate = floatAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['-12deg', state === 'celebrate' ? '-32deg' : '-20deg'],
+  });
+  const rightWingRotate = floatAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['12deg', state === 'celebrate' ? '32deg' : '20deg'],
+  });
+  const shadowScaleX = floatAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0.82],
+  });
+  const shadowOpacity = floatAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.85, 0.45],
+  });
+
   return (
     <Pressable
       onPress={handlePress}
@@ -296,6 +317,54 @@ export function AskieCompanion({
           ],
         }}
       >
+        {/* Left Wing / Hand (Cute animated cartoon wing) */}
+        {isStanding && (
+          <Animated.View
+            style={[
+              styles.wingL,
+              {
+                width: config.container * 0.22,
+                height: config.container * 0.38,
+                borderRadius: config.container * 0.11,
+                left: -config.container * 0.1,
+                top: config.container * 0.36,
+                transform: [{ rotate: leftWingRotate }],
+              },
+            ]}
+          >
+            <LinearGradient
+              colors={['#FF6B6B', '#D63031']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.wingInner, { borderRadius: config.container * 0.11 }]}
+            />
+          </Animated.View>
+        )}
+
+        {/* Right Wing / Hand (Cute animated cartoon wing) */}
+        {isStanding && (
+          <Animated.View
+            style={[
+              styles.wingR,
+              {
+                width: config.container * 0.22,
+                height: config.container * 0.38,
+                borderRadius: config.container * 0.11,
+                right: -config.container * 0.1,
+                top: config.container * 0.36,
+                transform: [{ rotate: rightWingRotate }],
+              },
+            ]}
+          >
+            <LinearGradient
+              colors={['#FF6B6B', '#D63031']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.wingInner, { borderRadius: config.container * 0.11 }]}
+            />
+          </Animated.View>
+        )}
+
         <LinearGradient
           colors={['#FF7675', '#E17055']}
           start={{ x: 0, y: 0 }}
@@ -392,7 +461,54 @@ export function AskieCompanion({
             </View>
           ) : null}
         </LinearGradient>
+
+        {/* Small Cute Feet (standing character) */}
+        {isStanding && (
+          <>
+            <View
+              style={[
+                styles.foot,
+                {
+                  width: config.container * 0.22,
+                  height: config.container * 0.1,
+                  borderRadius: config.container * 0.05,
+                  bottom: -config.container * 0.05,
+                  left: config.container * 0.22,
+                },
+              ]}
+            />
+            <View
+              style={[
+                styles.foot,
+                {
+                  width: config.container * 0.22,
+                  height: config.container * 0.1,
+                  borderRadius: config.container * 0.05,
+                  bottom: -config.container * 0.05,
+                  right: config.container * 0.22,
+                },
+              ]}
+            />
+          </>
+        )}
       </Animated.View>
+
+      {/* Ground Floor Shadow underneath standing character */}
+      {isStanding && (
+        <Animated.View
+          style={[
+            styles.groundShadow,
+            {
+              width: config.container * 0.72,
+              height: Math.max(7, config.container * 0.1),
+              borderRadius: config.container * 0.36,
+              marginTop: config.container * 0.07,
+              transform: [{ scaleX: shadowScaleX }],
+              opacity: shadowOpacity,
+            },
+          ]}
+        />
+      )}
     </Pressable>
   );
 }
@@ -534,5 +650,44 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18,
     shadowRadius: 6,
     elevation: 4,
+  },
+  wingL: {
+    position: 'absolute',
+    zIndex: 2,
+    shadowColor: '#D63031',
+    shadowOffset: { width: -2, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  wingR: {
+    position: 'absolute',
+    zIndex: 2,
+    shadowColor: '#D63031',
+    shadowOffset: { width: 2, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  wingInner: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+  },
+  foot: {
+    position: 'absolute',
+    backgroundColor: '#FFD54F',
+    borderWidth: 1.5,
+    borderColor: '#E6A100',
+    borderBottomWidth: 3.5,
+    zIndex: 2,
+    shadowColor: '#E6A100',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  groundShadow: {
+    backgroundColor: 'rgba(0, 0, 0, 0.14)',
   },
 });

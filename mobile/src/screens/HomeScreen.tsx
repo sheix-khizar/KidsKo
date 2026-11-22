@@ -186,7 +186,7 @@ export default function HomeScreen({
         <FadeSlideIn delay={60}>
           <View style={styles.heroRow}>
             <Pressable onPress={handleMascotTap} style={styles.mascotTouch}>
-              <AskieCompanion size="l" state="idle" interactive={true} onPress={handleMascotTap} />
+              <AskieCompanion size="l" state="idle" interactive={true} onPress={handleMascotTap} standing={true} />
             </Pressable>
 
             <Animated.View style={[styles.speechBubble, { transform: [{ scale: bubbleScale }] }]}>
@@ -214,10 +214,7 @@ export default function HomeScreen({
                 accessibilityLabel="Talk to me"
               >
                 <Text style={styles.talkBigEmoji}>🎤</Text>
-                <View style={styles.talkBigTextCol}>
-                  <Text style={styles.talkBigTitle}>Talk to me!</Text>
-                  <Text style={styles.talkBigSub}>Speak naturally like a phone call</Text>
-                </View>
+                <Text style={styles.talkBigTitle}>Talk to me!</Text>
               </Pressable>
             </Animated.View>
 
@@ -236,10 +233,7 @@ export default function HomeScreen({
               accessibilityLabel="Show me"
             >
               <Text style={styles.showBigEmoji}>📷</Text>
-              <View style={styles.talkBigTextCol}>
-                <Text style={styles.showBigTitle}>Show me!</Text>
-                <Text style={styles.showBigSub}>Camera & AI Vision for homework</Text>
-              </View>
+              <Text style={styles.showBigTitle}>Show me!</Text>
             </Pressable>
           </View>
         </FadeSlideIn>
@@ -247,36 +241,24 @@ export default function HomeScreen({
         {/* ── Today's Goal Card ── */}
         <FadeSlideIn delay={180}>
           <View style={styles.goalCard}>
-            <View style={styles.goalTopRow}>
-              <View>
-                <Text style={styles.goalHeading}>Today's Goal</Text>
-                <Text style={styles.goalSubtitle}>
-                  {goalQuestions >= goalTotal
-                    ? 'Goal done! 🎉'
-                    : `${goalQuestions} of ${goalTotal} questions`}
-                </Text>
-              </View>
-              {/* Star Dots */}
-              <View style={styles.goalDotsRow}>
-                {Array.from({ length: goalTotal }).map((_, i) => {
-                  const done = i < goalQuestions;
-                  return (
-                    <View key={i} style={[styles.goalDot, done && styles.goalDotDone]}>
-                      <Text style={{ fontSize: 13 }}>{done ? '⭐' : '•'}</Text>
-                    </View>
-                  );
-                })}
-              </View>
+            <View>
+              <Text style={styles.goalHeading}>Today's Goal</Text>
+              <Text style={styles.goalSubtitle}>
+                {goalQuestions >= goalTotal
+                  ? 'Goal done! 🎉'
+                  : `${goalQuestions} of ${goalTotal} questions`}
+              </Text>
             </View>
-
-            {/* Progress Bar */}
-            <View style={styles.goalProgressTrack}>
-              <View
-                style={[
-                  styles.goalProgressFill,
-                  { width: `${Math.min(100, (goalQuestions / goalTotal) * 100)}%` },
-                ]}
-              />
+            {/* Star Dots */}
+            <View style={styles.goalDotsRow}>
+              {Array.from({ length: goalTotal }).map((_, i) => {
+                const done = i < goalQuestions;
+                return (
+                  <View key={i} style={[styles.goalDot, done && styles.goalDotDone]}>
+                    <Text style={{ fontSize: 14 }}>{done ? '⭐' : '•'}</Text>
+                  </View>
+                );
+              })}
             </View>
           </View>
         </FadeSlideIn>
@@ -285,26 +267,22 @@ export default function HomeScreen({
         <FadeSlideIn delay={240}>
           <View style={styles.topicsSection}>
             <Text style={styles.sectionHeading}>Learn something new 💡</Text>
-            <View style={styles.topicsGrid}>
+            <View style={styles.trow}>
               {TOPICS.map((topic) => (
-                <PressScale
+                <Pressable
                   key={topic.key}
-                  style={styles.topicTileScale}
+                  style={({ pressed }) => [
+                    styles.tile,
+                    { backgroundColor: topic.bg, borderColor: topic.border },
+                    pressed && styles.tilePressed,
+                  ]}
                   onPress={() => onSelectTopic(topic.prompt)}
+                  accessibilityRole="button"
+                  accessibilityLabel={topic.title}
                 >
-                  <View
-                    style={[
-                      styles.topicTile,
-                      { backgroundColor: topic.bg, borderColor: topic.border },
-                    ]}
-                  >
-                    <Text style={styles.topicEmoji}>{topic.icon}</Text>
-                    <Text style={styles.topicTitle}>{topic.title}</Text>
-                    <Text style={styles.topicDesc} numberOfLines={2}>
-                      {topic.desc}
-                    </Text>
-                  </View>
-                </PressScale>
+                  <Text style={styles.tileEmoji}>{topic.icon}</Text>
+                  <Text style={styles.tileTitle}>{topic.title}</Text>
+                </Pressable>
               ))}
             </View>
           </View>
@@ -401,7 +379,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   mascotTouch: {
-    width: 110,
+    width: 125,
+    height: 140,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -441,78 +420,62 @@ const styles = StyleSheet.create({
   talkBigBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: '#FE5150',
-    borderRadius: 24,
-    paddingHorizontal: 18,
-    paddingVertical: 16,
+    borderRadius: 26,
+    height: 76,
     borderWidth: 2,
     borderBottomWidth: 6,
     borderColor: '#D94F4F',
+    gap: 12,
     ...shadows.button,
   },
   talkBigEmoji: {
     fontSize: 34,
-    marginRight: 14,
-  },
-  talkBigTextCol: {
-    flex: 1,
   },
   talkBigTitle: {
-    fontSize: 20,
+    fontSize: 24,
     fontFamily: fontFamilies.black,
     color: colors.white,
     letterSpacing: -0.3,
   },
-  talkBigSub: {
-    fontSize: 12,
-    fontFamily: fontFamilies.bold,
-    color: 'rgba(255, 255, 255, 0.92)',
-    marginTop: 2,
-  },
   showBigBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: '#4ECDC4',
     borderRadius: 22,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
+    height: 62,
     borderWidth: 2,
     borderBottomWidth: 6,
     borderColor: '#2FA9A0',
+    gap: 10,
     ...shadows.button,
   },
   showBigEmoji: {
-    fontSize: 28,
-    marginRight: 14,
+    fontSize: 26,
   },
   showBigTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontFamily: fontFamilies.black,
     color: colors.white,
   },
-  showBigSub: {
-    fontSize: 12,
-    fontFamily: fontFamilies.bold,
-    color: 'rgba(255, 255, 255, 0.92)',
-    marginTop: 2,
-  },
   goalCard: {
     backgroundColor: colors.white,
-    borderRadius: 20,
+    borderRadius: 22,
     borderWidth: 2,
     borderBottomWidth: 5,
     borderColor: colors.border,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     marginTop: 14,
-    ...shadows.card,
-  },
-  goalTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    ...shadows.card,
   },
   goalHeading: {
-    fontSize: 15,
+    fontSize: 16,
     fontFamily: fontFamilies.black,
     color: colors.text,
   },
@@ -527,66 +490,55 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   goalDot: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: '#F5ECDD',
     justifyContent: 'center',
     alignItems: 'center',
   },
   goalDotDone: {
     backgroundColor: '#FFE66D',
-  },
-  goalProgressTrack: {
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#F5ECDD',
-    marginTop: 12,
-    overflow: 'hidden',
-  },
-  goalProgressFill: {
-    height: '100%',
-    borderRadius: 5,
-    backgroundColor: '#FF9F43',
+    borderWidth: 1.5,
+    borderColor: '#FFD08A',
   },
   topicsSection: {
     marginTop: 18,
   },
   sectionHeading: {
-    fontSize: 17,
+    fontSize: 18,
     fontFamily: fontFamilies.black,
     color: colors.text,
-    marginBottom: 10,
+    marginBottom: 4,
   },
-  topicsGrid: {
+  trow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
+    gap: 8,
+    marginTop: 8,
   },
-  topicTileScale: {
-    width: '48%',
-  },
-  topicTile: {
-    borderRadius: 20,
+  tile: {
+    flex: 1,
+    borderRadius: 22,
     borderWidth: 2,
     borderBottomWidth: 5,
-    padding: 14,
-    alignItems: 'flex-start',
+    paddingVertical: 14,
+    paddingHorizontal: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.card,
   },
-  topicEmoji: {
-    fontSize: 36,
+  tileEmoji: {
+    fontSize: 34,
     marginBottom: 6,
   },
-  topicTitle: {
-    fontSize: 15,
+  tileTitle: {
+    fontSize: 13.5,
     fontFamily: fontFamilies.black,
     color: colors.text,
+    textAlign: 'center',
   },
-  topicDesc: {
-    fontSize: 11,
-    fontFamily: fontFamilies.bold,
-    color: colors.subtext,
-    marginTop: 2,
-    lineHeight: 15,
+  tilePressed: {
+    transform: [{ translateY: 2 }],
+    borderBottomWidth: 2,
   },
 });

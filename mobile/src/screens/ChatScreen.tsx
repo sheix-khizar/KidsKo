@@ -44,6 +44,15 @@ import {
   deleteThread,
 } from '../services/threads';
 
+const TOPIC_PILLS = [
+  { label: '🔬 Science', ask: 'Why do plants need sunlight?', icon: '🔬' },
+  { label: '🔢 Maths', ask: 'What is a fraction?', icon: '🔢' },
+  { label: '🦁 Animals', ask: 'Which animal sleeps the most?', icon: '🦁' },
+  { label: '🚀 Space', ask: 'Why does the Moon change shape?', icon: '🚀' },
+  { label: '🦕 Dinosaurs', ask: 'How big was the biggest dinosaur?', icon: '🦕' },
+  { label: '🎨 Art', ask: 'How do I make green paint?', icon: '🎨' },
+];
+
 const PROMPT_CARDS = [
   { text: 'Why is the sky blue?', icon: '🌍', isHomework: false },
   { text: 'Help me with maths!', icon: '🔢', isHomework: false },
@@ -152,16 +161,10 @@ export default function ChatScreen({
   const handleNewChat = () => {
     setMessages([]);
     setThreadId(undefined);
+    setLastThread(null);
     setPreviewImage(null);
     setInput('');
     setErrorMsg(null);
-    getThreads(studentId)
-      .then((res) => {
-        if (res.threads && res.threads.length > 0) {
-          setLastThread(res.threads[0]);
-        }
-      })
-      .catch(() => {});
   };
 
   const handleRequestDeleteThread = (thread: ThreadSummary) => {
@@ -290,19 +293,19 @@ export default function ChatScreen({
       <View style={styles.topbar}>
         {!embedded && (
           <View style={styles.topbarLeft}>
-            <Pressable onPress={onBack} style={styles.backButtonTouch}>
-              <Text style={styles.backButton}>←</Text>
+            <Pressable onPress={onBack} style={styles.backButtonTouch} accessibilityLabel="Back">
+              <Text style={styles.backButton}>‹</Text>
             </Pressable>
           </View>
         )}
 
         <View style={styles.topbarCenter}>
           <View style={styles.companionAvatarSquircle}>
-            <AskieCompanion size="xs" shape="squircle" state="idle" />
+            <AskieCompanion size="xs" shape="squircle" state="idle" standing={false} />
           </View>
           <View style={styles.studentInfoCol}>
             <Text style={styles.topbarTitle} numberOfLines={1}>
-              {lastThread?.title || `${studentName} & Kidsko`}
+              {threadId && lastThread?.title ? lastThread.title : 'Chat with Kidsko'}
             </Text>
             <View style={styles.statusRow}>
               <LiveDot size={6} color={colors.mint} />
@@ -356,68 +359,33 @@ export default function ChatScreen({
           contentContainerStyle={styles.welcomeContainer}
           showsVerticalScrollIndicator={false}
         >
-          {lastThread && (
-            <PressScale style={styles.continueCardWrapper}>
-              <Pressable
-                style={styles.continueCard}
-                onPress={() => handleSelectThread(lastThread)}
-                accessibilityRole="button"
-                accessibilityLabel={`Continue chat: ${lastThread.title}`}
-              >
-                <View style={styles.continueCardContent}>
-                  <Text style={styles.continueCardTag}>CONTINUE WHERE YOU LEFT OFF ⏱️</Text>
-                  <Text style={styles.continueCardTitle} numberOfLines={1}>
-                    {lastThread.title}
-                  </Text>
-                </View>
-                <Text style={styles.continueCardArrow}>→</Text>
-              </Pressable>
-            </PressScale>
-          )}
-
-          {/* Greeting Hero with primary gradient */}
           <FadeSlideIn delay={0}>
-            <LinearGradient
-              colors={gradients.primary.colors}
-              start={gradients.primary.start}
-              end={gradients.primary.end}
-              style={styles.heroCard}
-            >
-              <AskieCompanion size="m" state="idle" style={{ marginBottom: 12 }} />
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                <Text style={styles.heroTitle}>Hi {studentName}!</Text>
-                <AskieEmoji emoji="👋" size={24} effect="wiggle" style={{ marginLeft: 6 }} />
+            <View style={styles.emptyContainer}>
+              <View style={styles.emptyMascotWrapper}>
+                <AskieCompanion size="l" state="idle" standing={true} />
               </View>
-              <Text style={styles.heroSubtitle}>
-                I'm Kidsko! What do you want to learn today?
-              </Text>
-            </LinearGradient>
-          </FadeSlideIn>
+              <Text style={styles.emptyTitle}>What do you want to learn?</Text>
+              <Text style={styles.emptySubtitle}>Pick one or type your own question 👇</Text>
 
-          {/* 2x2 Prompt Suggestion Cards */}
-          <FadeSlideIn delay={60}>
-            <Text style={styles.promptsSectionHeader}>TRY ASKING ME...</Text>
-            <View style={styles.promptsGrid}>
-              {PROMPT_CARDS.map((card, idx) => (
-                <PressScale key={idx} style={styles.promptCardScale}>
+              <View style={styles.qrow}>
+                {TOPIC_PILLS.map((pill, idx) => (
                   <Pressable
-                    style={styles.promptCard}
+                    key={idx}
+                    style={({ pressed }) => [
+                      styles.qp,
+                      pressed && styles.qpPressed,
+                    ]}
                     onPress={() => {
-                      triggerAskieReaction(card.icon);
-                      if (card.isHomework) {
-                        setShowImagePickerModal(true);
-                      } else {
-                        handleSend(card.text);
-                      }
+                      triggerAskieReaction(pill.icon);
+                      handleSend(pill.ask);
                     }}
                     accessibilityRole="button"
-                    accessibilityLabel={card.text}
+                    accessibilityLabel={pill.label}
                   >
-                    <AskieEmoji emoji={card.icon} size={28} effect="bounce" interactive />
-                    <Text style={styles.promptCardText}>{card.text}</Text>
+                    <Text style={styles.qpText}>{pill.label}</Text>
                   </Pressable>
-                </PressScale>
-              ))}
+                ))}
+              </View>
             </View>
           </FadeSlideIn>
         </ScrollView>
@@ -841,7 +809,67 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   welcomeContainer: {
-    padding: 18,
+    padding: 16,
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+  },
+  emptyMascotWrapper: {
+    width: 140,
+    height: 145,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  emptyTitle: {
+    fontSize: 22,
+    fontFamily: fontFamilies.black,
+    color: colors.text,
+    textAlign: 'center',
+    letterSpacing: -0.3,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    fontFamily: fontFamilies.bold,
+    color: colors.subtext,
+    textAlign: 'center',
+    marginTop: 4,
+    marginBottom: 18,
+  },
+  qrow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+    maxWidth: 340,
+  },
+  qp: {
+    backgroundColor: colors.white,
+    borderWidth: 2,
+    borderBottomWidth: 4,
+    borderColor: colors.border,
+    borderRadius: 18,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    marginVertical: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+  },
+  qpPressed: {
+    transform: [{ translateY: 2 }],
+    borderBottomWidth: 2,
+  },
+  qpText: {
+    fontSize: 14,
+    fontFamily: fontFamilies.black,
+    color: colors.text,
   },
   continueCardWrapper: {
     width: '100%',
