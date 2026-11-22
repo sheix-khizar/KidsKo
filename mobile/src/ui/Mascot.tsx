@@ -11,19 +11,23 @@ type MascotProps = {
   state?: CompanionState;
   style?: ViewStyle;
   imageStyle?: ImageStyle;
+  standing?: boolean;
+  avatarMode?: boolean;
 };
 
 /**
  * Mascot: The official Kidsko 3D AI companion.
  * Renders the production-ready animated character with micro-physics and facial expressions.
  */
-export function Mascot({ size = 'm', shape = 'squircle', state = 'idle', style }: MascotProps) {
+export function Mascot({ size = 'm', shape = 'squircle', state = 'idle', style, standing, avatarMode }: MascotProps) {
   return (
     <AskieCompanion
       size={size}
       shape={shape}
       state={state}
       style={style}
+      standing={standing}
+      avatarMode={avatarMode}
     />
   );
 }

@@ -11,7 +11,7 @@ import {
 import { LinearGradient } from './LinearGradient';
 import { useReduceMotion } from './motion';
 
-export type CompanionState = 'idle' | 'listening' | 'speaking' | 'thinking' | 'celebrate' | 'waving' | 'wave';
+export type CompanionState = 'idle' | 'listening' | 'speaking' | 'thinking' | 'celebrate';
 export type CompanionSize = 'xs' | 's' | 'm' | 'l' | 'xl';
 
 type Props = {
@@ -22,14 +22,15 @@ type Props = {
   onPress?: () => void;
   style?: ViewStyle;
   standing?: boolean;
+  avatarMode?: boolean;
 };
 
 const SIZE_CONFIG: Record<CompanionSize, { container: number; radius: number; eyeSize: number; beakSize: number }> = {
-  xs: { container: 34, radius: 11, eyeSize: 9, beakSize: 6 },
-  s: { container: 48, radius: 16, eyeSize: 14, beakSize: 8 },
+  xs: { container: 36, radius: 13, eyeSize: 11, beakSize: 7 },
+  s: { container: 44, radius: 15, eyeSize: 13, beakSize: 8 },
   m: { container: 80, radius: 26, eyeSize: 22, beakSize: 12 },
-  l: { container: 120, radius: 38, eyeSize: 30, beakSize: 16 },
-  xl: { container: 148, radius: 46, eyeSize: 36, beakSize: 20 },
+  l: { container: 130, radius: 42, eyeSize: 34, beakSize: 18 },
+  xl: { container: 170, radius: 54, eyeSize: 44, beakSize: 24 },
 };
 
 /**
@@ -44,39 +45,42 @@ export function AskieCompanion({
   onPress,
   style,
   standing,
+  avatarMode,
 }: Props) {
   const reduceMotion = useReduceMotion();
   const config = SIZE_CONFIG[size] || SIZE_CONFIG.m;
-  const isWavingState = state === 'waving' || state === 'wave';
   const effectiveRadius = shape === 'circle' ? config.container / 2 : config.radius;
   const isStanding = standing !== undefined ? standing : (size === 'm' || size === 'l' || size === 'xl');
+  const isAvatar = avatarMode ?? (!isStanding && (size === 'xs' || size === 's'));
 
   // Animation values
   const floatAnim = useRef(new Animated.Value(0)).current;
+  const waveAnim = useRef(new Animated.Value(0)).current;
   const blinkAnim = useRef(new Animated.Value(0)).current;
   const mouthAnim = useRef(new Animated.Value(0)).current;
   const tiltAnim = useRef(new Animated.Value(0)).current;
   const pulseRing1 = useRef(new Animated.Value(0)).current;
   const pulseRing2 = useRef(new Animated.Value(0)).current;
   const touchScale = useRef(new Animated.Value(1)).current;
-  const waveAnim = useRef(new Animated.Value(0)).current;
-  const gestureAnim = useRef(new Animated.Value(0)).current;
 
-  // 1. Idle Hover & Breathing
+  // 1. Idle Hover & Breathing (disabled for avatars so they stay still)
   useEffect(() => {
-    if (reduceMotion) return;
+    if (reduceMotion || isAvatar) {
+      floatAnim.setValue(0);
+      return;
+    }
 
     const hover = Animated.loop(
       Animated.sequence([
         Animated.timing(floatAnim, {
           toValue: 1,
-          duration: state === 'celebrate' ? 300 : 1600,
+          duration: state === 'celebrate' ? 300 : (isStanding ? 1800 : 1600),
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
         Animated.timing(floatAnim, {
           toValue: 0,
-          duration: state === 'celebrate' ? 300 : 1600,
+          duration: state === 'celebrate' ? 300 : (isStanding ? 1800 : 1600),
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
@@ -85,9 +89,76 @@ export function AskieCompanion({
 
     hover.start();
     return () => hover.stop();
-  }, [state, reduceMotion]);
+  }, [state, isAvatar, isStanding, reduceMotion]);
 
-  // 2. Natural Blinking Loop (every ~3.5 seconds)
+  // 2. Hand Waving for standing mascot (Image 3)
+  useEffect(() => {
+    if (reduceMotion || !isStanding || isAvatar) {
+      waveAnim.setValue(0);
+      return;
+    }
+
+    let isMounted = true;
+    let timer: any;
+
+    const runWaveCycle = () => {
+      if (!isMounted) return;
+
+      if (state === 'celebrate') {
+        // Joyful fast waving / celebration flap
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(waveAnim, { toValue: 1, duration: 150, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+            Animated.timing(waveAnim, { toValue: 0.2, duration: 150, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          ]),
+          { iterations: 8 }
+        ).start(() => {
+          if (isMounted) timer = setTimeout(runWaveCycle, 800);
+        });
+        return;
+      }
+
+      // Friendly cartoon hand waving sequence:
+      // Lifts hand up -> waves hello 3 times -> lowers to rest -> waits ~2s
+      Animated.sequence([
+        // Raise hand up to greet
+        Animated.timing(waveAnim, {
+          toValue: 0.6,
+          duration: 320,
+          easing: Easing.out(Easing.back(1.5)),
+          useNativeDriver: true,
+        }),
+        // Wave 1: out -> in
+        Animated.timing(waveAnim, { toValue: 1, duration: 180, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(waveAnim, { toValue: 0.35, duration: 180, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        // Wave 2: out -> in
+        Animated.timing(waveAnim, { toValue: 1, duration: 180, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(waveAnim, { toValue: 0.35, duration: 180, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        // Wave 3: out -> in
+        Animated.timing(waveAnim, { toValue: 1, duration: 180, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(waveAnim, { toValue: 0.5, duration: 200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        // Return hand gently back to side
+        Animated.timing(waveAnim, {
+          toValue: 0,
+          duration: 400,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        if (!isMounted) return;
+        timer = setTimeout(runWaveCycle, 2200);
+      });
+    };
+
+    timer = setTimeout(runWaveCycle, 500);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [isStanding, isAvatar, state, reduceMotion]);
+
+  // 3. Natural Blinking Loop (every ~3.5 seconds)
   useEffect(() => {
     if (reduceMotion) return;
 
@@ -124,25 +195,25 @@ export function AskieCompanion({
       Animated.sequence([
         Animated.timing(mouthAnim, {
           toValue: 1,
-          duration: 110,
-          easing: Easing.linear,
-          useNativeDriver: true,
-        }),
-        Animated.timing(mouthAnim, {
-          toValue: 0.15,
-          duration: 90,
-          easing: Easing.linear,
-          useNativeDriver: true,
-        }),
-        Animated.timing(mouthAnim, {
-          toValue: 0.85,
           duration: 130,
           easing: Easing.linear,
           useNativeDriver: true,
         }),
         Animated.timing(mouthAnim, {
-          toValue: 0.1,
-          duration: 100,
+          toValue: 0.2,
+          duration: 110,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+        Animated.timing(mouthAnim, {
+          toValue: 0.8,
+          duration: 150,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+        Animated.timing(mouthAnim, {
+          toValue: 0,
+          duration: 120,
           easing: Easing.linear,
           useNativeDriver: true,
         }),
@@ -181,63 +252,7 @@ export function AskieCompanion({
     return () => tiltLoop.stop();
   }, [state, reduceMotion]);
 
-  // 5. Hand Waving Loop (for greeting / home / celebrate)
-  useEffect(() => {
-    if (reduceMotion || (!isWavingState && state !== 'celebrate')) {
-      waveAnim.setValue(0);
-      return;
-    }
-
-    const waveLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(waveAnim, {
-          toValue: 1,
-          duration: 270,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.timing(waveAnim, {
-          toValue: 0,
-          duration: 270,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-      ])
-    );
-
-    waveLoop.start();
-    return () => waveLoop.stop();
-  }, [state, isWavingState, reduceMotion]);
-
-  // 6. Speaking Wing Gestures Loop (expressive talking body language)
-  useEffect(() => {
-    if (reduceMotion || state !== 'speaking') {
-      gestureAnim.setValue(0);
-      return;
-    }
-
-    const gestureLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(gestureAnim, {
-          toValue: 1,
-          duration: 340,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(gestureAnim, {
-          toValue: -1,
-          duration: 380,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ])
-    );
-
-    gestureLoop.start();
-    return () => gestureLoop.stop();
-  }, [state, reduceMotion]);
-
-  // 7. Listening Soundwave Ripples
+  // 5. Listening Soundwave Ripples
   useEffect(() => {
     if (reduceMotion || state !== 'listening') {
       pulseRing1.setValue(0);
@@ -289,14 +304,23 @@ export function AskieCompanion({
   };
 
   // Interpolated Transforms
-  const translateY = floatAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, state === 'celebrate' ? -14 : -7],
-  });
+  const translateY = isAvatar
+    ? 0
+    : floatAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0, isStanding ? -3 : (state === 'celebrate' ? -14 : -7)],
+      });
 
-  const rotate = tiltAnim.interpolate({
-    inputRange: [-1, 0, 1],
-    outputRange: ['-8deg', '0deg', '8deg'],
+  const rotate = isAvatar
+    ? '0deg'
+    : tiltAnim.interpolate({
+        inputRange: [-1, 0, 1],
+        outputRange: ['-8deg', '0deg', '8deg'],
+      });
+
+  const mouthScaleY = mouthAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 2.4],
   });
 
   const eyelidTranslateY = blinkAnim.interpolate({
@@ -310,80 +334,34 @@ export function AskieCompanion({
   const ringScale2 = pulseRing2.interpolate({ inputRange: [0, 1], outputRange: [1, 1.45] });
   const ringOpacity2 = pulseRing2.interpolate({ inputRange: [0, 0.7, 1], outputRange: [0.6, 0.3, 0] });
 
-  // Situational Wing Animations
-  let leftWingRotate: any;
-  let leftWingTranslateY: any = 0;
-  let leftWingTranslateX: any = 0;
+  // Right wing waving rotation (Image 3)
+  const rightWingRotate = isStanding
+    ? waveAnim.interpolate({
+        inputRange: [0, 0.35, 0.6, 1],
+        outputRange: ['12deg', '-28deg', '-48deg', '-72deg'],
+      })
+    : '12deg';
 
-  if (isWavingState) {
-    // Friendly cartoon wave oscillating side-to-side (Home screen greeting)
-    leftWingRotate = waveAnim.interpolate({ inputRange: [0, 1], outputRange: ['-30deg', '-58deg'] });
-    leftWingTranslateY = waveAnim.interpolate({ inputRange: [0, 1], outputRange: [-config.container * 0.18, -config.container * 0.24] });
-    leftWingTranslateX = waveAnim.interpolate({ inputRange: [0, 1], outputRange: [-config.container * 0.02, -config.container * 0.05] });
-  } else if (state === 'celebrate') {
-    // Both wings raised high in victory cheer (\o/)
-    leftWingRotate = waveAnim.interpolate({ inputRange: [0, 1], outputRange: ['-42deg', '-68deg'] });
-    leftWingTranslateY = -config.container * 0.24;
-    leftWingTranslateX = -config.container * 0.04;
-  } else if (state === 'speaking') {
-    // Conversational talking gesture in sync with speech
-    leftWingRotate = gestureAnim.interpolate({ inputRange: [-1, 0, 1], outputRange: ['-14deg', '-28deg', '-42deg'] });
-    leftWingTranslateY = gestureAnim.interpolate({ inputRange: [-1, 0, 1], outputRange: [0, -config.container * 0.06, -config.container * 0.12] });
-  } else if (state === 'thinking') {
-    // Pensive chin-touch pose
-    leftWingRotate = '-54deg';
-    leftWingTranslateY = -config.container * 0.12;
-    leftWingTranslateX = config.container * 0.08;
-  } else {
-    // Idle & Listening: gentle breathing sway hugging left flank naturally (Duo Image 2 style)
-    leftWingRotate = floatAnim.interpolate({ inputRange: [0, 1], outputRange: ['6deg', '12deg'] });
-  }
-
-  let rightWingRotate: any;
-  let rightWingTranslateY: any = 0;
-  let rightWingTranslateX: any = 0;
-
-  if (state === 'celebrate') {
-    rightWingRotate = waveAnim.interpolate({ inputRange: [0, 1], outputRange: ['42deg', '68deg'] });
-    rightWingTranslateY = -config.container * 0.24;
-    rightWingTranslateX = config.container * 0.04;
-  } else if (state === 'speaking') {
-    // Alternating conversational gesture
-    rightWingRotate = gestureAnim.interpolate({ inputRange: [-1, 0, 1], outputRange: ['38deg', '24deg', '10deg'] });
-    rightWingTranslateY = gestureAnim.interpolate({ inputRange: [-1, 0, 1], outputRange: [-config.container * 0.12, -config.container * 0.06, 0] });
-  } else {
-    // Idle & Listening: resting naturally against right flank (hugging body curve - Duo Image 2 style)
-    rightWingRotate = floatAnim.interpolate({ inputRange: [0, 1], outputRange: ['-6deg', '-12deg'] });
-  }
-
-  // Duo-Style Beak & Mouth Transforms
-  const isMouthOpen = state === 'speaking' || isWavingState || state === 'celebrate';
-  let mouthOpenScaleY: any = 1;
-  let mouthOpenTranslateY: any = config.beakSize * 0.26;
-  let mouthOpenOpacity: any = 1;
-  let upperBeakTranslateY: any = 0;
-
-  if (state === 'speaking') {
-    // Talking: mouth rhythmically drops open and closed with natural syllable variations
-    mouthOpenScaleY = mouthAnim.interpolate({ inputRange: [0, 1], outputRange: [0.15, 1.25] });
-    mouthOpenTranslateY = mouthAnim.interpolate({ inputRange: [0, 1], outputRange: [-1, config.beakSize * 0.28] });
-    mouthOpenOpacity = mouthAnim.interpolate({ inputRange: [0, 0.15, 1], outputRange: [0, 1, 1] });
-    upperBeakTranslateY = mouthAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -1.5] });
-  } else if (isWavingState || state === 'celebrate') {
-    // Radiant open smile showing pink tongue
-    mouthOpenScaleY = floatAnim.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1.08] });
-    mouthOpenTranslateY = config.beakSize * 0.26;
-    mouthOpenOpacity = 1;
-    upperBeakTranslateY = -1;
-  }
+  // Left wing rotation (natural gentle idle breathing or celebration flap)
+  const leftWingRotate = isStanding
+    ? (state === 'celebrate'
+        ? waveAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: ['-12deg', '48deg'],
+          })
+        : floatAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: ['-10deg', '-18deg'],
+          }))
+    : '-12deg';
 
   const shadowScaleX = floatAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [1, 0.82],
+    outputRange: [1, 0.85],
   });
   const shadowOpacity = floatAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.85, 0.45],
+    outputRange: [0.85, 0.55],
   });
 
   return (
@@ -434,80 +412,50 @@ export function AskieCompanion({
           ],
         }}
       >
-        {/* Left Wing / Hand (Situational: Waving on home, talking gesture on call, cupping ear on listening, chin-touch on thinking) */}
+        {/* Left Wing / Hand (Cute animated cartoon wing) */}
         {isStanding && (
           <Animated.View
             style={[
               styles.wingL,
               {
-                width: config.container * 0.28,
-                height: config.container * 0.46,
-                borderTopLeftRadius: config.container * 0.18,
-                borderTopRightRadius: config.container * 0.14,
-                borderBottomLeftRadius: config.container * 0.12,
-                borderBottomRightRadius: config.container * 0.14,
-                left: -config.container * 0.04,
-                top: config.container * 0.38,
-                transform: [
-                  { translateY: leftWingTranslateY },
-                  { translateX: leftWingTranslateX },
-                  { rotate: leftWingRotate },
-                ],
+                width: config.container * 0.22,
+                height: config.container * 0.38,
+                borderRadius: config.container * 0.11,
+                left: -config.container * 0.1,
+                top: config.container * 0.36,
+                transform: [{ rotate: leftWingRotate }],
               },
             ]}
           >
             <LinearGradient
-              colors={['#FF8A80', '#FF5252', '#D63031']}
+              colors={['#FF6B6B', '#D63031']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
-              style={[
-                styles.wingInner,
-                {
-                  borderTopLeftRadius: config.container * 0.18,
-                  borderTopRightRadius: config.container * 0.14,
-                  borderBottomLeftRadius: config.container * 0.12,
-                  borderBottomRightRadius: config.container * 0.14,
-                },
-              ]}
+              style={[styles.wingInner, { borderRadius: config.container * 0.11 }]}
             />
           </Animated.View>
         )}
 
-        {/* Right Wing / Hand (Situational: resting at side, or gesturing on speaking/celebrate) */}
+        {/* Right Wing / Hand (Cute animated cartoon wing) */}
         {isStanding && (
           <Animated.View
             style={[
               styles.wingR,
               {
-                width: config.container * 0.28,
-                height: config.container * 0.46,
-                borderTopRightRadius: config.container * 0.18,
-                borderTopLeftRadius: config.container * 0.14,
-                borderBottomRightRadius: config.container * 0.12,
-                borderBottomLeftRadius: config.container * 0.14,
-                right: -config.container * 0.04,
-                top: config.container * 0.38,
-                transform: [
-                  { translateY: rightWingTranslateY },
-                  { translateX: rightWingTranslateX },
-                  { rotate: rightWingRotate },
-                ],
+                width: config.container * 0.22,
+                height: config.container * 0.38,
+                borderRadius: config.container * 0.11,
+                right: -config.container * 0.1,
+                top: config.container * 0.36,
+                transform: [{ rotate: rightWingRotate }],
               },
             ]}
           >
             <LinearGradient
-              colors={['#FF8A80', '#FF5252', '#D63031']}
+              colors={['#FF6B6B', '#D63031']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
-              style={[
-                styles.wingInner,
-                {
-                  borderTopRightRadius: config.container * 0.18,
-                  borderTopLeftRadius: config.container * 0.14,
-                  borderBottomRightRadius: config.container * 0.12,
-                  borderBottomLeftRadius: config.container * 0.14,
-                },
-              ]}
+              style={[styles.wingInner, { borderRadius: config.container * 0.11 }]}
             />
           </Animated.View>
         )}
@@ -518,6 +466,7 @@ export function AskieCompanion({
           end={{ x: 1, y: 1 }}
           style={[
             styles.avatarBody,
+            isAvatar && styles.avatarBodyAvatar,
             {
               width: config.container,
               height: config.container,
@@ -600,66 +549,20 @@ export function AskieCompanion({
               <View style={[styles.cheek, { width: config.eyeSize * 0.6, height: config.eyeSize * 0.35 }]} />
             </View>
 
-            {/* Expressive Duo-style Beak & Mouth */}
-            <View style={[styles.mouthContainer, { marginTop: -config.container * 0.02 }]}>
-              {/* Smiling Open Mouth Cavity with Tongue (visible when talking, waving, celebrate - Duo Image 1 style) */}
-              {isMouthOpen && (
-                <Animated.View
-                  style={[
-                    styles.mouthOpenCavity,
-                    {
-                      top: config.beakSize * 0.32,
-                      width: config.beakSize * 1.18,
-                      height: config.beakSize * 0.95,
-                      borderBottomLeftRadius: config.beakSize * 0.55,
-                      borderBottomRightRadius: config.beakSize * 0.55,
-                      transform: [
-                        { scaleY: mouthOpenScaleY },
-                        { translateY: mouthOpenTranslateY },
-                      ],
-                      opacity: mouthOpenOpacity,
-                    },
-                  ]}
-                >
-                  {/* Deep burgundy mouth throat interior */}
-                  <View style={styles.mouthInterior}>
-                    {/* Cute pink tongue */}
-                    <View
-                      style={[
-                        styles.mouthTongue,
-                        {
-                          width: config.beakSize * 0.88,
-                          height: config.beakSize * 0.55,
-                          borderTopLeftRadius: config.beakSize * 0.3,
-                          borderTopRightRadius: config.beakSize * 0.3,
-                        },
-                      ]}
-                    />
-                  </View>
-                </Animated.View>
-              )}
-
-              {/* Upper Beak (Golden dome with specular highlight - Duo style) */}
-              <Animated.View
-                style={[
-                  styles.upperBeak,
-                  {
-                    width: config.beakSize * 1.36,
-                    height: config.beakSize * 0.84,
-                    borderTopLeftRadius: config.beakSize * 0.45,
-                    borderTopRightRadius: config.beakSize * 0.45,
-                    borderBottomLeftRadius: config.beakSize * 0.3,
-                    borderBottomRightRadius: config.beakSize * 0.3,
-                    transform: [{ translateY: upperBeakTranslateY }],
-                  },
-                ]}
-              >
-                {/* Specular 3D Highlight on Upper Beak */}
-                <View style={styles.beakHighlight} />
-                {/* Lower beak lip contour */}
-                <View style={styles.beakLip} />
-              </Animated.View>
-            </View>
+            {/* Beak / Talking Mouth */}
+            <Animated.View
+              style={[
+                styles.beak,
+                {
+                  width: config.beakSize * 1.3,
+                  height: config.beakSize * 0.85,
+                  borderRadius: config.beakSize * 0.4,
+                  transform: [{ scaleY: state === 'celebrate' ? 1.4 : mouthScaleY }],
+                },
+              ]}
+            >
+              <View style={styles.beakHighlight} />
+            </Animated.View>
           </View>
 
           {/* Thinking Lightbulb / Question Balloon */}
@@ -745,6 +648,13 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     elevation: 8,
     position: 'relative',
+  },
+  avatarBodyAvatar: {
+    borderWidth: 1.5,
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
+    shadowOffset: { width: 0, height: 1 },
   },
   avatarSheen: {
     position: 'absolute',
@@ -832,67 +742,21 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 118, 117, 0.45)',
     borderRadius: 12,
   },
-  mouthContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-    zIndex: 5,
-  },
-  mouthOpenCavity: {
-    position: 'absolute',
-    backgroundColor: '#7A0E12',
-    borderWidth: 2,
-    borderColor: '#FFA000',
-    borderTopWidth: 0,
-    overflow: 'hidden',
-    zIndex: 1,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
-  mouthInterior: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: '#7A0E12',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
-  mouthTongue: {
-    backgroundColor: '#FF7675',
+  beak: {
+    backgroundColor: '#FDCB6E',
+    marginTop: -2,
     borderWidth: 1,
-    borderColor: '#FFAAAA',
-    borderBottomWidth: 0,
-    marginBottom: -1,
-  },
-  upperBeak: {
-    backgroundColor: '#FFB300',
-    borderWidth: 1.5,
-    borderColor: '#E65100',
-    borderBottomWidth: 2,
-    borderBottomColor: '#D84315',
-    zIndex: 3,
+    borderColor: '#E17055',
     overflow: 'hidden',
-    shadowColor: '#E65100',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.35,
-    shadowRadius: 3,
-    elevation: 3,
-    alignItems: 'center',
+    position: 'relative',
   },
   beakHighlight: {
     position: 'absolute',
-    top: 1.5,
-    left: '18%',
-    right: '18%',
-    height: 3.5,
-    borderRadius: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.65)',
-  },
-  beakLip: {
-    position: 'absolute',
-    bottom: 0,
+    top: 0,
     left: 0,
     right: 0,
-    height: 2,
-    backgroundColor: '#E65100',
+    height: '40%',
+    backgroundColor: 'rgba(255, 255, 255, 0.45)',
   },
   thinkingBalloon: {
     position: 'absolute',
@@ -930,6 +794,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 3,
+    transformOrigin: 'top right' as any,
   },
   wingR: {
     position: 'absolute',
@@ -939,6 +804,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 3,
+    transformOrigin: 'top left' as any,
   },
   wingInner: {
     flex: 1,

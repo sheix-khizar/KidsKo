@@ -309,7 +309,7 @@ export default function ChatScreen({
 
         <View style={styles.topbarCenter}>
           <View style={styles.companionAvatarSquircle}>
-            <AskieCompanion size="xs" shape="squircle" state="idle" standing={false} />
+            <AskieCompanion size="s" shape="squircle" state="idle" standing={false} avatarMode={true} />
           </View>
           <View style={styles.studentInfoCol}>
             <Text style={styles.topbarTitle} numberOfLines={1}>
@@ -362,7 +362,7 @@ export default function ChatScreen({
           <FadeSlideIn delay={0}>
             <View style={styles.emptyContainer}>
               <View style={styles.emptyMascotWrapper}>
-                <AskieCompanion size="l" state="waving" standing={true} />
+                <AskieCompanion size="l" state="idle" standing={true} />
               </View>
               <Text style={styles.emptyTitle}>What do you want to learn?</Text>
               <Text style={styles.emptySubtitle}>Pick one or type your own question 👇</Text>
@@ -407,13 +407,13 @@ export default function ChatScreen({
                 <View
                   style={[
                     styles.avatar,
-                    item.role === 'user' ? styles.avatarUser : { backgroundColor: 'transparent' },
+                    item.role === 'user' ? styles.avatarUser : styles.avatarAi,
                   ]}
                 >
                   {item.role === 'user' ? (
                     <Text style={styles.avatarEmoji}>👧</Text>
                   ) : (
-                    <Mascot size="xs" shape="circle" />
+                    <AskieCompanion size="xs" shape="circle" state="idle" standing={false} avatarMode={true} />
                   )}
                 </View>
                 <View style={{ flex: 1, alignItems: item.role === 'user' ? 'flex-end' : 'flex-start' }}>
@@ -491,8 +491,8 @@ export default function ChatScreen({
       {/* Typing animation while AI replies */}
       {sending && (
         <View style={styles.typingRow}>
-          <View style={styles.avatar}>
-            <Mascot size="xs" shape="circle" />
+          <View style={[styles.avatar, styles.avatarAi]}>
+            <AskieCompanion size="xs" shape="circle" state="idle" standing={false} avatarMode={true} />
           </View>
           <View style={styles.typingBubble}>
             <TypingDots color={colors.coral} />
@@ -706,15 +706,8 @@ const styles = StyleSheet.create({
   companionAvatarSquircle: {
     width: 44,
     height: 44,
-    borderRadius: 15,
-    backgroundColor: '#FF7675',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#D63031',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
   },
   msgReactionsRow: {
     flexDirection: 'row',
@@ -1007,10 +1000,12 @@ const styles = StyleSheet.create({
   avatar: {
     width: 36,
     height: 36,
-    borderRadius: 14,
-    backgroundColor: colors.sun,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  avatarAi: {
+    backgroundColor: 'transparent',
   },
   avatarUser: {
     backgroundColor: colors.cardBgMuted,
