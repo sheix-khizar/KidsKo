@@ -662,9 +662,9 @@ export default function OnboardingScreen({ onFinish }: Props) {
               Set healthy boundaries for how {firstName} uses Kidsko.
             </Text>
 
-            {/* Daily limit card */}
+            {/* Weekly limit card */}
             <View style={styles.card}>
-              <Text style={styles.cardSectionTitle}>Daily question limit</Text>
+              <Text style={styles.cardSectionTitle}>Weekly question limit</Text>
               <Text style={styles.cardSectionSub}>Kidsko pauses politely when the limit is reached.</Text>
               <View style={styles.limitRow}>
                 {LIMITS.map((lim) => {
@@ -888,7 +888,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
               </View>
 
               <View style={styles.summaryDetailRow}>
-                <Text style={styles.summaryDetailLabel}>Daily limit</Text>
+                <Text style={styles.summaryDetailLabel}>Weekly limit</Text>
                 <Text style={styles.summaryDetailValue}>
                   {dailyLimit === '∞' ? 'Unlimited' : `${dailyLimit} questions`}
                 </Text>

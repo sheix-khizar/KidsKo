@@ -1175,18 +1175,18 @@ export default function ParentsHub({
               </View>
             ) : activeStudent ? (
               <>
-                {/* ⏱️ Daily Question Limit Card */}
+                {/* ⏱️ Weekly Question Limit Card */}
                 <View style={styles.card}>
-                  <Text style={styles.cardHeaderTitle}>⏱️ Daily Question Limit</Text>
+                  <Text style={styles.cardHeaderTitle}>⏱️ Weekly Question Limit</Text>
                   <Text style={styles.cardSubtitle}>
-                    Control how many questions {activeStudent.student_name} can ask per day
+                    Control how many questions {activeStudent.student_name} can ask per week
                   </Text>
 
                   <View style={styles.limitCounterBox}>
                     <Text style={styles.limitBigNumber}>
                       {dailyLimit === 'infinity' ? '∞' : dailyLimit}
                     </Text>
-                    <Text style={styles.limitUnitsText}>questions per day</Text>
+                    <Text style={styles.limitUnitsText}>questions per week</Text>
 
                     {/* Progress Bar Track */}
                     <View style={styles.limitTrack}>
