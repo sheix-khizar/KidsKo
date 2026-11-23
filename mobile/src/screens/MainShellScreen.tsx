@@ -18,7 +18,7 @@ import HomeScreen from './HomeScreen';
 import ParentalGate from '../components/ParentalGate';
 import ParentsHub from '../components/ParentsHub';
 import * as SecureStore from 'expo-secure-store';
-import { getStudents, createStudent, clearToken, getSavedUserId } from '../services/api';
+import { getStudents, createStudent, clearToken, getSavedUserId, getVoiceEligibility } from '../services/api';
 import { configureBilling, isPremiumActive } from '../services/billing';
 import { TabBar, TabKey } from '../ui/TabBar';
 import { LinearGradient } from '../ui/LinearGradient';
@@ -69,12 +69,16 @@ export default function MainShellScreen({
       SecureStore.getItemAsync('kidsko_parent_curfew')
         .then((val) => setCurfewEnabled(val === 'true'))
         .catch(() => {});
+      getVoiceEligibility()
+        .then((v) => setWeeklyVoiceMinutes(v.minutesRemaining))
+        .catch(() => {});
     }
     setLocalTab(nextTab);
     setPrevForcedTab(nextTab);
     onTabChange?.(nextTab);
   };
   const [isPremium, setIsPremium] = useState(false);
+  const [weeklyVoiceMinutes, setWeeklyVoiceMinutes] = useState<number | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
   const [activeStudent, setActiveStudent] = useState<Student | null>(null);
   const [loadingStudents, setLoadingStudents] = useState(true);
@@ -297,7 +301,11 @@ export default function MainShellScreen({
                   <Text style={styles.lobbyPillText}>🔒 Safe call</Text>
                 </View>
                 <View style={styles.lobbyPill}>
-                  <Text style={styles.lobbyPillText}>⏱️ 18 min left today</Text>
+                  <Text style={styles.lobbyPillText}>
+                    {isPremium
+                      ? '⏱️ Unlimited calls'
+                      : `⏱️ ${weeklyVoiceMinutes !== null ? `${weeklyVoiceMinutes} min left this week` : '10 min left this week'}`}
+                  </Text>
                 </View>
               </View>
 

@@ -109,6 +109,38 @@ export function sanitizeChatResponse(text: string): string {
   return cleaned;
 }
 
+async function generateWithRetry(
+  client: GoogleGenAI,
+  params: any,
+  retries = 2,
+  delayMs = 1500
+): Promise<any> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await client.models.generateContent(params);
+    } catch (err: any) {
+      const isTransient =
+        err?.message?.includes('503') ||
+        err?.message?.includes('high demand') ||
+        err?.message?.includes('429') ||
+        err?.message?.includes('RESOURCE_EXHAUSTED') ||
+        err?.message?.includes('fetch failed') ||
+        err?.message?.includes('timeout') ||
+        err?.code === 'UND_ERR_HEADERS_TIMEOUT' ||
+        err?.status === 503 ||
+        err?.status === 429;
+      if (isTransient && attempt < retries) {
+        console.warn(
+          `[Gemini] Transient error (${err?.status || err?.code || '503'}), retrying in ${delayMs}ms (attempt ${attempt + 1}/${retries})...`
+        );
+        await new Promise((r) => setTimeout(r, delayMs));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
 export async function generateChatReply(
   history: ChatMessage[],
   threadImage?: { base64: string; mimeType: string },
@@ -139,65 +171,50 @@ export async function generateChatReply(
     : SYSTEM_PROMPT;
 
   let response;
-  try {
-    response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash',
-      contents,
-      config: {
-        systemInstruction,
-        maxOutputTokens: 600, // NFR-3: cost control with generous headroom for complete solutions
-        temperature: 0.3,
-        thinkingConfig: {
-          thinkingBudget: 0, // Disable internal thinking tokens from consuming maxOutputTokens budget
-        },
-      },
-    });
-  } catch (err: any) {
-    const isRetryable =
-      err?.message?.includes('503') ||
-      err?.message?.includes('high demand') ||
-      err?.message?.includes('404') ||
-      err?.message?.includes('not found') ||
-      err?.message?.includes('429') ||
-      err?.message?.includes('RESOURCE_EXHAUSTED') ||
-      err?.message?.includes('quota') ||
-      err?.status === 503 ||
-      err?.status === 429;
+  const modelsToTry = ['gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite'];
+  let lastErr;
 
-    if (isRetryable) {
-      console.warn('[Gemini] gemini-3.5-flash encountered error or quota limit. Retrying with fallback...');
-      const fallbackClient = aiFallback || ai;
-      try {
-        response = await fallbackClient.models.generateContent({
-          model: 'gemini-3.5-flash',
-          contents,
-          config: {
-            systemInstruction,
-            maxOutputTokens: 600,
-            temperature: 0.3,
-            thinkingConfig: {
-              thinkingBudget: 0,
-            },
+  for (const model of modelsToTry) {
+    try {
+      response = await generateWithRetry(ai, {
+        model,
+        contents,
+        config: {
+          systemInstruction,
+          maxOutputTokens: 600, // NFR-3: cost control with generous headroom for complete solutions
+          temperature: 0.3,
+          thinkingConfig: {
+            thinkingBudget: 0, // Disable internal thinking tokens from consuming maxOutputTokens budget
           },
-        });
-      } catch (fbErr: any) {
-        console.warn('[Gemini] Secondary client failed, falling back to gemini-3.1-flash-lite...');
-        response = await fallbackClient.models.generateContent({
-          model: 'gemini-3.1-flash-lite',
-          contents,
-          config: {
-            systemInstruction,
-            maxOutputTokens: 600,
-            temperature: 0.3,
-            thinkingConfig: {
-              thinkingBudget: 0,
+        },
+      });
+      break;
+    } catch (err: any) {
+      lastErr = err;
+      if (aiFallback) {
+        try {
+          response = await generateWithRetry(aiFallback, {
+            model,
+            contents,
+            config: {
+              systemInstruction,
+              maxOutputTokens: 600,
+              temperature: 0.3,
+              thinkingConfig: {
+                thinkingBudget: 0,
+              },
             },
-          },
-        });
+          });
+          break;
+        } catch (fbErr) {
+          lastErr = fbErr;
+        }
       }
-    } else {
-      throw err;
     }
+  }
+
+  if (!response) {
+    throw lastErr;
   }
 
   const rawText = response.text || '';
@@ -241,28 +258,49 @@ export async function generateHomeworkExplanation(
       },
     });
   } catch (err: any) {
-    console.warn('[Gemini] gemini-3.5-flash image fallback to gemini-3.1-flash-lite...');
+    console.warn('[Gemini] gemini-3.5-flash image fallback to gemini-2.5-flash...');
     const fallbackClient = aiFallback || ai;
-    response = await fallbackClient.models.generateContent({
-      model: 'gemini-3.1-flash-lite',
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            { inlineData: { data: imageBase64, mimeType } },
-            { text: promptInstruction },
-          ],
+    try {
+      response = await fallbackClient.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              { inlineData: { data: imageBase64, mimeType } },
+              { text: promptInstruction },
+            ],
+          },
+        ],
+        config: {
+          systemInstruction,
+          maxOutputTokens: 500,
+          temperature: 0.3,
         },
-      ],
-      config: {
-        systemInstruction,
-        maxOutputTokens: 500,
-        temperature: 0.3,
-        thinkingConfig: {
-          thinkingBudget: 0,
+      });
+    } catch {
+      console.warn('[Gemini] gemini-2.5-flash image fallback to gemini-3.1-flash-lite...');
+      response = await fallbackClient.models.generateContent({
+        model: 'gemini-3.1-flash-lite',
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              { inlineData: { data: imageBase64, mimeType } },
+              { text: promptInstruction },
+            ],
+          },
+        ],
+        config: {
+          systemInstruction,
+          maxOutputTokens: 500,
+          temperature: 0.3,
+          thinkingConfig: {
+            thinkingBudget: 0,
+          },
         },
-      },
-    });
+      });
+    }
   }
 
   const rawText = response.text || '';

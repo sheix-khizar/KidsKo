@@ -19,6 +19,7 @@ import { WaveBars, PressScale } from '../ui/motion';
 import { AskieCompanion } from '../ui/AskieCompanion';
 import { AskieReactionOverlay, triggerAskieReaction } from '../ui/AskieReactions';
 import { VoiceSession } from '../services/voiceSocket';
+import { getVoiceEligibility } from '../services/api';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const isCompact = SCREEN_HEIGHT < 720;
@@ -73,6 +74,16 @@ export default function LiveVoiceScreen({
   const [status, setStatus] = useState<'connecting' | 'live' | 'ended'>('connecting');
   const [voiceState, setVoiceState] = useState<'listening' | 'thinking' | 'speaking'>('listening');
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+
+  useEffect(() => {
+    getVoiceEligibility()
+      .then((res) => {
+        if (res && typeof res.minutesRemaining === 'number') {
+          setSecondsLeft((prev) => (prev === null ? res.minutesRemaining * 60 : prev));
+        }
+      })
+      .catch(() => {});
+  }, []);
   const [callDuration, setCallDuration] = useState<number>(0);
   const [questionCount, setQuestionCount] = useState<number>(1);
   const [errorReason, setErrorReason] = useState<string | null>(null);
@@ -574,7 +585,7 @@ export default function LiveVoiceScreen({
 
           <View style={styles.headerPill}>
             <Text style={styles.headerPillText}>
-              ⏱️ {secondsLeft !== null ? `${Math.ceil(secondsLeft / 60)} min left` : '18 min left'}
+              ⏱️ {secondsLeft !== null ? `${Math.ceil(secondsLeft / 60)} min left` : '10 min left'}
             </Text>
           </View>
         </View>

@@ -1144,7 +1144,7 @@ export default function ParentsHub({
                   <View style={styles.limitsComparisonBox}>
                     <View style={styles.limitsComparisonRow}>
                       <Text style={styles.limitsComparisonLabel}>📦 Free Plan Default:</Text>
-                      <Text style={styles.limitsComparisonVal}>Fixed 30 questions/day</Text>
+                      <Text style={styles.limitsComparisonVal}>Fixed 30 questions/week</Text>
                     </View>
                     <View style={styles.limitsComparisonRow}>
                       <Text style={[styles.limitsComparisonLabel, { color: '#FFD700' }]}>⭐ Premium Plan:</Text>
@@ -1156,7 +1156,7 @@ export default function ParentsHub({
 
                   {/* Feature Highlights */}
                   <View style={styles.limitsFeaturesList}>
-                    <Text style={styles.limitsFeatureItem}>✨ Set custom daily limits (10, 20, 50, or Unlimited)</Text>
+                    <Text style={styles.limitsFeatureItem}>✨ Set custom weekly limits (30, 50, 100, or Unlimited)</Text>
                     <Text style={styles.limitsFeatureItem}>⏰ Tailor study schedules (School, Evening, Weekend)</Text>
                     <Text style={styles.limitsFeatureItem}>🌙 Enforce night-time Bedtime Curfew (8 PM – 7 AM)</Text>
                     <Text style={styles.limitsFeatureItem}>📷 AI Camera Vision parental switch</Text>
@@ -1376,7 +1376,7 @@ export default function ParentsHub({
                 <Text style={styles.membershipFeaturesText}>
                   {isPremium
                     ? '✨ Unlimited homework questions\n📞 Unlimited Voice & Video calls\n📷 Real-time AI Camera Vision\n👨‍👩‍👧‍👦 Multi-child learning profiles'
-                    : '• 30 questions/day limit\n• Standard homework help\n• Tap to unlock unlimited voice/video & camera vision'}
+                    : '• 30 questions/week limit\n• Standard homework help\n• Tap to unlock unlimited voice/video & camera vision'}
                 </Text>
 
                 <View style={styles.membershipActionBtn}>

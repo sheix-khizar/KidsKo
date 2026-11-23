@@ -4,6 +4,7 @@ import rateLimit from 'express-rate-limit';
 import { supabase, supabaseAdmin } from '../lib/supabase';
 import { requireAuth } from '../middleware/auth';
 import { deleteThreadImagesFromStorage } from '../lib/homeworkStorage';
+import { checkVoiceEligibility } from '../lib/voiceLimits';
 
 const router = Router();
 
@@ -313,6 +314,18 @@ router.get('/me', requireAuth, async (req: Request, res: Response) => {
     userId: req.user!.id,
     email: req.user!.email,
   });
+});
+
+// GET /api/auth/voice-eligibility (Get real weekly remaining voice & video allowance)
+router.get('/voice-eligibility', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const parentId = req.user!.id;
+    const dbClient = req.supabase || supabaseAdmin;
+    const eligibility = await checkVoiceEligibility(dbClient, parentId);
+    return res.status(200).json(eligibility);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Could not check voice eligibility' });
+  }
 });
 
 // PUT /api/auth/password (Update parent account password - legacy direct update)

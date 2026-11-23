@@ -39,8 +39,8 @@ async function testVoiceLimits() {
     console.error('❌ TEST 1 FAILED!', check1);
   }
 
-  console.log('👉 [TEST 2] Recording 5 minutes of voice usage...');
-  await recordVoiceMinutesUsed(supabaseAdmin, testParentId, 5);
+  console.log(`👉 [TEST 2] Recording ${FREE_WEEKLY_VOICE_MINUTES} minutes of voice usage...`);
+  await recordVoiceMinutesUsed(supabaseAdmin, testParentId, FREE_WEEKLY_VOICE_MINUTES);
 
   const check2 = await checkVoiceEligibility(supabaseAdmin, testParentId);
   if (!check2.allowed && check2.minutesRemaining === 0) {

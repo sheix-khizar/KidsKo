@@ -243,7 +243,6 @@ export default function HomeScreen({
                   pressed && { transform: [{ scale: 0.97 }], borderBottomWidth: 2, marginTop: 4 },
                 ]}
                 onPress={() => {
-                  console.log('[HomeScreen] Talk to me tapped!');
                   onStartVoice();
                 }}
                 accessibilityRole="button"
@@ -262,7 +261,6 @@ export default function HomeScreen({
                 pressed && { transform: [{ scale: 0.97 }], borderBottomWidth: 2, marginTop: 16 },
               ]}
               onPress={() => {
-                console.log('[HomeScreen] Show me tapped!');
                 onStartCamera();
               }}
               accessibilityRole="button"

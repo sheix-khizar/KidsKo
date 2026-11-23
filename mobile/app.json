@@ -30,8 +30,7 @@
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO",
-        "android.permission.READ_MEDIA_IMAGES"
+        "android.permission.RECORD_AUDIO"
       ],
       "package": "kidsko.ai"
     },

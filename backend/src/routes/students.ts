@@ -3,6 +3,7 @@ import { requireAuth } from '../middleware/auth';
 import { getMemory, filterFact, filterPreferredName } from '../lib/studentMemory';
 import { supabaseAdmin } from '../lib/supabase';
 import { deleteThreadImagesFromStorage } from '../lib/homeworkStorage';
+import { checkVoiceEligibility } from '../lib/voiceLimits';
 
 const router = Router();
 
@@ -194,6 +195,16 @@ router.get('/:id/activity', requireAuth, async (req: Request, res: Response) => 
   // Real total stars earned: 5 stars per question + 10 stars per topic + 15 stars per streak day
   const totalStars = Math.max(25, (userMessages.length * 5) + (topicsExplored * 10) + (streak * 15));
 
+  // Real weekly remaining voice minutes from family usage
+  let weeklyVoiceMinutesRemaining = 10;
+  try {
+    const dbClient = req.supabase || supabaseAdmin;
+    const vCheck = await checkVoiceEligibility(dbClient, req.user!.id);
+    weeklyVoiceMinutesRemaining = Math.ceil(vCheck.minutesRemaining);
+  } catch (err: any) {
+    console.warn('[Activity] Could not check voice eligibility:', err?.message);
+  }
+
   return res.status(200).json({
     studentId: id,
     studentName: student.student_name,
@@ -202,6 +213,7 @@ router.get('/:id/activity', requireAuth, async (req: Request, res: Response) => 
     topicsExplored,
     streak,
     stars: totalStars,
+    weeklyVoiceMinutesRemaining,
     dailyCounts,
     topics,
   });

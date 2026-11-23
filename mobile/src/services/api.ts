@@ -397,12 +397,33 @@ export type StudentActivityData = {
   studentName: string;
   questionsToday: number;
   questionsThisWeek: number;
+  weeklyVoiceMinutesRemaining?: number;
   topicsExplored: number;
   streak: number;
   stars?: number;
   dailyCounts: Record<string, number>;
   topics?: TopicSummary[];
 };
+
+export async function getVoiceEligibility(): Promise<{
+  allowed: boolean;
+  isPremium: boolean;
+  minutesRemaining: number;
+  reason?: string;
+}> {
+  const token = await getToken();
+  const res = await fetchWithTimeout(`${getApiUrl()}/api/auth/voice-eligibility`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Could not fetch voice eligibility');
+  return data as {
+    allowed: boolean;
+    isPremium: boolean;
+    minutesRemaining: number;
+    reason?: string;
+  };
+}
 
 export async function getStudentActivity(studentId: string): Promise<StudentActivityData> {
   const token = await getToken();

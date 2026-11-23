@@ -53,8 +53,8 @@ async function runVoiceLimitsMatrixTest() {
   }
 
   // --- TEST 2: User has 0 weekly minutes -> session rejected ---
-  console.log('👉 [TEST 2] Testing 0 weekly minutes remaining (usage = 5 min)...');
-  await supabaseAdmin.from('family_usage').update({ weekly_voice_minutes_used: 5 }).eq('parent_id', userId);
+  console.log(`👉 [TEST 2] Testing 0 weekly minutes remaining (usage = ${FREE_WEEKLY_VOICE_MINUTES} min)...`);
+  await supabaseAdmin.from('family_usage').update({ weekly_voice_minutes_used: FREE_WEEKLY_VOICE_MINUTES }).eq('parent_id', userId);
 
   const eligibility2 = await checkVoiceEligibility(supabaseAdmin, userId);
   if (!eligibility2.allowed && eligibility2.minutesRemaining === 0) {
@@ -75,9 +75,9 @@ async function runVoiceLimitsMatrixTest() {
     ws.on('open', () => {});
   });
 
-  // --- TEST 3: User has 4 minutes used -> 1 minute remains -> session allowed ---
-  console.log('👉 [TEST 3] Testing partial usage (4 minutes used -> 1 minute remaining)...');
-  await supabaseAdmin.from('family_usage').update({ weekly_voice_minutes_used: 4 }).eq('parent_id', userId);
+  // --- TEST 3: User has partial minutes used -> 1 minute remains -> session allowed ---
+  console.log(`👉 [TEST 3] Testing partial usage (${FREE_WEEKLY_VOICE_MINUTES - 1} minutes used -> 1 minute remaining)...`);
+  await supabaseAdmin.from('family_usage').update({ weekly_voice_minutes_used: FREE_WEEKLY_VOICE_MINUTES - 1 }).eq('parent_id', userId);
 
   const eligibility3 = await checkVoiceEligibility(supabaseAdmin, userId);
   if (eligibility3.allowed && eligibility3.minutesRemaining === 1) {
