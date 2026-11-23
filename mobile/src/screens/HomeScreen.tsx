@@ -415,8 +415,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   mascotTouch: {
-    width: 95,
+    width: 105,
     height: 105,
+    marginLeft: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },

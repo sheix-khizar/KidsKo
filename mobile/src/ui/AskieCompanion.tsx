@@ -118,35 +118,21 @@ export function AskieCompanion({
         return;
       }
 
-      // Friendly cartoon hand waving sequence:
-      // Lifts hand up -> waves hello 3 times -> lowers to rest -> waits ~2s
+      // Friendly cartoon hand waving sequence (matching reference image):
+      // Hand rests in friendly greeting posture (-48deg) -> waves 3 times -> pauses
       Animated.sequence([
-        // Raise hand up to greet
-        Animated.timing(waveAnim, {
-          toValue: 0.6,
-          duration: 320,
-          easing: Easing.out(Easing.back(1.5)),
-          useNativeDriver: true,
-        }),
-        // Wave 1: out -> in
-        Animated.timing(waveAnim, { toValue: 1, duration: 180, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(waveAnim, { toValue: 0.35, duration: 180, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        // Wave 2: out -> in
-        Animated.timing(waveAnim, { toValue: 1, duration: 180, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(waveAnim, { toValue: 0.35, duration: 180, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        // Wave 3: out -> in
-        Animated.timing(waveAnim, { toValue: 1, duration: 180, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(waveAnim, { toValue: 0.5, duration: 200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        // Return hand gently back to side
-        Animated.timing(waveAnim, {
-          toValue: 0,
-          duration: 400,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
+        // Wave 1: outwards -> inwards
+        Animated.timing(waveAnim, { toValue: 1, duration: 190, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(waveAnim, { toValue: 0.3, duration: 190, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        // Wave 2: outwards -> inwards
+        Animated.timing(waveAnim, { toValue: 1, duration: 190, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(waveAnim, { toValue: 0.3, duration: 190, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        // Wave 3: outwards -> settle to greeting rest angle
+        Animated.timing(waveAnim, { toValue: 0.95, duration: 190, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(waveAnim, { toValue: 0, duration: 260, easing: Easing.out(Easing.ease), useNativeDriver: true }),
       ]).start(() => {
         if (!isMounted) return;
-        timer = setTimeout(runWaveCycle, 2200);
+        timer = setTimeout(runWaveCycle, 2000);
       });
     };
 
@@ -334,26 +320,40 @@ export function AskieCompanion({
   const ringScale2 = pulseRing2.interpolate({ inputRange: [0, 1], outputRange: [1, 1.45] });
   const ringOpacity2 = pulseRing2.interpolate({ inputRange: [0, 0.7, 1], outputRange: [0.6, 0.3, 0] });
 
-  // Right wing waving rotation (Image 3)
-  const rightWingRotate = isStanding
-    ? waveAnim.interpolate({
-        inputRange: [0, 0.35, 0.6, 1],
-        outputRange: ['12deg', '-28deg', '-48deg', '-72deg'],
-      })
-    : '12deg';
-
-  // Left wing rotation (natural gentle idle breathing or celebration flap)
+  // Left wing (Viewer's left = Mascot's right): Waving Hand (Image reference)
   const leftWingRotate = isStanding
     ? (state === 'celebrate'
         ? waveAnim.interpolate({
             inputRange: [0, 1],
-            outputRange: ['-12deg', '48deg'],
+            outputRange: ['120deg', '160deg'],
+          })
+        : waveAnim.interpolate({
+            inputRange: [0, 0.5, 1],
+            outputRange: ['135deg', '122deg', '148deg'],
+          }))
+    : '-12deg';
+
+  // Right wing (Viewer's right = Mascot's left): Resting Hand (Image reference)
+  const rightWingRotate = isStanding
+    ? (state === 'celebrate'
+        ? waveAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: ['-20deg', '-60deg'],
           })
         : floatAnim.interpolate({
             inputRange: [0, 1],
-            outputRange: ['-10deg', '-18deg'],
+            outputRange: ['-26deg', '-30deg'],
           }))
-    : '-12deg';
+    : '12deg';
+
+  const waveArcsOpacity = waveAnim.interpolate({
+    inputRange: [0, 0.3, 0.7, 1],
+    outputRange: [0.4, 0.65, 0.9, 1],
+  });
+  const waveArcsScale = waveAnim.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [0.92, 1.02, 1.12],
+  });
 
   const shadowScaleX = floatAnim.interpolate({
     inputRange: [0, 1],
@@ -412,23 +412,85 @@ export function AskieCompanion({
           ],
         }}
       >
-        {/* Left Wing / Hand (Cute animated cartoon wing) */}
+        {/* Cartoon Waving Motion Arcs (Matching user reference) */}
+        {isStanding && (
+          <Animated.View
+            style={[
+              styles.waveArcsContainer,
+              {
+                left: -config.container * 0.42,
+                top: config.container * 0.08,
+                opacity: waveArcsOpacity,
+                transform: [{ scale: waveArcsScale }],
+              },
+            ]}
+            pointerEvents="none"
+          >
+            {/* Upper Arc */}
+            <View
+              style={[
+                styles.waveArcLine,
+                {
+                  width: config.container * 0.14,
+                  height: config.container * 0.16,
+                  borderRadius: config.container * 0.10,
+                  borderLeftWidth: Math.max(2, config.container * 0.024),
+                  borderTopWidth: Math.max(1.5, config.container * 0.018),
+                  top: 0,
+                  left: config.container * 0.05,
+                },
+              ]}
+            />
+            {/* Middle Main Arc */}
+            <View
+              style={[
+                styles.waveArcLine,
+                {
+                  width: config.container * 0.18,
+                  height: config.container * 0.22,
+                  borderRadius: config.container * 0.13,
+                  borderLeftWidth: Math.max(2.2, config.container * 0.028),
+                  borderTopWidth: Math.max(1.5, config.container * 0.02),
+                  top: config.container * 0.08,
+                  left: 0,
+                },
+              ]}
+            />
+            {/* Lower Arc */}
+            <View
+              style={[
+                styles.waveArcLine,
+                {
+                  width: config.container * 0.13,
+                  height: config.container * 0.16,
+                  borderRadius: config.container * 0.09,
+                  borderLeftWidth: Math.max(2, config.container * 0.024),
+                  borderTopWidth: Math.max(1.2, config.container * 0.016),
+                  top: config.container * 0.18,
+                  left: config.container * 0.04,
+                },
+              ]}
+            />
+          </Animated.View>
+        )}
+
+        {/* Left Wing / Hand - Waving Hand (Viewer's left = Mascot's right hand) */}
         {isStanding && (
           <Animated.View
             style={[
               styles.wingL,
               {
                 width: config.container * 0.22,
-                height: config.container * 0.38,
+                height: config.container * 0.42,
                 borderRadius: config.container * 0.11,
-                left: -config.container * 0.1,
-                top: config.container * 0.36,
+                left: -config.container * 0.18,
+                top: config.container * 0.40,
                 transform: [{ rotate: leftWingRotate }],
               },
             ]}
           >
             <LinearGradient
-              colors={['#FF6B6B', '#D63031']}
+              colors={['#FF7675', '#E17055']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={[styles.wingInner, { borderRadius: config.container * 0.11 }]}
@@ -436,23 +498,23 @@ export function AskieCompanion({
           </Animated.View>
         )}
 
-        {/* Right Wing / Hand (Cute animated cartoon wing) */}
+        {/* Right Wing / Hand - Resting Hand (Viewer's right = Mascot's left hand) */}
         {isStanding && (
           <Animated.View
             style={[
               styles.wingR,
               {
                 width: config.container * 0.22,
-                height: config.container * 0.38,
+                height: config.container * 0.40,
                 borderRadius: config.container * 0.11,
-                right: -config.container * 0.1,
-                top: config.container * 0.36,
+                right: -config.container * 0.14,
+                top: config.container * 0.42,
                 transform: [{ rotate: rightWingRotate }],
               },
             ]}
           >
             <LinearGradient
-              colors={['#FF6B6B', '#D63031']}
+              colors={['#FF7675', '#E17055']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={[styles.wingInner, { borderRadius: config.container * 0.11 }]}
@@ -647,6 +709,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.35,
     shadowRadius: 14,
     elevation: 8,
+    zIndex: 1,
     position: 'relative',
   },
   avatarBodyAvatar: {
@@ -788,28 +851,31 @@ const styles = StyleSheet.create({
   },
   wingL: {
     position: 'absolute',
-    zIndex: 2,
-    shadowColor: '#D63031',
-    shadowOffset: { width: -2, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 3,
+    zIndex: 0,
+    elevation: 0,
     transformOrigin: 'top right' as any,
   },
   wingR: {
     position: 'absolute',
-    zIndex: 2,
-    shadowColor: '#D63031',
-    shadowOffset: { width: 2, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 3,
+    zIndex: 0,
+    elevation: 0,
     transformOrigin: 'top left' as any,
   },
   wingInner: {
     flex: 1,
     borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.5)',
+    borderColor: 'rgba(255, 255, 255, 0.55)',
+  },
+  waveArcsContainer: {
+    position: 'absolute',
+    zIndex: 3,
+  },
+  waveArcLine: {
+    position: 'absolute',
+    borderColor: '#FF7675',
+    borderRightColor: 'transparent',
+    borderBottomColor: 'transparent',
+    transform: [{ rotate: '-32deg' }],
   },
   foot: {
     position: 'absolute',
