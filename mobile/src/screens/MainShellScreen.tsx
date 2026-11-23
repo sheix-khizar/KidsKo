@@ -304,7 +304,7 @@ export default function MainShellScreen({
                   <Text style={styles.lobbyPillText}>
                     {isPremium
                       ? '⏱️ Unlimited calls'
-                      : `⏱️ ${weeklyVoiceMinutes !== null ? `${weeklyVoiceMinutes} min left this week` : '10 min left this week'}`}
+                      : `⏱️ ${weeklyVoiceMinutes !== null ? `${Math.ceil(weeklyVoiceMinutes)} min left this week` : '10 min left this week'}`}
                   </Text>
                 </View>
               </View>

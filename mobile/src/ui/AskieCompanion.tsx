@@ -63,7 +63,7 @@ export function AskieCompanion({
   const pulseRing2 = useRef(new Animated.Value(0)).current;
   const touchScale = useRef(new Animated.Value(1)).current;
 
-  // 1. Idle Hover & Breathing (disabled for avatars so they stay still)
+  // 1. Idle Hover & Torso Breathing
   useEffect(() => {
     if (reduceMotion || isAvatar) {
       floatAnim.setValue(0);
@@ -74,13 +74,13 @@ export function AskieCompanion({
       Animated.sequence([
         Animated.timing(floatAnim, {
           toValue: 1,
-          duration: state === 'celebrate' ? 300 : (isStanding ? 1800 : 1600),
+          duration: state === 'celebrate' ? 300 : (isStanding ? 2000 : 1600),
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
         Animated.timing(floatAnim, {
           toValue: 0,
-          duration: state === 'celebrate' ? 300 : (isStanding ? 1800 : 1600),
+          duration: state === 'celebrate' ? 300 : (isStanding ? 2000 : 1600),
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
@@ -91,7 +91,7 @@ export function AskieCompanion({
     return () => hover.stop();
   }, [state, isAvatar, isStanding, reduceMotion]);
 
-  // 2. Hand Waving for standing mascot (Image 3)
+  // 2. Hand Waving for standing mascot: waves periodically every 5-7 seconds, then rests down at side
   useEffect(() => {
     if (reduceMotion || !isStanding || isAvatar) {
       waveAnim.setValue(0);
@@ -101,46 +101,51 @@ export function AskieCompanion({
     let isMounted = true;
     let timer: any;
 
-    const runWaveCycle = () => {
-      if (!isMounted) return;
+    if (state === 'celebrate') {
+      // Joyful fast waving loop in celebration state
+      const celebrateLoop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(waveAnim, { toValue: 0.54, duration: 160, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(waveAnim, { toValue: 0.85, duration: 160, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        ])
+      );
+      celebrateLoop.start();
+      return () => celebrateLoop.stop();
+    }
 
-      if (state === 'celebrate') {
-        // Joyful fast waving / celebration flap
-        Animated.loop(
-          Animated.sequence([
-            Animated.timing(waveAnim, { toValue: 1, duration: 150, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-            Animated.timing(waveAnim, { toValue: 0.2, duration: 150, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-          ]),
-          { iterations: 8 }
-        ).start(() => {
-          if (isMounted) timer = setTimeout(runWaveCycle, 800);
-        });
-        return;
-      }
-
-      // Friendly cartoon hand waving sequence (matching reference image):
-      // Hand rests in friendly greeting posture (-48deg) -> waves 3 times -> pauses
-      Animated.sequence([
-        // Wave 1: outwards -> inwards
-        Animated.timing(waveAnim, { toValue: 1, duration: 190, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(waveAnim, { toValue: 0.3, duration: 190, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        // Wave 2: outwards -> inwards
-        Animated.timing(waveAnim, { toValue: 1, duration: 190, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(waveAnim, { toValue: 0.3, duration: 190, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        // Wave 3: outwards -> settle to greeting rest angle
-        Animated.timing(waveAnim, { toValue: 0.95, duration: 190, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(waveAnim, { toValue: 0, duration: 260, easing: Easing.out(Easing.ease), useNativeDriver: true }),
-      ]).start(() => {
+    const scheduleWave = (delayMs: number) => {
+      timer = setTimeout(() => {
         if (!isMounted) return;
-        timer = setTimeout(runWaveCycle, 2000);
-      });
+
+        // Wave Cycle (1.75s total):
+        // 0 -> 0.20: Arm raises up to greeting position
+        // 0.20 -> 0.38: Wave in
+        // 0.38 -> 0.54: Wave out
+        // 0.54 -> 0.70: Wave in
+        // 0.70 -> 0.85: Wave out
+        // 0.85 -> 1.00: Arm lowers smoothly back to resting side
+        Animated.timing(waveAnim, {
+          toValue: 1,
+          duration: 1750,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }).start(() => {
+          if (!isMounted) return;
+          waveAnim.setValue(0); // Sits at 0 (arm completely at side) during idle rest
+
+          // Schedule next wave after 5 to 7 seconds
+          const nextDelay = Math.random() * 2000 + 5000;
+          scheduleWave(nextDelay);
+        });
+      }, delayMs);
     };
 
-    timer = setTimeout(runWaveCycle, 500);
+    // Initial greeting wave after 1.5 seconds, then every 5-7 seconds
+    scheduleWave(1500);
 
     return () => {
       isMounted = false;
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
     };
   }, [isStanding, isAvatar, state, reduceMotion]);
 
@@ -282,27 +287,69 @@ export function AskieCompanion({
   const handlePress = () => {
     if (!interactive) return;
     Animated.sequence([
-      Animated.spring(touchScale, { toValue: 0.88, friction: 4, useNativeDriver: true }),
+      Animated.spring(touchScale, { toValue: 0.90, friction: 4, useNativeDriver: true }),
       Animated.spring(touchScale, { toValue: 1.05, friction: 3, useNativeDriver: true }),
       Animated.spring(touchScale, { toValue: 1, friction: 5, useNativeDriver: true }),
     ]).start();
+
+    // Trigger immediate joyful greeting wave on tap!
+    if (isStanding && !isAvatar && state !== 'celebrate') {
+      waveAnim.setValue(0);
+      Animated.timing(waveAnim, {
+        toValue: 1,
+        duration: 1750,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }).start(() => {
+        waveAnim.setValue(0);
+      });
+    }
+
     onPress?.();
   };
 
   // Interpolated Transforms
-  const translateY = isAvatar
+  // When standing idle, translateY is 0 so feet stay firmly anchored on the floor!
+  const isStandingAndIdle = isStanding && state !== 'celebrate';
+
+  const translateY = isAvatar || isStandingAndIdle
     ? 0
     : floatAnim.interpolate({
         inputRange: [0, 1],
-        outputRange: [0, isStanding ? -3 : (state === 'celebrate' ? -14 : -7)],
+        outputRange: [0, state === 'celebrate' ? -12 : -6],
       });
+
+  // Torso subtle breathing scale (standing character breathes naturally without jumping off floor)
+  const torsoScaleY = isStandingAndIdle && !isAvatar
+    ? floatAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [1, 1.022],
+      })
+    : 1;
+
+  const torsoScaleX = isStandingAndIdle && !isAvatar
+    ? floatAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [1, 0.988],
+      })
+    : 1;
+
+  // Gentle wave body tilt
+  const waveBodyTilt = waveAnim.interpolate({
+    inputRange: [0, 0.20, 0.85, 1],
+    outputRange: ['0deg', '3.5deg', '3.5deg', '0deg'],
+  });
 
   const rotate = isAvatar
     ? '0deg'
-    : tiltAnim.interpolate({
+    : state === 'thinking'
+    ? tiltAnim.interpolate({
         inputRange: [-1, 0, 1],
         outputRange: ['-8deg', '0deg', '8deg'],
-      });
+      })
+    : isStanding
+    ? waveBodyTilt
+    : '0deg';
 
   const mouthScaleY = mouthAnim.interpolate({
     inputRange: [0, 1],
@@ -320,49 +367,55 @@ export function AskieCompanion({
   const ringScale2 = pulseRing2.interpolate({ inputRange: [0, 1], outputRange: [1, 1.45] });
   const ringOpacity2 = pulseRing2.interpolate({ inputRange: [0, 0.7, 1], outputRange: [0.6, 0.3, 0] });
 
-  // Left wing (Viewer's left = Mascot's right): Waving Hand (Image reference)
+  // Left wing (Viewer's left = Mascot's right): Waving Hand (matching video example)
+  // At rest (0): hangs down naturally alongside left body flank (18deg)
+  // During wave (0.2 -> 0.85): raises and waves hello
+  // At 1.0: lowers smoothly back to resting side (18deg)
   const leftWingRotate = isStanding
     ? (state === 'celebrate'
         ? waveAnim.interpolate({
-            inputRange: [0, 1],
-            outputRange: ['120deg', '160deg'],
+            inputRange: [0, 0.54, 0.85, 1],
+            outputRange: ['18deg', '120deg', '155deg', '18deg'],
           })
         : waveAnim.interpolate({
-            inputRange: [0, 0.5, 1],
-            outputRange: ['135deg', '122deg', '148deg'],
+            inputRange: [0, 0.20, 0.38, 0.54, 0.70, 0.85, 1],
+            outputRange: ['18deg', '138deg', '118deg', '142deg', '118deg', '142deg', '18deg'],
           }))
     : '-12deg';
 
-  // Right wing (Viewer's right = Mascot's left): Resting Hand (Image reference)
+  // Right wing (Viewer's right = Mascot's left): Resting Hand (matching video example)
+  // Rests naturally downwards along the right side of the body
   const rightWingRotate = isStanding
     ? (state === 'celebrate'
         ? waveAnim.interpolate({
             inputRange: [0, 1],
-            outputRange: ['-20deg', '-60deg'],
+            outputRange: ['-18deg', '-55deg'],
           })
-        : floatAnim.interpolate({
-            inputRange: [0, 1],
-            outputRange: ['-26deg', '-30deg'],
-          }))
+        : '-18deg')
     : '12deg';
 
+  // Waving motion arcs: ONLY visible when arm is raised and actively waving!
   const waveArcsOpacity = waveAnim.interpolate({
-    inputRange: [0, 0.3, 0.7, 1],
-    outputRange: [0.4, 0.65, 0.9, 1],
+    inputRange: [0, 0.18, 0.24, 0.82, 0.88, 1],
+    outputRange: [0, 0, 1, 1, 0, 0],
   });
   const waveArcsScale = waveAnim.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: [0.92, 1.02, 1.12],
+    inputRange: [0, 0.2, 0.5, 0.85, 1],
+    outputRange: [0.8, 1.0, 1.1, 1.0, 0.8],
   });
 
-  const shadowScaleX = floatAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 0.85],
-  });
-  const shadowOpacity = floatAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.85, 0.55],
-  });
+  const shadowScaleX = isStandingAndIdle
+    ? 1
+    : floatAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [1, 0.88],
+      });
+  const shadowOpacity = isStandingAndIdle
+    ? 0.9
+    : floatAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0.9, 0.6],
+      });
 
   return (
     <Pressable
@@ -409,6 +462,8 @@ export function AskieCompanion({
             { translateY },
             { rotate },
             { scale: touchScale },
+            { scaleY: torsoScaleY },
+            { scaleX: torsoScaleX },
           ],
         }}
       >
@@ -537,7 +592,17 @@ export function AskieCompanion({
           ]}
         >
           {/* 3D Specular Lighting / Sheen */}
-          <View style={[styles.avatarSheen, { borderRadius: effectiveRadius - 2 }]} />
+          <View
+            style={[
+              styles.avatarSheen,
+              {
+                borderTopLeftRadius: Math.max(0, effectiveRadius - 1),
+                borderTopRightRadius: Math.max(0, effectiveRadius - 1),
+                borderBottomLeftRadius: 0,
+                borderBottomRightRadius: 0,
+              },
+            ]}
+          />
 
           {/* Cute Tuft / Ear Accent */}
           <View
@@ -616,6 +681,7 @@ export function AskieCompanion({
                 {/* Pupil & Specular Sparkle */}
                 <View style={styles.eyePupil}>
                   <View style={styles.eyeSparkle} />
+                  <View style={styles.eyeSparkleSub} />
                 </View>
 
                 {/* Animated Eyelid - clean downward slide without pupil deformation */}
@@ -644,6 +710,7 @@ export function AskieCompanion({
               >
                 <View style={styles.eyePupil}>
                   <View style={styles.eyeSparkle} />
+                  <View style={styles.eyeSparkleSub} />
                 </View>
 
                 {/* Animated Eyelid */}
@@ -677,6 +744,32 @@ export function AskieCompanion({
             </Animated.View>
           </View>
 
+          {/* Cute Belly Patch with feather marks (matching video example) */}
+          {!isAvatar && isStanding && (
+            <View
+              style={[
+                styles.bellyPatch,
+                {
+                  width: config.container * 0.58,
+                  height: config.container * 0.33,
+                  borderRadius: config.container * 0.29,
+                  bottom: config.container * 0.04,
+                },
+              ]}
+              pointerEvents="none"
+            >
+              <View style={styles.scallopRow}>
+                <View style={[styles.featherScallop, { width: config.container * 0.085, height: config.container * 0.045 }]} />
+                <View style={[styles.featherScallop, { width: config.container * 0.085, height: config.container * 0.045 }]} />
+                <View style={[styles.featherScallop, { width: config.container * 0.085, height: config.container * 0.045 }]} />
+              </View>
+              <View style={[styles.scallopRow, { marginTop: 2 }]}>
+                <View style={[styles.featherScallop, { width: config.container * 0.085, height: config.container * 0.045 }]} />
+                <View style={[styles.featherScallop, { width: config.container * 0.085, height: config.container * 0.045 }]} />
+              </View>
+            </View>
+          )}
+
           {/* Thinking Lightbulb / Question Balloon */}
           {state === 'thinking' ? (
             <View style={styles.thinkingBalloon}>
@@ -692,47 +785,102 @@ export function AskieCompanion({
           ) : null}
         </LinearGradient>
 
-        {/* Small Cute Feet (standing character) */}
+        {/* Cute 3-Toed Chick/Owl Feet (grounded, matching video example) */}
         {isStanding && (
-          <>
+          <View style={styles.feetRow} pointerEvents="none">
+            {/* Left Foot (Viewer's left) */}
             <View
               style={[
-                styles.foot,
+                styles.threeToedFoot,
                 {
-                  width: config.container * 0.22,
-                  height: config.container * 0.1,
-                  borderRadius: config.container * 0.05,
+                  left: config.container * 0.17,
                   bottom: -config.container * 0.05,
-                  left: config.container * 0.22,
                 },
               ]}
-            />
+            >
+              <View
+                style={[
+                  styles.toeBump,
+                  {
+                    width: config.container * 0.08,
+                    height: config.container * 0.078,
+                  },
+                ]}
+              />
+              <View
+                style={[
+                  styles.toeBump,
+                  styles.toeBumpMid,
+                  {
+                    width: config.container * 0.092,
+                    height: config.container * 0.090,
+                  },
+                ]}
+              />
+              <View
+                style={[
+                  styles.toeBump,
+                  {
+                    width: config.container * 0.08,
+                    height: config.container * 0.078,
+                  },
+                ]}
+              />
+            </View>
+
+            {/* Right Foot (Viewer's right) */}
             <View
               style={[
-                styles.foot,
+                styles.threeToedFoot,
                 {
-                  width: config.container * 0.22,
-                  height: config.container * 0.1,
-                  borderRadius: config.container * 0.05,
+                  right: config.container * 0.17,
                   bottom: -config.container * 0.05,
-                  right: config.container * 0.22,
                 },
               ]}
-            />
-          </>
+            >
+              <View
+                style={[
+                  styles.toeBump,
+                  {
+                    width: config.container * 0.08,
+                    height: config.container * 0.078,
+                  },
+                ]}
+              />
+              <View
+                style={[
+                  styles.toeBump,
+                  styles.toeBumpMid,
+                  {
+                    width: config.container * 0.092,
+                    height: config.container * 0.090,
+                  },
+                ]}
+              />
+              <View
+                style={[
+                  styles.toeBump,
+                  {
+                    width: config.container * 0.08,
+                    height: config.container * 0.078,
+                  },
+                ]}
+              />
+            </View>
+          </View>
         )}
       </Animated.View>
 
-      {/* Ground Floor Shadow underneath standing character */}
+      {/* Ground Floor Contact Shadow underneath standing character (flush against toes) */}
       {isStanding && (
         <Animated.View
           style={[
             styles.groundShadow,
             {
-              width: config.container * 0.72,
-              height: Math.max(7, config.container * 0.1),
-              borderRadius: config.container * 0.36,
-              marginTop: config.container * 0.07,
+              width: config.container * 0.78,
+              height: Math.max(7, config.container * 0.085),
+              borderRadius: config.container * 0.39,
+              marginTop: -config.container * 0.035,
               transform: [{ scaleX: shadowScaleX }],
               opacity: shadowOpacity,
             },
@@ -937,7 +1085,70 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 3,
   },
+  feetRow: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 1,
+    zIndex: 2,
+    elevation: 3,
+  },
+  threeToedFoot: {
+    position: 'absolute',
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  eyeSparkleSub: {
+    position: 'absolute',
+    bottom: '12%',
+    left: '14%',
+    width: '22%',
+    height: '22%',
+    borderRadius: 100,
+    backgroundColor: 'rgba(255, 255, 255, 0.75)',
+  },
+  toeBump: {
+    backgroundColor: '#FFB800',
+    borderWidth: 1.4,
+    borderColor: '#E69500',
+    borderBottomWidth: 2.4,
+    borderBottomColor: '#CC7A00',
+    borderRadius: 999,
+    marginHorizontal: -1,
+  },
+  toeBumpMid: {
+    backgroundColor: '#FFC81A',
+    zIndex: 3,
+  },
+  bellyPatch: {
+    position: 'absolute',
+    alignSelf: 'center',
+    backgroundColor: '#FFE3E8',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 2,
+    zIndex: 1,
+  },
+  scallopRow: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  featherScallop: {
+    borderBottomWidth: 1.8,
+    borderLeftWidth: 1.4,
+    borderRightWidth: 1.4,
+    borderTopWidth: 0,
+    borderColor: '#FF9EAF',
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 6,
+  },
   groundShadow: {
-    backgroundColor: 'rgba(0, 0, 0, 0.14)',
+    backgroundColor: 'rgba(15, 23, 42, 0.25)',
+    alignSelf: 'center',
   },
 });
