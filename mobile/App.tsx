@@ -116,6 +116,7 @@ export default function App() {
     const onBackPress = () => {
       if (screen === 'liveVoice' || screen === 'transcript' || screen === 'paywall') {
         setActiveThread(null);
+        setShellTab('home');
         setScreen('main');
         return true;
       }

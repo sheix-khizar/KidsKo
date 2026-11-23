@@ -50,13 +50,30 @@ export default function MainShellScreen({
   onTabChange,
 }: Props) {
   const insets = useSafeAreaInsets();
-  const [tab, setTab] = useState<TabKey>(forcedTab || 'home');
+  const [localTab, setLocalTab] = useState<TabKey>(forcedTab || 'home');
+  const [prevForcedTab, setPrevForcedTab] = useState(forcedTab);
 
-  useEffect(() => {
-    if (forcedTab) {
-      setTab(forcedTab);
+  if (forcedTab && forcedTab !== prevForcedTab) {
+    setPrevForcedTab(forcedTab);
+    setLocalTab(forcedTab);
+  }
+
+  const tab = forcedTab ?? localTab;
+
+  const changeTab = (nextTab: TabKey) => {
+    if (tab === 'parents' && nextTab !== 'parents') {
+      setParentsUnlocked(false);
     }
-  }, [forcedTab]);
+    if (nextTab === 'call') {
+      isPremiumActive().then(setIsPremium).catch(() => {});
+      SecureStore.getItemAsync('kidsko_parent_curfew')
+        .then((val) => setCurfewEnabled(val === 'true'))
+        .catch(() => {});
+    }
+    setLocalTab(nextTab);
+    setPrevForcedTab(nextTab);
+    onTabChange?.(nextTab);
+  };
   const [isPremium, setIsPremium] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
   const [activeStudent, setActiveStudent] = useState<Student | null>(null);
@@ -125,7 +142,7 @@ export default function MainShellScreen({
         return true;
       }
       if (tab !== 'chat') {
-        setTab('chat');
+        changeTab('chat');
         return true;
       }
       return false; // let OS exit app on chat tab
@@ -136,17 +153,7 @@ export default function MainShellScreen({
 
   // Tab change handler: re-lock parents tab whenever leaving it, refresh billing on call tab
   const handleTabSelect = (nextTab: TabKey) => {
-    if (tab === 'parents' && nextTab !== 'parents') {
-      setParentsUnlocked(false);
-    }
-    if (nextTab === 'call') {
-      isPremiumActive().then(setIsPremium).catch(() => {});
-      SecureStore.getItemAsync('kidsko_parent_curfew')
-        .then((val) => setCurfewEnabled(val === 'true'))
-        .catch(() => {});
-    }
-    setTab(nextTab);
-    onTabChange?.(nextTab);
+    changeTab(nextTab);
   };
 
   const isCurfewActive = () => {
@@ -209,8 +216,7 @@ export default function MainShellScreen({
                   onStartCall(activeStudent, 'video');
                 }}
                 onSelectTopic={(prompt) => {
-                  setTab('chat');
-                  onTabChange?.('chat');
+                  changeTab('chat');
                 }}
                 onOpenProfile={() => setShowSwitcherModal(true)}
               />
@@ -268,8 +274,7 @@ export default function MainShellScreen({
               studentName={activeStudent.student_name}
               embedded={true}
               onBack={() => {
-                setTab('home');
-                onTabChange?.('home');
+                changeTab('home');
               }}
               onLimitReached={onLimitReached}
               onSwitchStudent={() => setShowSwitcherModal(true)}
@@ -314,7 +319,10 @@ export default function MainShellScreen({
                   ]}
                   onPress={() => {
                     console.log('[MainShell] Talk to me tapped!');
-                    if (activeStudent) onStartCall(activeStudent, 'voice');
+                    if (activeStudent) {
+                      changeTab('home');
+                      onStartCall(activeStudent, 'voice');
+                    }
                   }}
                   accessibilityRole="button"
                   accessibilityLabel="Talk to me"
@@ -331,7 +339,10 @@ export default function MainShellScreen({
                   ]}
                   onPress={() => {
                     console.log('[MainShell] Show me tapped!');
-                    if (activeStudent) onStartCall(activeStudent, 'video');
+                    if (activeStudent) {
+                      changeTab('home');
+                      onStartCall(activeStudent, 'video');
+                    }
                   }}
                   accessibilityRole="button"
                   accessibilityLabel="Show me"
@@ -353,7 +364,7 @@ export default function MainShellScreen({
                 <ParentalGate
                   visible={true}
                   onSuccess={() => setParentsUnlocked(true)}
-                  onCancel={() => setTab('chat')}
+                  onCancel={() => changeTab('chat')}
                 />
               </View>
             ) : (
@@ -368,7 +379,7 @@ export default function MainShellScreen({
                   onRequestLogout={() => setLogoutGateVisible(true)}
                   onRequestClose={() => {
                     setParentsUnlocked(false);
-                    setTab('chat');
+                    changeTab('chat');
                   }}
                   onAccountDeleted={() => onLogout()}
                   billingVersion={billingVersion}
