@@ -209,7 +209,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
         `Grade: ${grade}`,
         `Avatar: ${AVATARS[avatarIndex].emoji}`,
         `Interests: ${Array.from(selectedInterests).join(', ')}`,
-        `Daily Question Limit: ${dailyLimit === '∞' ? 'Unlimited' : dailyLimit + ' questions'}`,
+        `Weekly Question Limit: ${dailyLimit === '∞' ? 'Unlimited' : dailyLimit + ' questions'}`,
         `Safety Filter: ${strictFilter ? 'Strict' : 'Standard'}`,
       ];
 
@@ -299,7 +299,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
                 </View>
                 <View style={styles.stepInfo}>
                   <Text style={styles.stepTitle}>Safety and limits</Text>
-                  <Text style={styles.stepDesc}>Daily limit and content filter</Text>
+                  <Text style={styles.stepDesc}>Weekly limit and content filter</Text>
                 </View>
               </View>
             </View>
@@ -1099,7 +1099,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
       {
         emoji: '⏰',
         title: 'Set healthy limits',
-        desc: 'Set daily question limits and study hours. Kidsko pauses automatically when time is up.',
+        desc: 'Set weekly question limits and study hours. Kidsko pauses automatically when time is up.',
       },
       {
         emoji: '👨‍👩‍👧',
@@ -1308,7 +1308,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
               <View style={styles.stepInfo}>
                 <Text style={styles.stepTitle}>Safety and limits</Text>
                 <Text style={styles.stepDesc}>
-                  {dailyLimit === '∞' ? 'No limit' : `${dailyLimit} questions / day`}
+                  {dailyLimit === '∞' ? 'No limit' : `${dailyLimit} questions / week`}
                 </Text>
               </View>
               <Text style={styles.checkGreen}>✓</Text>
