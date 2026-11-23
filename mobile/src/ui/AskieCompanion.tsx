@@ -26,11 +26,11 @@ type Props = {
 };
 
 const SIZE_CONFIG: Record<CompanionSize, { container: number; radius: number; eyeSize: number; beakSize: number }> = {
-  xs: { container: 36, radius: 13, eyeSize: 11, beakSize: 7 },
-  s: { container: 44, radius: 15, eyeSize: 13, beakSize: 8 },
-  m: { container: 80, radius: 26, eyeSize: 22, beakSize: 12 },
-  l: { container: 130, radius: 42, eyeSize: 34, beakSize: 18 },
-  xl: { container: 170, radius: 54, eyeSize: 44, beakSize: 24 },
+  xs: { container: 36, radius: 12, eyeSize: 10, beakSize: 6 },
+  s: { container: 44, radius: 15, eyeSize: 12.5, beakSize: 7.5 },
+  m: { container: 80, radius: 26, eyeSize: 22, beakSize: 13 },
+  l: { container: 130, radius: 42, eyeSize: 35, beakSize: 20 },
+  xl: { container: 170, radius: 54, eyeSize: 46, beakSize: 26 },
 };
 
 /**
@@ -540,11 +540,65 @@ export function AskieCompanion({
           <View style={[styles.avatarSheen, { borderRadius: effectiveRadius - 2 }]} />
 
           {/* Cute Tuft / Ear Accent */}
-          <View style={[styles.earAccentL, { top: -config.container * 0.08 }]} />
-          <View style={[styles.earAccentR, { top: -config.container * 0.08 }]} />
+          <View
+            style={[
+              styles.earAccentL,
+              {
+                width: config.container * 0.12,
+                height: config.container * 0.16,
+                borderRadius: config.container * 0.08,
+                top: -config.container * 0.07,
+                left: shape === 'circle' ? '22%' : '18%',
+              },
+            ]}
+          />
+          <View
+            style={[
+              styles.earAccentR,
+              {
+                width: config.container * 0.12,
+                height: config.container * 0.16,
+                borderRadius: config.container * 0.08,
+                top: -config.container * 0.07,
+                right: shape === 'circle' ? '22%' : '18%',
+              },
+            ]}
+          />
 
           {/* Facial Features Container */}
-          <View style={styles.faceContainer}>
+          <View style={[styles.faceContainer, { paddingTop: isAvatar ? 0 : '3%' }]}>
+            {/* Rosy Cheeks - behind eyes so eye orbs remain bright pure white */}
+            <View
+              style={[
+                styles.cheeksRow,
+                {
+                  width: '84%',
+                  top: config.eyeSize * 0.38,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.cheek,
+                  {
+                    width: config.eyeSize * 0.50,
+                    height: config.eyeSize * 0.28,
+                    borderRadius: config.eyeSize * 0.25,
+                  },
+                ]}
+              />
+              <View
+                style={[
+                  styles.cheek,
+                  {
+                    width: config.eyeSize * 0.50,
+                    height: config.eyeSize * 0.28,
+                    borderRadius: config.eyeSize * 0.25,
+                  },
+                ]}
+              />
+            </View>
+
             {/* Eyes Row */}
             <View style={styles.eyesRow}>
               {/* Left Eye */}
@@ -605,20 +659,16 @@ export function AskieCompanion({
               </View>
             </View>
 
-            {/* Rosy Cheeks */}
-            <View style={styles.cheeksRow}>
-              <View style={[styles.cheek, { width: config.eyeSize * 0.6, height: config.eyeSize * 0.35 }]} />
-              <View style={[styles.cheek, { width: config.eyeSize * 0.6, height: config.eyeSize * 0.35 }]} />
-            </View>
-
-            {/* Beak / Talking Mouth */}
+            {/* Beak / Talking Mouth - tucked between bottom of eyes */}
             <Animated.View
               style={[
                 styles.beak,
                 {
-                  width: config.beakSize * 1.3,
-                  height: config.beakSize * 0.85,
-                  borderRadius: config.beakSize * 0.4,
+                  width: config.container * 0.18,
+                  height: config.container * 0.09,
+                  borderRadius: config.container * 0.045,
+                  marginTop: -config.eyeSize * 0.20,
+                  borderWidth: Math.max(1, config.container * 0.015),
                   transform: [{ scaleY: state === 'celebrate' ? 1.4 : mouthScaleY }],
                 },
               ]}
@@ -731,56 +781,52 @@ const styles = StyleSheet.create({
   },
   earAccentL: {
     position: 'absolute',
-    left: '18%',
-    width: 14,
-    height: 18,
-    borderRadius: 7,
     backgroundColor: '#FF7675',
-    transform: [{ rotate: '-25deg' }],
+    transform: [{ rotate: '-22deg' }],
+    zIndex: 0,
   },
   earAccentR: {
     position: 'absolute',
-    right: '18%',
-    width: 14,
-    height: 18,
-    borderRadius: 7,
-    backgroundColor: '#E17055',
-    transform: [{ rotate: '25deg' }],
+    backgroundColor: '#B85338',
+    transform: [{ rotate: '22deg' }],
+    zIndex: 0,
   },
   faceContainer: {
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
-    paddingTop: '6%',
+    position: 'relative',
   },
   eyesRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    width: '56%',
+    width: '62%',
     alignItems: 'center',
+    zIndex: 2,
   },
   eyeOrb: {
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.12,
-    shadowRadius: 3,
+    shadowRadius: 2,
+    elevation: 2,
   },
   eyePupil: {
-    width: '64%',
-    height: '64%',
+    width: '68%',
+    height: '68%',
     borderRadius: 100,
     backgroundColor: '#1E272E',
     justifyContent: 'flex-start',
     alignItems: 'flex-end',
-    paddingTop: '12%',
-    paddingRight: '12%',
+    paddingTop: '10%',
+    paddingRight: '10%',
   },
   eyeSparkle: {
-    width: '38%',
-    height: '38%',
+    width: '40%',
+    height: '40%',
     borderRadius: 100,
     backgroundColor: '#FFFFFF',
   },
@@ -790,36 +836,37 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: '#FF6B6B',
-    borderBottomWidth: 3,
+    borderBottomWidth: 2.5,
     borderBottomColor: '#E65555',
     zIndex: 5,
   },
   cheeksRow: {
     position: 'absolute',
-    top: '38%',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    width: '74%',
+    zIndex: 1,
   },
   cheek: {
-    backgroundColor: 'rgba(255, 118, 117, 0.45)',
-    borderRadius: 12,
+    backgroundColor: 'rgba(255, 118, 117, 0.35)',
   },
   beak: {
     backgroundColor: '#FDCB6E',
-    marginTop: -2,
-    borderWidth: 1,
     borderColor: '#E17055',
     overflow: 'hidden',
     position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 3,
   },
   beakHighlight: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    height: '40%',
-    backgroundColor: 'rgba(255, 255, 255, 0.45)',
+    height: '42%',
+    backgroundColor: 'rgba(255, 255, 255, 0.40)',
+    borderTopLeftRadius: 4,
+    borderTopRightRadius: 4,
   },
   thinkingBalloon: {
     position: 'absolute',
