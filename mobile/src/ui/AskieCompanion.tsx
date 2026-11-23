@@ -56,9 +56,17 @@ export function AskieCompanion({
   // Animation values
   const floatAnim = useRef(new Animated.Value(0)).current;
   const waveAnim = useRef(new Animated.Value(0)).current;
+  const waveLiftAnim = useRef(new Animated.Value(0)).current;
   const blinkAnim = useRef(new Animated.Value(0)).current;
   const mouthAnim = useRef(new Animated.Value(0)).current;
   const tiltAnim = useRef(new Animated.Value(0)).current;
+  const bodyTiltAnim = useRef(new Animated.Value(0)).current;
+  const leftWingAngleAnim = useRef(new Animated.Value(-6)).current;
+  const rightWingAngleAnim = useRef(new Animated.Value(6)).current;
+  const earWiggleAnim = useRef(new Animated.Value(0)).current;
+  const lookAnimX = useRef(new Animated.Value(0)).current;
+  const lookAnimY = useRef(new Animated.Value(0)).current;
+  const bounceHopAnim = useRef(new Animated.Value(0)).current;
   const pulseRing1 = useRef(new Animated.Value(0)).current;
   const pulseRing2 = useRef(new Animated.Value(0)).current;
   const touchScale = useRef(new Animated.Value(1)).current;
@@ -91,10 +99,18 @@ export function AskieCompanion({
     return () => hover.stop();
   }, [state, isAvatar, isStanding, reduceMotion]);
 
-  // 2. Hand Waving for standing mascot: waves periodically every 5-7 seconds, then rests down at side
+  // 2. Rich Expressive Mascot Animations (periodic wave, curious tilt, ear wiggle, wing flutter, pupil glance)
   useEffect(() => {
     if (reduceMotion || !isStanding || isAvatar) {
       waveAnim.setValue(0);
+      waveLiftAnim.setValue(0);
+      leftWingAngleAnim.setValue(-6);
+      rightWingAngleAnim.setValue(6);
+      bodyTiltAnim.setValue(0);
+      earWiggleAnim.setValue(0);
+      lookAnimX.setValue(0);
+      lookAnimY.setValue(0);
+      bounceHopAnim.setValue(0);
       return;
     }
 
@@ -105,43 +121,137 @@ export function AskieCompanion({
       // Joyful fast waving loop in celebration state
       const celebrateLoop = Animated.loop(
         Animated.sequence([
-          Animated.timing(waveAnim, { toValue: 0.54, duration: 160, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-          Animated.timing(waveAnim, { toValue: 0.85, duration: 160, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.parallel([
+            Animated.timing(leftWingAngleAnim, { toValue: 145, duration: 160, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+            Animated.timing(rightWingAngleAnim, { toValue: -50, duration: 160, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+            Animated.timing(waveLiftAnim, { toValue: 1, duration: 160, useNativeDriver: true }),
+          ]),
+          Animated.parallel([
+            Animated.timing(leftWingAngleAnim, { toValue: 115, duration: 160, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+            Animated.timing(rightWingAngleAnim, { toValue: -30, duration: 160, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+            Animated.timing(waveLiftAnim, { toValue: 0.8, duration: 160, useNativeDriver: true }),
+          ]),
         ])
       );
       celebrateLoop.start();
       return () => celebrateLoop.stop();
     }
 
-    const scheduleWave = (delayMs: number) => {
+    let actionIndex = 0;
+    const IDLE_ACTIONS = ['wave', 'curiousTilt', 'wingFlutter', 'glanceLook'] as const;
+
+    const scheduleNext = (delayMs: number) => {
       timer = setTimeout(() => {
         if (!isMounted) return;
+        const currentAction = IDLE_ACTIONS[actionIndex % IDLE_ACTIONS.length];
+        actionIndex++;
 
-        // Wave Cycle (1.75s total):
-        // 0 -> 0.20: Arm raises up to greeting position
-        // 0.20 -> 0.38: Wave in
-        // 0.38 -> 0.54: Wave out
-        // 0.54 -> 0.70: Wave in
-        // 0.70 -> 0.85: Wave out
-        // 0.85 -> 1.00: Arm lowers smoothly back to resting side
-        Animated.timing(waveAnim, {
-          toValue: 1,
-          duration: 1750,
-          easing: Easing.linear,
-          useNativeDriver: true,
-        }).start(() => {
-          if (!isMounted) return;
-          waveAnim.setValue(0); // Sits at 0 (arm completely at side) during idle rest
-
-          // Schedule next wave after 5 to 7 seconds
-          const nextDelay = Math.random() * 2000 + 5000;
-          scheduleWave(nextDelay);
-        });
+        if (currentAction === 'wave') {
+          // Action 1: Cheerful Hand Wave with animated motion arcs
+          Animated.parallel([
+            Animated.sequence([
+              // Raise arm to greeting position
+              Animated.timing(waveLiftAnim, { toValue: 1, duration: 320, easing: Easing.out(Easing.back(1.4)), useNativeDriver: true }),
+              Animated.delay(1150),
+              // Lower arm back to side
+              Animated.timing(waveLiftAnim, { toValue: 0, duration: 380, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+            ]),
+            Animated.sequence([
+              // Wave 1
+              Animated.timing(leftWingAngleAnim, { toValue: 132, duration: 320, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+              Animated.timing(leftWingAngleAnim, { toValue: 112, duration: 190, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+              // Wave 2
+              Animated.timing(leftWingAngleAnim, { toValue: 136, duration: 190, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+              Animated.timing(leftWingAngleAnim, { toValue: 112, duration: 190, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+              // Wave 3 & return to resting side
+              Animated.timing(leftWingAngleAnim, { toValue: 132, duration: 190, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+              Animated.timing(leftWingAngleAnim, { toValue: -6, duration: 380, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+            ]),
+            Animated.sequence([
+              Animated.timing(waveAnim, { toValue: 1, duration: 1850, easing: Easing.linear, useNativeDriver: true }),
+              Animated.timing(waveAnim, { toValue: 0, duration: 0, useNativeDriver: true }),
+            ]),
+            Animated.sequence([
+              Animated.timing(bodyTiltAnim, { toValue: 3.5, duration: 350, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+              Animated.delay(1100),
+              Animated.timing(bodyTiltAnim, { toValue: 0, duration: 400, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+            ]),
+          ]).start(() => {
+            if (!isMounted) return;
+            scheduleNext(Math.random() * 2000 + 3500);
+          });
+        } else if (currentAction === 'curiousTilt') {
+          // Action 2: Inquisitive Head Tilt, Ear Wiggle & Pupil Glance
+          Animated.parallel([
+            Animated.sequence([
+              Animated.timing(bodyTiltAnim, { toValue: -5.5, duration: 350, easing: Easing.out(Easing.back(1.5)), useNativeDriver: true }),
+              Animated.delay(1200),
+              Animated.timing(bodyTiltAnim, { toValue: 0, duration: 400, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+            ]),
+            Animated.sequence([
+              Animated.delay(150),
+              Animated.timing(earWiggleAnim, { toValue: 1, duration: 110, useNativeDriver: true }),
+              Animated.timing(earWiggleAnim, { toValue: -0.8, duration: 110, useNativeDriver: true }),
+              Animated.timing(earWiggleAnim, { toValue: 0.6, duration: 110, useNativeDriver: true }),
+              Animated.timing(earWiggleAnim, { toValue: 0, duration: 120, useNativeDriver: true }),
+            ]),
+            Animated.sequence([
+              Animated.timing(lookAnimX, { toValue: 0.85, duration: 300, useNativeDriver: true }),
+              Animated.delay(1200),
+              Animated.timing(lookAnimX, { toValue: 0, duration: 350, useNativeDriver: true }),
+            ]),
+          ]).start(() => {
+            if (!isMounted) return;
+            scheduleNext(Math.random() * 2000 + 3500);
+          });
+        } else if (currentAction === 'wingFlutter') {
+          // Action 3: Playful Double-Wing Flutter & Happy Micro-Hop
+          Animated.parallel([
+            Animated.sequence([
+              Animated.timing(leftWingAngleAnim, { toValue: 26, duration: 150, useNativeDriver: true }),
+              Animated.timing(leftWingAngleAnim, { toValue: -2, duration: 130, useNativeDriver: true }),
+              Animated.timing(leftWingAngleAnim, { toValue: 24, duration: 140, useNativeDriver: true }),
+              Animated.timing(leftWingAngleAnim, { toValue: -6, duration: 180, useNativeDriver: true }),
+            ]),
+            Animated.sequence([
+              Animated.timing(rightWingAngleAnim, { toValue: -26, duration: 150, useNativeDriver: true }),
+              Animated.timing(rightWingAngleAnim, { toValue: 2, duration: 130, useNativeDriver: true }),
+              Animated.timing(rightWingAngleAnim, { toValue: -24, duration: 140, useNativeDriver: true }),
+              Animated.timing(rightWingAngleAnim, { toValue: 6, duration: 180, useNativeDriver: true }),
+            ]),
+            Animated.sequence([
+              Animated.timing(bounceHopAnim, { toValue: 1, duration: 250, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+              Animated.timing(bounceHopAnim, { toValue: 0, duration: 300, easing: Easing.bounce, useNativeDriver: true }),
+            ]),
+            Animated.sequence([
+              Animated.timing(earWiggleAnim, { toValue: 0.8, duration: 130, useNativeDriver: true }),
+              Animated.timing(earWiggleAnim, { toValue: -0.6, duration: 130, useNativeDriver: true }),
+              Animated.timing(earWiggleAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
+            ]),
+          ]).start(() => {
+            if (!isMounted) return;
+            scheduleNext(Math.random() * 2000 + 3500);
+          });
+        } else {
+          // Action 4: Curious Glance Around with Eye Pupils & Natural Blink
+          Animated.sequence([
+            Animated.timing(lookAnimX, { toValue: -0.85, duration: 320, useNativeDriver: true }),
+            Animated.delay(700),
+            Animated.timing(lookAnimX, { toValue: 0.85, duration: 420, useNativeDriver: true }),
+            Animated.delay(600),
+            Animated.timing(blinkAnim, { toValue: 1, duration: 70, useNativeDriver: true }),
+            Animated.timing(blinkAnim, { toValue: 0, duration: 90, useNativeDriver: true }),
+            Animated.timing(lookAnimX, { toValue: 0, duration: 320, useNativeDriver: true }),
+          ]).start(() => {
+            if (!isMounted) return;
+            scheduleNext(Math.random() * 2000 + 3500);
+          });
+        }
       }, delayMs);
     };
 
-    // Initial greeting wave after 1.5 seconds, then every 5-7 seconds
-    scheduleWave(1500);
+    // First greeting wave starts at 1.2s, then cycles through varied actions
+    scheduleNext(1200);
 
     return () => {
       isMounted = false;
@@ -288,21 +398,36 @@ export function AskieCompanion({
     if (!interactive) return;
     Animated.sequence([
       Animated.spring(touchScale, { toValue: 0.90, friction: 4, useNativeDriver: true }),
-      Animated.spring(touchScale, { toValue: 1.05, friction: 3, useNativeDriver: true }),
+      Animated.spring(touchScale, { toValue: 1.08, friction: 3, useNativeDriver: true }),
       Animated.spring(touchScale, { toValue: 1, friction: 5, useNativeDriver: true }),
     ]).start();
 
-    // Trigger immediate joyful greeting wave on tap!
+    // Joyful celebration combo on tap!
     if (isStanding && !isAvatar && state !== 'celebrate') {
-      waveAnim.setValue(0);
-      Animated.timing(waveAnim, {
-        toValue: 1,
-        duration: 1750,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }).start(() => {
-        waveAnim.setValue(0);
-      });
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(leftWingAngleAnim, { toValue: 28, duration: 140, useNativeDriver: true }),
+          Animated.timing(leftWingAngleAnim, { toValue: -2, duration: 120, useNativeDriver: true }),
+          Animated.timing(leftWingAngleAnim, { toValue: 24, duration: 130, useNativeDriver: true }),
+          Animated.timing(leftWingAngleAnim, { toValue: -6, duration: 160, useNativeDriver: true }),
+        ]),
+        Animated.sequence([
+          Animated.timing(rightWingAngleAnim, { toValue: -28, duration: 140, useNativeDriver: true }),
+          Animated.timing(rightWingAngleAnim, { toValue: 2, duration: 120, useNativeDriver: true }),
+          Animated.timing(rightWingAngleAnim, { toValue: -24, duration: 130, useNativeDriver: true }),
+          Animated.timing(rightWingAngleAnim, { toValue: 6, duration: 160, useNativeDriver: true }),
+        ]),
+        Animated.sequence([
+          Animated.timing(bounceHopAnim, { toValue: 1, duration: 220, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+          Animated.timing(bounceHopAnim, { toValue: 0, duration: 280, easing: Easing.bounce, useNativeDriver: true }),
+        ]),
+        Animated.sequence([
+          Animated.timing(earWiggleAnim, { toValue: 1, duration: 100, useNativeDriver: true }),
+          Animated.timing(earWiggleAnim, { toValue: -0.8, duration: 100, useNativeDriver: true }),
+          Animated.timing(earWiggleAnim, { toValue: 0.6, duration: 100, useNativeDriver: true }),
+          Animated.timing(earWiggleAnim, { toValue: 0, duration: 110, useNativeDriver: true }),
+        ]),
+      ]).start();
     }
 
     onPress?.();
@@ -312,8 +437,15 @@ export function AskieCompanion({
   // When standing idle, translateY is 0 so feet stay firmly anchored on the floor!
   const isStandingAndIdle = isStanding && state !== 'celebrate';
 
-  const translateY = isAvatar || isStandingAndIdle
+  const hopTranslateY = bounceHopAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -7],
+  });
+
+  const translateY = isAvatar
     ? 0
+    : isStandingAndIdle
+    ? hopTranslateY
     : floatAnim.interpolate({
         inputRange: [0, 1],
         outputRange: [0, state === 'celebrate' ? -12 : -6],
@@ -334,12 +466,6 @@ export function AskieCompanion({
       })
     : 1;
 
-  // Gentle wave body tilt
-  const waveBodyTilt = waveAnim.interpolate({
-    inputRange: [0, 0.20, 0.85, 1],
-    outputRange: ['0deg', '3.5deg', '3.5deg', '0deg'],
-  });
-
   const rotate = isAvatar
     ? '0deg'
     : state === 'thinking'
@@ -348,7 +474,10 @@ export function AskieCompanion({
         outputRange: ['-8deg', '0deg', '8deg'],
       })
     : isStanding
-    ? waveBodyTilt
+    ? bodyTiltAnim.interpolate({
+        inputRange: [-10, 0, 10],
+        outputRange: ['-10deg', '0deg', '10deg'],
+      })
     : '0deg';
 
   const mouthScaleY = mouthAnim.interpolate({
@@ -361,38 +490,53 @@ export function AskieCompanion({
     outputRange: [-config.eyeSize, 0],
   });
 
+  const pupilTranslateX = lookAnimX.interpolate({
+    inputRange: [-1, 0, 1],
+    outputRange: [-config.eyeSize * 0.14, 0, config.eyeSize * 0.14],
+  });
+
+  const pupilTranslateY = lookAnimY.interpolate({
+    inputRange: [-1, 0, 1],
+    outputRange: [-config.eyeSize * 0.10, 0, config.eyeSize * 0.10],
+  });
+
+  const earLRotate = earWiggleAnim.interpolate({
+    inputRange: [-1, 0, 1],
+    outputRange: ['-14deg', '-22deg', '-34deg'],
+  });
+
+  const earRRotate = earWiggleAnim.interpolate({
+    inputRange: [-1, 0, 1],
+    outputRange: ['14deg', '22deg', '34deg'],
+  });
+
   const ringScale1 = pulseRing1.interpolate({ inputRange: [0, 1], outputRange: [1, 1.45] });
   const ringOpacity1 = pulseRing1.interpolate({ inputRange: [0, 0.7, 1], outputRange: [0.6, 0.3, 0] });
 
   const ringScale2 = pulseRing2.interpolate({ inputRange: [0, 1], outputRange: [1, 1.45] });
   const ringOpacity2 = pulseRing2.interpolate({ inputRange: [0, 0.7, 1], outputRange: [0.6, 0.3, 0] });
 
-  // Left wing (Viewer's left = Mascot's right): Waving Hand (matching video example)
-  // At rest (0): hangs down naturally alongside left body flank (18deg)
-  // During wave (0.2 -> 0.85): raises and waves hello
-  // At 1.0: lowers smoothly back to resting side (18deg)
-  const leftWingRotate = isStanding
-    ? (state === 'celebrate'
-        ? waveAnim.interpolate({
-            inputRange: [0, 0.54, 0.85, 1],
-            outputRange: ['18deg', '120deg', '155deg', '18deg'],
-          })
-        : waveAnim.interpolate({
-            inputRange: [0, 0.20, 0.38, 0.54, 0.70, 0.85, 1],
-            outputRange: ['18deg', '138deg', '118deg', '142deg', '118deg', '142deg', '18deg'],
-          }))
-    : '-12deg';
+  // Left wing rotation: hugs flank at rest (-6deg), flutters or waves
+  const leftWingRotate = leftWingAngleAnim.interpolate({
+    inputRange: [-180, 180],
+    outputRange: ['-180deg', '180deg'],
+  });
 
-  // Right wing (Viewer's right = Mascot's left): Resting Hand (matching video example)
-  // Rests naturally downwards along the right side of the body
-  const rightWingRotate = isStanding
-    ? (state === 'celebrate'
-        ? waveAnim.interpolate({
-            inputRange: [0, 1],
-            outputRange: ['-18deg', '-55deg'],
-          })
-        : '-18deg')
-    : '12deg';
+  // Right wing rotation: hugs flank at rest (6deg), flutters
+  const rightWingRotate = rightWingAngleAnim.interpolate({
+    inputRange: [-180, 180],
+    outputRange: ['-180deg', '180deg'],
+  });
+
+  // Left wing shoulder translation during wave
+  const leftWingTranslateX = waveLiftAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -config.container * 0.04],
+  });
+  const leftWingTranslateY = waveLiftAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -config.container * 0.10],
+  });
 
   // Waving motion arcs: ONLY visible when arm is raised and actively waving!
   const waveArcsOpacity = waveAnim.interpolate({
@@ -529,18 +673,22 @@ export function AskieCompanion({
           </Animated.View>
         )}
 
-        {/* Left Wing / Hand - Waving Hand (Viewer's left = Mascot's right hand) */}
+        {/* Left Wing / Hand - Attached flush with torso (ZERO gap) */}
         {isStanding && (
           <Animated.View
             style={[
               styles.wingL,
               {
                 width: config.container * 0.22,
-                height: config.container * 0.42,
+                height: config.container * 0.40,
                 borderRadius: config.container * 0.11,
-                left: -config.container * 0.18,
-                top: config.container * 0.40,
-                transform: [{ rotate: leftWingRotate }],
+                left: -config.container * 0.08,
+                top: config.container * 0.38,
+                transform: [
+                  { translateX: leftWingTranslateX },
+                  { translateY: leftWingTranslateY },
+                  { rotate: leftWingRotate },
+                ],
               },
             ]}
           >
@@ -553,17 +701,17 @@ export function AskieCompanion({
           </Animated.View>
         )}
 
-        {/* Right Wing / Hand - Resting Hand (Viewer's right = Mascot's left hand) */}
+        {/* Right Wing / Hand - Attached flush with torso (ZERO gap) */}
         {isStanding && (
           <Animated.View
             style={[
               styles.wingR,
               {
                 width: config.container * 0.22,
-                height: config.container * 0.40,
+                height: config.container * 0.38,
                 borderRadius: config.container * 0.11,
-                right: -config.container * 0.14,
-                top: config.container * 0.42,
+                right: -config.container * 0.08,
+                top: config.container * 0.40,
                 transform: [{ rotate: rightWingRotate }],
               },
             ]}
@@ -604,8 +752,8 @@ export function AskieCompanion({
             ]}
           />
 
-          {/* Cute Tuft / Ear Accent */}
-          <View
+          {/* Cute Tuft / Ear Accent with animated twitch */}
+          <Animated.View
             style={[
               styles.earAccentL,
               {
@@ -614,10 +762,11 @@ export function AskieCompanion({
                 borderRadius: config.container * 0.08,
                 top: -config.container * 0.07,
                 left: shape === 'circle' ? '22%' : '18%',
+                transform: [{ rotate: earLRotate }],
               },
             ]}
           />
-          <View
+          <Animated.View
             style={[
               styles.earAccentR,
               {
@@ -626,6 +775,7 @@ export function AskieCompanion({
                 borderRadius: config.container * 0.08,
                 top: -config.container * 0.07,
                 right: shape === 'circle' ? '22%' : '18%',
+                transform: [{ rotate: earRRotate }],
               },
             ]}
           />
@@ -678,11 +828,21 @@ export function AskieCompanion({
                   },
                 ]}
               >
-                {/* Pupil & Specular Sparkle */}
-                <View style={styles.eyePupil}>
+                {/* Pupil & Specular Sparkle with animated gaze */}
+                <Animated.View
+                  style={[
+                    styles.eyePupil,
+                    {
+                      transform: [
+                        { translateX: pupilTranslateX },
+                        { translateY: pupilTranslateY },
+                      ],
+                    },
+                  ]}
+                >
                   <View style={styles.eyeSparkle} />
                   <View style={styles.eyeSparkleSub} />
-                </View>
+                </Animated.View>
 
                 {/* Animated Eyelid - clean downward slide without pupil deformation */}
                 <Animated.View
@@ -708,10 +868,20 @@ export function AskieCompanion({
                   },
                 ]}
               >
-                <View style={styles.eyePupil}>
+                <Animated.View
+                  style={[
+                    styles.eyePupil,
+                    {
+                      transform: [
+                        { translateX: pupilTranslateX },
+                        { translateY: pupilTranslateY },
+                      ],
+                    },
+                  ]}
+                >
                   <View style={styles.eyeSparkle} />
                   <View style={styles.eyeSparkleSub} />
-                </View>
+                </Animated.View>
 
                 {/* Animated Eyelid */}
                 <Animated.View
@@ -930,13 +1100,11 @@ const styles = StyleSheet.create({
   earAccentL: {
     position: 'absolute',
     backgroundColor: '#FF7675',
-    transform: [{ rotate: '-22deg' }],
     zIndex: 0,
   },
   earAccentR: {
     position: 'absolute',
     backgroundColor: '#B85338',
-    transform: [{ rotate: '22deg' }],
     zIndex: 0,
   },
   faceContainer: {
@@ -1048,13 +1216,11 @@ const styles = StyleSheet.create({
     position: 'absolute',
     zIndex: 0,
     elevation: 0,
-    transformOrigin: 'top right' as any,
   },
   wingR: {
     position: 'absolute',
     zIndex: 0,
     elevation: 0,
-    transformOrigin: 'top left' as any,
   },
   wingInner: {
     flex: 1,
