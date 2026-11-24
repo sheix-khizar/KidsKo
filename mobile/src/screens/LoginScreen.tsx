@@ -22,6 +22,7 @@ import {
   FadeSlideIn,
   useSafeAreaInsets,
   AskieCompanion,
+  KeyboardAwareView,
 } from '../ui';
 import { colors, fontFamilies, gradients } from '../theme';
 
@@ -171,10 +172,7 @@ export default function LoginScreen({ onLoggedIn, onGoToRegister }: Props) {
       </LinearGradient>
 
       {/* ── Body / Form Area ── */}
-      <KeyboardAvoidingView
-        style={styles.keyboardContainer}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      <KeyboardAwareView style={styles.keyboardContainer}>
         <ScrollView
           contentContainerStyle={[
             styles.scrollContent,
@@ -318,7 +316,7 @@ export default function LoginScreen({ onLoggedIn, onGoToRegister }: Props) {
             </Pressable>
           </FadeSlideIn>
         </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAwareView>
 
       <ServerConfigModal
         visible={showServerModal}
@@ -333,14 +331,17 @@ export default function LoginScreen({ onLoggedIn, onGoToRegister }: Props) {
       <Modal
         visible={showForgotModal}
         transparent
+        statusBarTranslucent
         animationType="fade"
         onRequestClose={() => setShowForgotModal(false)}
       >
-        <KeyboardAvoidingView
-          style={styles.modalOverlay}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-          <View style={styles.modalCard}>
+        <KeyboardAwareView style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <ScrollView
+            contentContainerStyle={styles.modalOverlayScroll}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Reset Password 🔑</Text>
               <Pressable
@@ -450,8 +451,9 @@ export default function LoginScreen({ onLoggedIn, onGoToRegister }: Props) {
                 </Pressable>
               </View>
             )}
-          </View>
-        </KeyboardAvoidingView>
+            </View>
+          </ScrollView>
+        </KeyboardAwareView>
       </Modal>
     </View>
   );
@@ -641,6 +643,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20,
+  },
+  modalOverlayScroll: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 24,
   },
   modalCard: {
     width: '100%',

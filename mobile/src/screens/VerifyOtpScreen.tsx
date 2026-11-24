@@ -18,6 +18,7 @@ import {
   PressScale,
   FadeSlideIn,
   Mascot,
+  KeyboardAwareView,
   useSafeAreaInsets,
 } from '../ui';
 import { colors, fontFamilies, gradients } from '../theme';
@@ -126,10 +127,7 @@ export default function VerifyOtpScreen({ email, onVerified, onBack }: Props) {
       </LinearGradient>
 
       {/* ── OTP Form ── */}
-      <KeyboardAvoidingView
-        style={styles.keyboardContainer}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      <KeyboardAwareView style={styles.keyboardContainer}>
         <ScrollView
           contentContainerStyle={[
             styles.scrollContent,
@@ -245,7 +243,7 @@ export default function VerifyOtpScreen({ email, onVerified, onBack }: Props) {
             </PressScale>
           </FadeSlideIn>
         </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAwareView>
     </View>
   );
 }

@@ -449,9 +449,10 @@ router.patch('/:id', requireAuth, async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'student_name is required' });
   }
 
+  const trimmedName = student_name.trim();
   const { data, error } = await req.supabase!
     .from('students')
-    .update({ student_name: student_name.trim() })
+    .update({ student_name: trimmedName })
     .eq('id', id)
     .eq('parent_id', req.user!.id)
     .select()
@@ -459,6 +460,41 @@ router.patch('/:id', requireAuth, async (req: Request, res: Response) => {
 
   if (error) {
     return res.status(500).json({ error: error.message });
+  }
+
+  // Keep student_memory.preferred_name in sync so AI chat & memory immediately use the new name
+  try {
+    const cleanPref =
+      filterPreferredName(trimmedName) ||
+      filterPreferredName(trimmedName.split(/\s+/)[0]) ||
+      null;
+    const { data: existingMem } = await req.supabase!
+      .from('student_memory')
+      .select('student_id, facts, enabled')
+      .eq('student_id', id)
+      .maybeSingle();
+
+    if (existingMem) {
+      await req.supabase!
+        .from('student_memory')
+        .update({
+          preferred_name: cleanPref,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('student_id', id);
+    } else if (cleanPref) {
+      await req.supabase!
+        .from('student_memory')
+        .upsert({
+          student_id: id,
+          preferred_name: cleanPref,
+          facts: [],
+          enabled: true,
+          updated_at: new Date().toISOString(),
+        });
+    }
+  } catch (memSyncErr: any) {
+    console.warn('[PATCH /students/:id] Could not sync preferred_name in student_memory:', memSyncErr?.message);
   }
 
   return res.status(200).json({ student: data });

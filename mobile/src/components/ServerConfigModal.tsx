@@ -8,7 +8,9 @@ import {
   Pressable,
   StyleSheet,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
+import { KeyboardAwareView } from '../ui';
 import { getApiUrl, setCustomApiUrl, resetApiUrlToDefault } from '../services/config';
 
 type Props = {
@@ -97,9 +99,14 @@ export default function ServerConfigModal({ visible, onClose, onSaved }: Props) 
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <View style={styles.card}>
+    <Modal visible={visible} transparent statusBarTranslucent animationType="fade" onRequestClose={onClose}>
+      <KeyboardAwareView style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+        <ScrollView
+          contentContainerStyle={styles.overlayScroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.card}>
           <Text style={styles.title}>Server Settings 🌐</Text>
           <Text style={styles.subtitle}>
             When using a real phone, enter your computer's local Wi-Fi IP (e.g. http://192.168.18.95:3003) or an ngrok tunnel URL.
@@ -169,8 +176,9 @@ export default function ServerConfigModal({ visible, onClose, onSaved }: Props) 
           <Pressable style={styles.cancelBtn} onPress={onClose}>
             <Text style={styles.cancelBtnText}>Cancel</Text>
           </Pressable>
-        </View>
-      </View>
+          </View>
+        </ScrollView>
+      </KeyboardAwareView>
     </Modal>
   );
 }
@@ -179,6 +187,12 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  overlayScroll: {
+    flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,

@@ -1,5 +1,5 @@
 import { fontFamilies } from '../theme';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   View,
@@ -12,6 +12,9 @@ import {
   BackHandler,
   ScrollView,
   TouchableOpacity,
+  Keyboard,
+  ToastAndroid,
+  Platform,
 } from 'react-native';
 import ChatScreen from './ChatScreen';
 import HomeScreen from './HomeScreen';
@@ -22,7 +25,7 @@ import { getStudents, createStudent, clearToken, getSavedUserId, getVoiceEligibi
 import { configureBilling, isPremiumActive } from '../services/billing';
 import { TabBar, TabKey } from '../ui/TabBar';
 import { LinearGradient } from '../ui/LinearGradient';
-import { Screen, Mascot, Button, Card, Pill, FadeSlideIn, Bounce, PressScale } from '../ui';
+import { Screen, Mascot, Button, Card, Pill, FadeSlideIn, Bounce, PressScale, KeyboardAwareView } from '../ui';
 import { AskieCompanion } from '../ui/AskieCompanion';
 import { colors, radii, typography, spacing, gradients, shadows } from '../theme';
 
@@ -33,10 +36,12 @@ type Props = {
   onOpenPaywall: () => void;
   onOpenTranscript: (student: Student, thread?: { id: string; title: string }) => void;
   onStartCall: (student: Student, initialMode?: 'voice' | 'video') => void;
-  onLimitReached: () => void;
+  onLimitReached: (reason?: string) => void;
   billingVersion?: number;
   forcedTab?: TabKey;
   onTabChange?: (tab: TabKey) => void;
+  homeTransitionKey?: number;
+  parentsInitiallyUnlocked?: boolean;
 };
 
 export default function MainShellScreen({
@@ -48,6 +53,8 @@ export default function MainShellScreen({
   billingVersion = 0,
   forcedTab,
   onTabChange,
+  homeTransitionKey = 0,
+  parentsInitiallyUnlocked = false,
 }: Props) {
   const insets = useSafeAreaInsets();
   const [localTab, setLocalTab] = useState<TabKey>(forcedTab || 'home');
@@ -90,21 +97,38 @@ export default function MainShellScreen({
   const [firstRunError, setFirstRunError] = useState<string | null>(null);
 
   // Parents tab gate state
-  const [parentsUnlocked, setParentsUnlocked] = useState(false);
+  const [parentsUnlocked, setParentsUnlocked] = useState(parentsInitiallyUnlocked);
   const [logoutGateVisible, setLogoutGateVisible] = useState(false);
   const [curfewEnabled, setCurfewEnabled] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const lastBackPressRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (parentsInitiallyUnlocked) {
+      setParentsUnlocked(true);
+    }
+  }, [parentsInitiallyUnlocked]);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const loadStudentList = async (): Promise<Student[]> => {
     try {
       const list = await getStudents();
       setStudents([...list]);
       if (list.length > 0) {
-        // Auto-select first child if none selected or if active was removed
+        // Auto-select first child if none selected, or update activeStudent with latest data
         setActiveStudent((prev) => {
-          if (!prev || !list.some((s) => s.id === prev.id)) {
-            return list[0];
-          }
-          return prev;
+          if (!prev) return list[0];
+          return list.find((s) => s.id === prev.id) || list[0];
         });
       } else {
         setActiveStudent(null);
@@ -138,22 +162,41 @@ export default function MainShellScreen({
     isPremiumActive().then(setIsPremium).catch(() => {});
   }, [billingVersion]);
 
-  // Handle hardware back on Android: return to 'chat' tab before exiting
+  // Handle hardware back on Android:
+  // - Inside unlocked Parent Dashboard: block hardware back (must close via top-right ✕ cross button)
+  // - On Chat / Call / locked Parents: return to Home tab
+  // - On Home tab: double press within 2s to exit app
   useEffect(() => {
     const onBackPress = () => {
       if (showSwitcherModal) {
         setShowSwitcherModal(false);
         return true;
       }
-      if (tab !== 'chat') {
-        changeTab('chat');
+      if (tab === 'parents') {
+        if (parentsUnlocked) {
+          return true;
+        }
+        changeTab('home');
         return true;
       }
-      return false; // let OS exit app on chat tab
+      if (tab !== 'home') {
+        changeTab('home');
+        return true;
+      }
+      const now = Date.now();
+      if (now - lastBackPressRef.current < 2000) {
+        BackHandler.exitApp();
+        return true;
+      }
+      lastBackPressRef.current = now;
+      if (Platform.OS === 'android') {
+        ToastAndroid.show('Press back again to exit', ToastAndroid.SHORT);
+      }
+      return true;
     };
     const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => backHandler.remove();
-  }, [tab, showSwitcherModal]);
+  }, [tab, parentsUnlocked, showSwitcherModal]);
 
   // Tab change handler: re-lock parents tab whenever leaving it, refresh billing on call tab
   const handleTabSelect = (nextTab: TabKey) => {
@@ -209,7 +252,7 @@ export default function MainShellScreen({
       <View style={styles.bodyContainer}>
         {/* TAB 0: HOME */}
         {tab === 'home' && (
-          <View style={{ flex: 1 }}>
+          <FadeSlideIn key={`home_${homeTransitionKey}`} duration={220} style={{ flex: 1 }}>
             {activeStudent ? (
               <HomeScreen
                 student={activeStudent}
@@ -225,14 +268,15 @@ export default function MainShellScreen({
                 onOpenProfile={() => setShowSwitcherModal(true)}
               />
             ) : null}
-          </View>
+          </FadeSlideIn>
         )}
 
         {/* TAB 1: CHAT (Kept mounted to preserve scroll, draft text, and attachments across tabs) */}
         <View style={[{ flex: 1 }, tab !== 'chat' && { display: 'none' }]}>
           {students.length === 0 ? (
             // Ungated first-run empty state
-            <ScrollView contentContainerStyle={styles.firstRunContent}>
+            <KeyboardAwareView>
+            <ScrollView contentContainerStyle={styles.firstRunContent} keyboardShouldPersistTaps="handled">
               <Mascot size="l" style={styles.firstRunMascot} />
               <Text style={styles.firstRunTitle}>Welcome to Kidsko!</Text>
               <Text style={styles.firstRunSub}>
@@ -271,6 +315,7 @@ export default function MainShellScreen({
                 </TouchableOpacity>
               </Card>
             </ScrollView>
+            </KeyboardAwareView>
           ) : activeStudent ? (
             <ChatScreen
               key={activeStudent.id}
@@ -372,7 +417,7 @@ export default function MainShellScreen({
                 <ParentalGate
                   visible={true}
                   onSuccess={() => setParentsUnlocked(true)}
-                  onCancel={() => changeTab('chat')}
+                  onCancel={() => changeTab('home')}
                 />
               </View>
             ) : (
@@ -387,7 +432,7 @@ export default function MainShellScreen({
                   onRequestLogout={() => setLogoutGateVisible(true)}
                   onRequestClose={() => {
                     setParentsUnlocked(false);
-                    changeTab('chat');
+                    changeTab('home');
                   }}
                   onAccountDeleted={() => onLogout()}
                   billingVersion={billingVersion}
@@ -462,8 +507,8 @@ export default function MainShellScreen({
         </Pressable>
       </Modal>
 
-      {/* Bottom Tab Bar (hidden when inside Parental Dashboard) */}
-      {tab !== 'parents' && (
+      {/* Bottom Tab Bar (hidden when inside Parental Dashboard or while typing with keyboard open) */}
+      {tab !== 'parents' && !keyboardVisible && (
         <TabBar activeTab={tab} onSelectTab={handleTabSelect} />
       )}
     </Screen>

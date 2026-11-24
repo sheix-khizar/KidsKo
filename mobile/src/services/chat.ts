@@ -4,6 +4,7 @@ import { getApiUrl } from './config';
 export type Message = {
   role: 'user' | 'assistant';
   content: string;
+  imageUri?: string;
 };
 
 export type ChatResponse = {

@@ -19,15 +19,35 @@ import { LinearGradient } from '../ui/LinearGradient';
 import { PressScale, FadeSlideIn, Bounce } from '../ui/motion';
 import { useSafeAreaInsets } from '../ui/safeArea';
 import { AskieCompanion } from '../ui/AskieCompanion';
+import ParentalGate from '../components/ParentalGate';
 
-type Props = { onBack: () => void; onPurchased: () => void };
+type Props = {
+  onBack: () => void;
+  onPurchased: () => void;
+  limitBanner?: string | null;
+  requireParentalGate?: boolean;
+  onOpenParentsDashboard?: () => void;
+};
 
-export default function PaywallScreen({ onBack, onPurchased }: Props) {
+export default function PaywallScreen({
+  onBack,
+  onPurchased,
+  limitBanner,
+  requireParentalGate = false,
+  onOpenParentsDashboard,
+}: Props) {
   const [offering, setOffering] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<'yearly' | 'monthly'>('yearly');
+  const [gateVisible, setGateVisible] = useState(false);
+  const [pendingGateAction, setPendingGateAction] = useState<'purchase' | 'dashboard' | null>(null);
+  const [parentVerified, setParentVerified] = useState(!requireParentalGate);
   const insets = useSafeAreaInsets();
+
+  useEffect(() => {
+    setParentVerified(!requireParentalGate);
+  }, [requireParentalGate]);
 
   useEffect(() => {
     (async () => {
@@ -37,7 +57,7 @@ export default function PaywallScreen({ onBack, onPurchased }: Props) {
     })();
   }, []);
 
-  const handleUpgrade = async () => {
+  const executePurchase = async () => {
     const targetPackage =
       selectedPlan === 'yearly'
         ? getAnnualPackage(offering)
@@ -70,6 +90,25 @@ export default function PaywallScreen({ onBack, onPurchased }: Props) {
     } finally {
       setPurchasing(false);
     }
+  };
+
+  const handleUpgrade = async () => {
+    if (!parentVerified) {
+      setPendingGateAction('purchase');
+      setGateVisible(true);
+      return;
+    }
+    await executePurchase();
+  };
+
+  const handleOpenParentsFromPaywall = () => {
+    if (!onOpenParentsDashboard) return;
+    if (!parentVerified) {
+      setPendingGateAction('dashboard');
+      setGateVisible(true);
+      return;
+    }
+    onOpenParentsDashboard();
   };
 
   if (loading) {
@@ -109,14 +148,24 @@ export default function PaywallScreen({ onBack, onPurchased }: Props) {
         </PressScale>
       </View>
 
+      {limitBanner ? (
+        <FadeSlideIn delay={0}>
+          <View style={styles.limitAlertBanner}>
+            <Text style={styles.limitAlertTitle}>⏱️ Limit Reached</Text>
+            <Text style={styles.limitAlertText}>{limitBanner}</Text>
+            <Text style={styles.limitAlertSub}>
+              🔒 Grown-ups only: Parent PIN is required to unlock Premium or manage limits.
+            </Text>
+          </View>
+        </FadeSlideIn>
+      ) : null}
+
       {/* Header with Mascot Badge */}
       <FadeSlideIn delay={0}>
         <View style={styles.header}>
-          <Bounce>
-            <View style={{ marginBottom: 12 }}>
-              <AskieCompanion size="m" state="celebrate" />
-            </View>
-          </Bounce>
+          <View style={{ marginBottom: 12 }}>
+            <AskieCompanion size="m" state="idle" standing={true} blinkOnly={true} />
+          </View>
           <Text style={styles.title}>Unlock Kidsko Premium</Text>
           <Text style={styles.subtitle}>
             Supercharge your child's learning with expanded Voice, Video & Chat guidance
@@ -285,12 +334,40 @@ export default function PaywallScreen({ onBack, onPurchased }: Props) {
         </PressScale>
       </FadeSlideIn>
 
+      {/* Parent Dashboard Option (if triggered from child screen) */}
+      {onOpenParentsDashboard && (
+        <PressScale onPress={handleOpenParentsFromPaywall}>
+          <View style={styles.parentDashBtn}>
+            <Text style={styles.parentDashBtnText}>🔒 Go to Parent Dashboard</Text>
+          </View>
+        </PressScale>
+      )}
+
       {/* Cancel / Dismiss */}
       <PressScale onPress={onBack}>
         <View style={styles.cancelBtn}>
           <Text style={styles.cancelText}>Not now, stay on free plan</Text>
         </View>
       </PressScale>
+
+      <ParentalGate
+        visible={gateVisible}
+        onSuccess={() => {
+          setGateVisible(false);
+          setParentVerified(true);
+          const action = pendingGateAction;
+          setPendingGateAction(null);
+          if (action === 'dashboard') {
+            onOpenParentsDashboard?.();
+          } else {
+            void executePurchase();
+          }
+        }}
+        onCancel={() => {
+          setGateVisible(false);
+          setPendingGateAction(null);
+        }}
+      />
     </ScrollView>
   );
 }
@@ -503,5 +580,48 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: fontFamilies.bold,
     color: colors.subtext,
+  },
+  limitAlertBanner: {
+    backgroundColor: '#FFF3E0',
+    borderWidth: 2,
+    borderColor: '#FFB74D',
+    borderRadius: radii.xl,
+    padding: 14,
+    marginBottom: spacing.md,
+  },
+  limitAlertTitle: {
+    fontSize: 15,
+    fontFamily: fontFamilies.black,
+    color: '#D84315',
+    marginBottom: 4,
+  },
+  limitAlertText: {
+    fontSize: 13,
+    fontFamily: fontFamilies.bold,
+    color: colors.text,
+    lineHeight: 18,
+  },
+  limitAlertSub: {
+    fontSize: 11.5,
+    fontFamily: fontFamilies.semiBold,
+    color: colors.subtext,
+    marginTop: 6,
+  },
+  parentDashBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 11,
+    paddingHorizontal: 18,
+    borderRadius: radii.pill,
+    borderWidth: 1.5,
+    borderColor: '#1E3A5F',
+    backgroundColor: 'rgba(30, 58, 95, 0.06)',
+    marginTop: 4,
+    minHeight: 44,
+  },
+  parentDashBtnText: {
+    fontSize: 13.5,
+    fontFamily: fontFamilies.extraBold,
+    color: '#1E3A5F',
   },
 });

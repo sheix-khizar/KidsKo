@@ -66,8 +66,8 @@ export async function checkVoiceEligibility(
       isPremium,
       minutesRemaining: 0,
       reason: isPremium
-        ? `Premium voice & video allowance used up for this week (${PREMIUM_WEEKLY_VOICE_MINUTES} min/week).`
-        : `Free voice & video time used up for this week (${FREE_WEEKLY_VOICE_MINUTES} min/week). Upgrade to Premium for more!`,
+        ? `Weekly Premium voice & video limit reached (${PREMIUM_WEEKLY_VOICE_MINUTES} min/week).`
+        : `Weekly free voice & video limit reached (${FREE_WEEKLY_VOICE_MINUTES} min/week). Upgrade to Premium for more!`,
     };
   }
 

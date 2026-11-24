@@ -17,5 +17,5 @@ export async function analyzeHomework(studentId: string, imageBase64: string, th
     err.status = res.status;
     throw err;
   }
-  return data as { threadId: string; explanation: string };
+  return data as { threadId: string; explanation: string; imageUrl?: string };
 }

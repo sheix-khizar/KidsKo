@@ -7,7 +7,12 @@ import { checkAndIncrementUsage } from '../lib/usageLimits';
 import { getCachedAnswer, setCachedAnswer, isPersonalMessage } from '../lib/cache';
 import { logUsageEvent } from '../lib/usageEvents';
 import { getThreadImage, setThreadImage, getThreadStoragePath, awaitPendingUpload } from '../lib/threadImageStore';
-import { downloadHomeworkImageFromStorage, deleteThreadImagesFromStorage, deleteSingleImageFromStorage } from '../lib/homeworkStorage';
+import {
+  downloadHomeworkImageFromStorage,
+  deleteThreadImagesFromStorage,
+  deleteSingleImageFromStorage,
+  getHomeworkImageSignedUrl,
+} from '../lib/homeworkStorage';
 import { cleanMessageForClient } from '../lib/chatHistory';
 import { supabaseAdmin } from '../lib/supabase';
 import { getMemory, buildMemoryBlock, extractFactsAfterTurn, hasCustomStudentMemory } from '../lib/studentMemory';
@@ -323,8 +328,30 @@ router.get('/threads/:threadId/messages', requireAuth, async (req: Request, res:
 
     const chronological = (rawMessages || []).reverse();
 
-    const messages = chronological.map((m: any) =>
-      cleanMessageForClient(m.role, m.content || '', m.created_at)
+    const messages = await Promise.all(
+      chronological.map(async (m: any) => {
+        const rawContent = m.content || '';
+        const cleaned = cleanMessageForClient(m.role, rawContent, m.created_at);
+        let imageUrl: string | undefined;
+
+        if (cleaned.hasImage && !cleaned.imageExpired) {
+          const storageMatch = rawContent.match(/\[STORAGE:([^\]]+)\]/i);
+          if (storageMatch && storageMatch[1]) {
+            const url = await getHomeworkImageSignedUrl(supabaseAdmin, storageMatch[1].trim());
+            if (url) imageUrl = url;
+          } else {
+            const inlineMatch = rawContent.match(/\[IMAGE:([^\]]+)\]/i);
+            if (inlineMatch && inlineMatch[1]) {
+              imageUrl = `data:image/jpeg;base64,${inlineMatch[1].trim()}`;
+            }
+          }
+        }
+
+        return {
+          ...cleaned,
+          ...(imageUrl ? { imageUrl } : {}),
+        };
+      })
     );
 
     return res.status(200).json({

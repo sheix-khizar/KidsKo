@@ -12,6 +12,7 @@ export type ThreadMessage = {
   text: string;
   hasImage: boolean;
   imageExpired: boolean;
+  imageUrl?: string;
   createdAt: string;
 };
 

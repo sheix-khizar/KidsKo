@@ -12,3 +12,4 @@ export * from './safeArea';
 export * from './AskieEmoji';
 export * from './AskieCompanion';
 export * from './AskieReactions';
+export * from './KeyboardAware';

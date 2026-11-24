@@ -6,7 +6,7 @@ import {
   Pressable,
   StyleSheet,
   ScrollView,
-  KeyboardAvoidingView,
+  Modal,
   Platform,
   ActivityIndicator,
   Alert,
@@ -20,11 +20,13 @@ import {
   Mascot,
   AskieEmoji,
   AskieCompanion,
+  KeyboardAwareView,
   useSafeAreaInsets,
 } from '../ui';
 import { colors, fontFamilies, gradients } from '../theme';
 import { createStudent, updateStudentMemory } from '../services/api';
 import { savePin } from '../services/pinService';
+import { triggerKidFeedback, vibrateTap } from '../utils/feedback';
 
 type Props = {
   onFinish: (student: { id: string; student_name: string }) => void;
@@ -124,10 +126,12 @@ export default function OnboardingScreen({ onFinish }: Props) {
 
   // Saving / Finalizing State
   const [saving, setSaving] = useState(false);
+  const [showGradeDropdown, setShowGradeDropdown] = useState(false);
 
   const firstName = childName.trim().split(' ')[0] || 'your child';
 
   const toggleInterest = (label: string) => {
+    triggerKidFeedback('pop');
     setSelectedInterests((prev) => {
       const next = new Set(prev);
       if (next.has(label)) {
@@ -140,6 +144,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
   };
 
   const handlePickAge = (a: number) => {
+    triggerKidFeedback('pop');
     setAge(a);
     const gIndex = Math.max(0, Math.min(GRADES.length - 1, a - 5));
     setGrade(GRADES[gIndex]);
@@ -148,6 +153,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
   // PIN Keypad Handlers
   const handlePinKey = (d: string) => {
     if (pinBuf.length >= 4) return;
+    triggerKidFeedback('key', { keyIndex: pinBuf.length });
     const nextPin = pinBuf + d;
     setPinBuf(nextPin);
     setPinError('');
@@ -158,6 +164,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
   };
 
   const handlePinBack = () => {
+    triggerKidFeedback('back');
     setPinBuf((prev) => prev.slice(0, -1));
     setPinError('');
   };
@@ -166,19 +173,23 @@ export default function OnboardingScreen({ onFinish }: Props) {
     if (pinStage === 'create') {
       // Check for trivial pins like 1111, 2222
       if (/^(\d)\1{3}$/.test(entered)) {
+        vibrateTap('error');
         setPinError('Too easy to guess. Choose a stronger PIN.');
         setPinBuf('');
         return;
       }
+      triggerKidFeedback('next');
       setPinTemp(entered);
       setPinBuf('');
       setPinStage('confirm');
       setPinError('');
     } else {
       if (entered === pinTemp) {
+        triggerKidFeedback('celebrate');
         setConfirmedPin(entered);
         setStep('c-safety');
       } else {
+        vibrateTap('error');
         setPinError("PINs don't match. Let's start again.");
         setPinBuf('');
         setPinTemp('');
@@ -241,7 +252,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
         <ScrollView contentContainerStyle={styles.scrollPad} showsVerticalScrollIndicator={false}>
           <FadeSlideIn delay={40}>
             <View style={styles.mascotBubbleRow}>
-              <AskieCompanion size="s" state="idle" style={{ marginRight: 10 }} />
+              <AskieCompanion size="s" state="idle" standing={false} avatarMode={true} style={{ marginRight: 10 }} />
               <View style={styles.mascotBubble}>
                 <Text style={styles.mascotBubbleText}>Hi, grown-up! Let's set up Kidsko for your child.</Text>
               </View>
@@ -324,7 +335,10 @@ export default function OnboardingScreen({ onFinish }: Props) {
         <View style={styles.footerBar}>
           <Button
             title="Start setup →"
-            onPress={() => setStep('c-name')}
+            onPress={() => {
+              triggerKidFeedback('start');
+              setStep('c-name');
+            }}
             disabled={!consent}
             variant="primary"
           />
@@ -341,7 +355,13 @@ export default function OnboardingScreen({ onFinish }: Props) {
     return (
       <View style={[styles.container, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 20 }]}>
         <View style={styles.headerProgressRow}>
-          <Pressable onPress={() => setStep('intro')} style={styles.backCircle}>
+          <Pressable
+            onPress={() => {
+              triggerKidFeedback('back');
+              setStep('intro');
+            }}
+            style={styles.backCircle}
+          >
             <Text style={styles.backCircleText}>‹</Text>
           </Pressable>
           <View style={styles.progressBarBg}>
@@ -350,14 +370,11 @@ export default function OnboardingScreen({ onFinish }: Props) {
           <Text style={styles.stepCounterText}>1/5</Text>
         </View>
 
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={{ flex: 1 }}
-        >
+        <KeyboardAwareView style={{ flex: 1 }}>
           <ScrollView contentContainerStyle={styles.scrollPad} keyboardShouldPersistTaps="handled">
             <FadeSlideIn delay={40}>
               <View style={styles.mascotBubbleRow}>
-                <AskieCompanion size="s" state="speaking" style={{ marginRight: 10 }} />
+                <AskieCompanion size="s" state="idle" standing={false} avatarMode={true} style={{ marginRight: 10 }} />
                 <View style={styles.mascotBubble}>
                   <Text style={styles.mascotBubbleText}>
                     {isNameValid ? `Nice to meet you, ${firstName}! 🎉` : "What's your child's name?"}
@@ -383,7 +400,10 @@ export default function OnboardingScreen({ onFinish }: Props) {
                   return (
                     <Pressable
                       key={idx}
-                      onPress={() => setAvatarIndex(idx)}
+                      onPress={() => {
+                        triggerKidFeedback('pop');
+                        setAvatarIndex(idx);
+                      }}
                       style={[styles.avatarCard, isSel && styles.avatarCardSelected]}
                     >
                       <LinearGradient
@@ -405,16 +425,19 @@ export default function OnboardingScreen({ onFinish }: Props) {
               </View>
             </FadeSlideIn>
           </ScrollView>
-        </KeyboardAvoidingView>
 
-        <View style={styles.footerBar}>
-          <Button
-            title="Next →"
-            onPress={() => setStep('c-age')}
-            disabled={!isNameValid}
-            variant="primary"
-          />
-        </View>
+          <View style={styles.footerBar}>
+            <Button
+              title="Next →"
+              onPress={() => {
+                triggerKidFeedback('next');
+                setStep('c-age');
+              }}
+              disabled={!isNameValid}
+              variant="primary"
+            />
+          </View>
+        </KeyboardAwareView>
       </View>
     );
   }
@@ -426,7 +449,13 @@ export default function OnboardingScreen({ onFinish }: Props) {
     return (
       <View style={[styles.container, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 20 }]}>
         <View style={styles.headerProgressRow}>
-          <Pressable onPress={() => setStep('c-name')} style={styles.backCircle}>
+          <Pressable
+            onPress={() => {
+              triggerKidFeedback('back');
+              setStep('c-name');
+            }}
+            style={styles.backCircle}
+          >
             <Text style={styles.backCircleText}>‹</Text>
           </Pressable>
           <View style={styles.progressBarBg}>
@@ -438,7 +467,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
         <ScrollView contentContainerStyle={styles.scrollPad}>
           <FadeSlideIn delay={40}>
             <View style={styles.mascotBubbleRow}>
-              <AskieCompanion size="s" state="speaking" style={{ marginRight: 10 }} />
+              <AskieCompanion size="s" state="idle" standing={false} avatarMode={true} style={{ marginRight: 10 }} />
               <View style={styles.mascotBubble}>
                 <Text style={styles.mascotBubbleText}>How old is {firstName}?</Text>
               </View>
@@ -461,20 +490,18 @@ export default function OnboardingScreen({ onFinish }: Props) {
             </View>
 
             <Text style={[styles.fieldLabel, { marginTop: 20 }]}>Grade / Class</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4 }}>
-              {GRADES.map((g) => {
-                const isSel = grade === g;
-                return (
-                  <Pressable
-                    key={g}
-                    onPress={() => setGrade(g)}
-                    style={[styles.gradeChip, isSel && styles.gradeChipSelected]}
-                  >
-                    <Text style={[styles.gradeChipText, isSel && styles.gradeChipTextSelected]}>{g}</Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+            <Pressable
+              onPress={() => {
+                triggerKidFeedback('pop');
+                setShowGradeDropdown(true);
+              }}
+              style={styles.dropdownTrigger}
+              accessibilityRole="button"
+              accessibilityLabel={`Selected grade ${grade}. Tap to change`}
+            >
+              <Text style={styles.dropdownTriggerText}>🎓  {grade}</Text>
+              <Text style={styles.dropdownChevron}>▾</Text>
+            </Pressable>
 
             <View style={styles.tipCard}>
               <Text style={{ fontSize: 26, marginRight: 12 }}>💡</Text>
@@ -488,11 +515,58 @@ export default function OnboardingScreen({ onFinish }: Props) {
         <View style={styles.footerBar}>
           <Button
             title="Next →"
-            onPress={() => setStep('c-interest')}
+            onPress={() => {
+              triggerKidFeedback('next');
+              setStep('c-interest');
+            }}
             disabled={!age}
             variant="primary"
           />
         </View>
+
+        {/* Grade Dropdown Modal */}
+        <Modal
+          visible={showGradeDropdown}
+          transparent
+          statusBarTranslucent
+          animationType="fade"
+          onRequestClose={() => setShowGradeDropdown(false)}
+        >
+          <Pressable style={styles.dropdownModalOverlay} onPress={() => setShowGradeDropdown(false)}>
+            <Pressable style={styles.dropdownSheet} onPress={(e) => e.stopPropagation()}>
+              <View style={styles.dropdownSheetHeader}>
+                <Text style={styles.dropdownSheetTitle}>Select Grade / Class</Text>
+                <Pressable onPress={() => setShowGradeDropdown(false)} style={styles.dropdownCloseBtn}>
+                  <Text style={styles.dropdownCloseText}>✕</Text>
+                </Pressable>
+              </View>
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {GRADES.map((g, idx) => {
+                  const isSel = grade === g;
+                  return (
+                    <Pressable
+                      key={g}
+                      onPress={() => {
+                        triggerKidFeedback('key', { keyIndex: idx });
+                        setGrade(g);
+                        setShowGradeDropdown(false);
+                      }}
+                      style={[
+                        styles.dropdownOptionRow,
+                        isSel && styles.dropdownOptionRowSelected,
+                      ]}
+                    >
+                      <Text style={[styles.dropdownOptionText, isSel && styles.dropdownOptionTextSelected]}>
+                        {g}
+                      </Text>
+                      {isSel ? <Text style={styles.dropdownCheckMark}>✓</Text> : null}
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </Pressable>
+          </Pressable>
+        </Modal>
       </View>
     );
   }
@@ -505,7 +579,13 @@ export default function OnboardingScreen({ onFinish }: Props) {
     return (
       <View style={[styles.container, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 20 }]}>
         <View style={styles.headerProgressRow}>
-          <Pressable onPress={() => setStep('c-age')} style={styles.backCircle}>
+          <Pressable
+            onPress={() => {
+              triggerKidFeedback('back');
+              setStep('c-age');
+            }}
+            style={styles.backCircle}
+          >
             <Text style={styles.backCircleText}>‹</Text>
           </Pressable>
           <View style={styles.progressBarBg}>
@@ -517,7 +597,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
         <ScrollView contentContainerStyle={styles.scrollPad}>
           <FadeSlideIn delay={40}>
             <View style={styles.mascotBubbleRow}>
-              <AskieCompanion size="s" state="speaking" style={{ marginRight: 10 }} />
+              <AskieCompanion size="s" state="idle" standing={false} avatarMode={true} style={{ marginRight: 10 }} />
               <View style={styles.mascotBubble}>
                 <Text style={styles.mascotBubbleText}>What does {firstName} love learning about?</Text>
               </View>
@@ -550,7 +630,10 @@ export default function OnboardingScreen({ onFinish }: Props) {
         <View style={styles.footerBar}>
           <Button
             title={count === 0 ? 'Pick at least 1 topic' : `Next · ${count} selected →`}
-            onPress={() => setStep('c-pin')}
+            onPress={() => {
+              triggerKidFeedback('next');
+              setStep('c-pin');
+            }}
             disabled={count === 0}
             variant="primary"
           />
@@ -568,6 +651,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
         <View style={styles.headerProgressRow}>
           <Pressable
             onPress={() => {
+              triggerKidFeedback('back');
               setPinBuf('');
               setPinTemp('');
               setPinStage('create');
@@ -584,7 +668,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
         </View>
 
         <ScrollView contentContainerStyle={[styles.scrollPad, { alignItems: 'center' }]}>
-          <FadeSlideIn delay={40}>
+          <FadeSlideIn delay={40} style={styles.centeredSlide}>
             <View style={styles.pinShieldBadge}>
               <Text style={{ fontSize: 40 }}>🔐</Text>
             </View>
@@ -592,7 +676,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
             <Text style={[styles.title, { textAlign: 'center' }]}>
               {pinStage === 'create' ? 'Create a parent PIN' : 'Confirm your PIN'}
             </Text>
-            <Text style={[styles.subtext, { textAlign: 'center', marginBottom: 20 }]}>
+            <Text style={[styles.subtext, { textAlign: 'center', marginBottom: 20, maxWidth: 320 }]}>
               {pinStage === 'create'
                 ? "You'll need this 4-digit PIN to open the Parents area. Keep it secret from the kids!"
                 : 'Enter the same 4 digits again to confirm.'}
@@ -646,7 +730,13 @@ export default function OnboardingScreen({ onFinish }: Props) {
     return (
       <View style={[styles.container, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 20 }]}>
         <View style={styles.headerProgressRow}>
-          <Pressable onPress={() => setStep('c-pin')} style={styles.backCircle}>
+          <Pressable
+            onPress={() => {
+              triggerKidFeedback('back');
+              setStep('c-pin');
+            }}
+            style={styles.backCircle}
+          >
             <Text style={styles.backCircleText}>‹</Text>
           </Pressable>
           <View style={styles.progressBarBg}>
@@ -672,7 +762,10 @@ export default function OnboardingScreen({ onFinish }: Props) {
                   return (
                     <Pressable
                       key={lim}
-                      onPress={() => setDailyLimit(lim)}
+                      onPress={() => {
+                        triggerKidFeedback('pop');
+                        setDailyLimit(lim);
+                      }}
                       style={[styles.limitChip, isSel && styles.limitChipSelected]}
                     >
                       <Text style={[styles.limitChipText, isSel && styles.limitChipTextSelected]}>
@@ -695,7 +788,10 @@ export default function OnboardingScreen({ onFinish }: Props) {
                   <Text style={styles.stepDesc}>Blocks unsafe topics and language</Text>
                 </View>
                 <Pressable
-                  onPress={() => setStrictFilter((v) => !v)}
+                  onPress={() => {
+                    triggerKidFeedback('pop');
+                    setStrictFilter((v) => !v);
+                  }}
                   style={[styles.toggleSwitch, strictFilter && styles.toggleSwitchOn]}
                 >
                   <View style={[styles.toggleThumb, strictFilter && styles.toggleThumbOn]} />
@@ -711,7 +807,10 @@ export default function OnboardingScreen({ onFinish }: Props) {
                   <Text style={styles.stepDesc}>8am–3pm and 5pm–7pm</Text>
                 </View>
                 <Pressable
-                  onPress={() => setStudyHours((v) => !v)}
+                  onPress={() => {
+                    triggerKidFeedback('pop');
+                    setStudyHours((v) => !v);
+                  }}
                   style={[styles.toggleSwitch, studyHours && styles.toggleSwitchOn]}
                 >
                   <View style={[styles.toggleThumb, studyHours && styles.toggleThumbOn]} />
@@ -727,7 +826,10 @@ export default function OnboardingScreen({ onFinish }: Props) {
                   <Text style={styles.stepDesc}>Summary sent every evening</Text>
                 </View>
                 <Pressable
-                  onPress={() => setDailyReport((v) => !v)}
+                  onPress={() => {
+                    triggerKidFeedback('pop');
+                    setDailyReport((v) => !v);
+                  }}
                   style={[styles.toggleSwitch, dailyReport && styles.toggleSwitchOn]}
                 >
                   <View style={[styles.toggleThumb, dailyReport && styles.toggleThumbOn]} />
@@ -740,7 +842,10 @@ export default function OnboardingScreen({ onFinish }: Props) {
         <View style={styles.footerBar}>
           <Button
             title="Save and continue →"
-            onPress={() => setStep('perm')}
+            onPress={() => {
+              triggerKidFeedback('next');
+              setStep('perm');
+            }}
             variant="primary"
           />
         </View>
@@ -755,7 +860,13 @@ export default function OnboardingScreen({ onFinish }: Props) {
     return (
       <View style={[styles.container, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 20 }]}>
         <View style={styles.headerProgressRow}>
-          <Pressable onPress={() => setStep('c-safety')} style={styles.backCircle}>
+          <Pressable
+            onPress={() => {
+              triggerKidFeedback('back');
+              setStep('c-safety');
+            }}
+            style={styles.backCircle}
+          >
             <Text style={styles.backCircleText}>‹</Text>
           </Pressable>
           <View style={{ flex: 1 }} />
@@ -764,7 +875,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
         <ScrollView contentContainerStyle={styles.scrollPad}>
           <FadeSlideIn delay={40}>
             <View style={styles.mascotBubbleRow}>
-              <AskieCompanion size="s" state="speaking" style={{ marginRight: 10 }} />
+              <AskieCompanion size="s" state="idle" standing={false} avatarMode={true} style={{ marginRight: 10 }} />
               <View style={styles.mascotBubble}>
                 <Text style={styles.mascotBubbleText}>I need a few permissions to help in all the ways!</Text>
               </View>
@@ -783,7 +894,10 @@ export default function OnboardingScreen({ onFinish }: Props) {
                   <Text style={styles.stepDesc}>For real-time voice calls with Kidsko</Text>
                 </View>
                 <Pressable
-                  onPress={() => setPermMic((v) => !v)}
+                  onPress={() => {
+                    triggerKidFeedback('pop');
+                    setPermMic((v) => !v);
+                  }}
                   style={[styles.permBtn, permMic && styles.permBtnAllowed]}
                 >
                   <Text style={[styles.permBtnText, permMic && styles.permBtnTextAllowed]}>
@@ -801,7 +915,10 @@ export default function OnboardingScreen({ onFinish }: Props) {
                   <Text style={styles.stepDesc}>For homework scanning with AI Vision</Text>
                 </View>
                 <Pressable
-                  onPress={() => setPermCam((v) => !v)}
+                  onPress={() => {
+                    triggerKidFeedback('pop');
+                    setPermCam((v) => !v);
+                  }}
                   style={[styles.permBtn, permCam && styles.permBtnAllowed]}
                 >
                   <Text style={[styles.permBtnText, permCam && styles.permBtnTextAllowed]}>
@@ -819,7 +936,10 @@ export default function OnboardingScreen({ onFinish }: Props) {
                   <Text style={styles.stepDesc}>Daily reports and study reminders</Text>
                 </View>
                 <Pressable
-                  onPress={() => setPermNotif((v) => !v)}
+                  onPress={() => {
+                    triggerKidFeedback('pop');
+                    setPermNotif((v) => !v);
+                  }}
                   style={[styles.permBtn, permNotif && styles.permBtnAllowed]}
                 >
                   <Text style={[styles.permBtnText, permNotif && styles.permBtnTextAllowed]}>
@@ -838,7 +958,10 @@ export default function OnboardingScreen({ onFinish }: Props) {
         <View style={styles.footerBar}>
           <Button
             title="Continue →"
-            onPress={() => setStep('done')}
+            onPress={() => {
+              triggerKidFeedback('celebrate');
+              setStep('done');
+            }}
             variant="primary"
           />
         </View>
@@ -852,16 +975,14 @@ export default function OnboardingScreen({ onFinish }: Props) {
   if (step === 'done') {
     const chosenAvatar = AVATARS[avatarIndex];
     return (
-      <View style={[styles.container, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 }]}>
+      <View style={[styles.container, { paddingTop: Math.max(insets.top, 24) + 24, paddingBottom: insets.bottom + 20 }]}>
         <ScrollView contentContainerStyle={[styles.scrollPad, { alignItems: 'center' }]}>
-          <FadeSlideIn delay={40}>
-            <Bounce>
-              <View style={[styles.doneMascotBox, { backgroundColor: 'transparent', borderWidth: 0 }]}>
-                <AskieCompanion size="l" state="celebrate" />
-              </View>
-            </Bounce>
+          <FadeSlideIn delay={40} style={styles.centeredSlide}>
+            <View style={styles.doneMascotContainer}>
+              <AskieCompanion size="l" state="idle" standing={true} blinkOnly={true} />
+            </View>
 
-            <Text style={[styles.title, { textAlign: 'center', marginTop: 12 }]}>All set! 🎉</Text>
+            <Text style={[styles.title, { textAlign: 'center', marginTop: 10 }]}>All set! 🎉</Text>
             <Text style={[styles.subtext, { textAlign: 'center' }]}>{firstName}'s Kidsko is ready.</Text>
 
             <View style={[styles.card, { width: '100%', marginTop: 20 }]}>
@@ -905,11 +1026,17 @@ export default function OnboardingScreen({ onFinish }: Props) {
         <View style={styles.footerBar}>
           <Button
             title="Take a quick tour 🚀"
-            onPress={() => setStep('tour-choice')}
+            onPress={() => {
+              triggerKidFeedback('next');
+              setStep('tour-choice');
+            }}
             variant="primary"
           />
           <Pressable
-            onPress={handleSaveAndOpenApp}
+            onPress={() => {
+              triggerKidFeedback('celebrate');
+              handleSaveAndOpenApp();
+            }}
             style={{ alignItems: 'center', marginTop: 14 }}
             disabled={saving}
           >
@@ -931,7 +1058,13 @@ export default function OnboardingScreen({ onFinish }: Props) {
     return (
       <View style={[styles.container, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 20 }]}>
         <View style={styles.headerProgressRow}>
-          <Pressable onPress={() => setStep('done')} style={styles.backCircle}>
+          <Pressable
+            onPress={() => {
+              triggerKidFeedback('back');
+              setStep('done');
+            }}
+            style={styles.backCircle}
+          >
             <Text style={styles.backCircleText}>‹</Text>
           </Pressable>
           <View style={{ flex: 1 }} />
@@ -944,11 +1077,14 @@ export default function OnboardingScreen({ onFinish }: Props) {
 
             {/* Kid's tour card */}
             <Pressable
-              onPress={() => setStep('kid-tour')}
+              onPress={() => {
+                triggerKidFeedback('start');
+                setStep('kid-tour');
+              }}
               style={[styles.tourCard, { borderColor: 'rgba(255, 107, 107, 0.4)' }]}
             >
               <View style={[styles.tourCardIcon, { backgroundColor: 'transparent' }]}>
-                <AskieCompanion size="s" state="idle" />
+                <AskieCompanion size="s" state="idle" standing={false} avatarMode={true} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.tourCardTitle}>{firstName}'s tour</Text>
@@ -961,7 +1097,10 @@ export default function OnboardingScreen({ onFinish }: Props) {
 
             {/* Parent's tour card */}
             <Pressable
-              onPress={() => setStep('parent-tour')}
+              onPress={() => {
+                triggerKidFeedback('next');
+                setStep('parent-tour');
+              }}
               style={[styles.tourCard, { borderColor: 'rgba(41, 128, 185, 0.4)', marginTop: 14 }]}
             >
               <View style={[styles.tourCardIcon, { backgroundColor: '#EBF5FB' }]}>
@@ -981,7 +1120,10 @@ export default function OnboardingScreen({ onFinish }: Props) {
         <View style={styles.footerBar}>
           <Button
             title={kidTourDone || parentTourDone ? 'Finish setup →' : 'Skip for now'}
-            onPress={() => setStep('finish')}
+            onPress={() => {
+              triggerKidFeedback('celebrate');
+              setStep('finish');
+            }}
             variant="primary"
           />
         </View>
@@ -1030,6 +1172,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
         <View style={styles.carouselHeader}>
           <Pressable
             onPress={() => {
+              triggerKidFeedback('back');
               setKidTourDone(true);
               setStep('tour-choice');
             }}
@@ -1039,10 +1182,10 @@ export default function OnboardingScreen({ onFinish }: Props) {
         </View>
 
         <View style={styles.carouselStage}>
-          <FadeSlideIn key={kidTourIndex} delay={0}>
-            <View style={[styles.tourMascotCard, cur.isMascot && { backgroundColor: 'transparent', elevation: 0, shadowOpacity: 0 }]}>
+          <FadeSlideIn key={kidTourIndex} delay={0} style={styles.centeredSlide}>
+            <View style={[styles.tourMascotCard, cur.isMascot && { backgroundColor: 'transparent', elevation: 0, shadowOpacity: 0, height: 220, width: 250 }]}>
               {cur.isMascot ? (
-                <AskieCompanion size="xl" state="celebrate" />
+                <AskieCompanion size="xl" state="idle" standing={true} blinkOnly={true} />
               ) : (
                 <AskieEmoji emoji={cur.emoji} size={72} effect="bounce" />
               )}
@@ -1062,7 +1205,10 @@ export default function OnboardingScreen({ onFinish }: Props) {
         <View style={styles.footerRow}>
           {kidTourIndex > 0 ? (
             <Pressable
-              onPress={() => setKidTourIndex((prev) => prev - 1)}
+              onPress={() => {
+                triggerKidFeedback('back');
+                setKidTourIndex((prev) => prev - 1);
+              }}
               style={styles.tourBackBtn}
             >
               <Text style={styles.tourBackBtnText}>Back</Text>
@@ -1071,9 +1217,11 @@ export default function OnboardingScreen({ onFinish }: Props) {
           <Pressable
             onPress={() => {
               if (isLast) {
+                triggerKidFeedback('celebrate');
                 setKidTourDone(true);
                 setStep('tour-choice');
               } else {
+                triggerKidFeedback('next');
                 setKidTourIndex((prev) => prev + 1);
               }
             }}
@@ -1121,6 +1269,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
         <View style={styles.carouselHeader}>
           <Pressable
             onPress={() => {
+              triggerKidFeedback('back');
               setParentTourDone(true);
               setStep('workflow');
             }}
@@ -1130,7 +1279,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
         </View>
 
         <View style={styles.carouselStage}>
-          <FadeSlideIn key={parentTourIndex} delay={0}>
+          <FadeSlideIn key={parentTourIndex} delay={0} style={styles.centeredSlide}>
             <View style={[styles.tourMascotCard, { backgroundColor: '#EBF5FB' }]}>
               <Text style={{ fontSize: 90 }}>{cur.emoji}</Text>
             </View>
@@ -1155,7 +1304,10 @@ export default function OnboardingScreen({ onFinish }: Props) {
         <View style={styles.footerRow}>
           {parentTourIndex > 0 ? (
             <Pressable
-              onPress={() => setParentTourIndex((prev) => prev - 1)}
+              onPress={() => {
+                triggerKidFeedback('back');
+                setParentTourIndex((prev) => prev - 1);
+              }}
               style={styles.tourBackBtn}
             >
               <Text style={styles.tourBackBtnText}>Back</Text>
@@ -1164,9 +1316,11 @@ export default function OnboardingScreen({ onFinish }: Props) {
           <Pressable
             onPress={() => {
               if (isLast) {
+                triggerKidFeedback('celebrate');
                 setParentTourDone(true);
                 setStep('workflow');
               } else {
+                triggerKidFeedback('next');
                 setParentTourIndex((prev) => prev + 1);
               }
             }}
@@ -1188,7 +1342,13 @@ export default function OnboardingScreen({ onFinish }: Props) {
     return (
       <View style={[styles.container, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 20 }]}>
         <View style={styles.headerProgressRow}>
-          <Pressable onPress={() => setStep('parent-tour')} style={styles.backCircle}>
+          <Pressable
+            onPress={() => {
+              triggerKidFeedback('back');
+              setStep('parent-tour');
+            }}
+            style={styles.backCircle}
+          >
             <Text style={styles.backCircleText}>‹</Text>
           </Pressable>
           <View style={{ flex: 1 }} />
@@ -1226,7 +1386,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
 
               <View style={styles.workflowStep}>
                 <View style={[styles.workflowBadge, { backgroundColor: 'transparent' }]}>
-                  <AskieCompanion size="s" state="speaking" />
+                  <AskieCompanion size="s" state="idle" standing={false} avatarMode={true} />
                 </View>
                 <View style={styles.workflowContent}>
                   <Text style={styles.workflowTitle}>3. Kidsko explains</Text>
@@ -1254,7 +1414,10 @@ export default function OnboardingScreen({ onFinish }: Props) {
         <View style={styles.footerBar}>
           <Button
             title="Got it →"
-            onPress={() => setStep('finish')}
+            onPress={() => {
+              triggerKidFeedback('celebrate');
+              setStep('finish');
+            }}
             variant="primary"
           />
         </View>
@@ -1268,7 +1431,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
   return (
     <View style={[styles.container, { paddingTop: insets.top + 30, paddingBottom: insets.bottom + 20 }]}>
       <ScrollView contentContainerStyle={[styles.scrollPad, { alignItems: 'center' }]}>
-        <FadeSlideIn delay={40}>
+        <FadeSlideIn delay={40} style={styles.centeredSlide}>
           <View style={styles.finishMascotBadge}>
             <Text style={{ fontSize: 50 }}>🎉</Text>
           </View>
@@ -1333,7 +1496,10 @@ export default function OnboardingScreen({ onFinish }: Props) {
       <View style={styles.footerBar}>
         <Button
           title={saving ? 'Setting up...' : 'Open Kidsko 🚀'}
-          onPress={handleSaveAndOpenApp}
+          onPress={() => {
+            triggerKidFeedback('celebrate');
+            handleSaveAndOpenApp();
+          }}
           loading={saving}
           variant="primary"
         />
@@ -1351,6 +1517,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     paddingTop: 10,
     paddingBottom: 24,
+  },
+  centeredSlide: {
+    width: '100%',
+    alignItems: 'center',
   },
   title: {
     fontSize: 26,
@@ -1705,6 +1875,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1E3A5F',
     justifyContent: 'center',
     alignItems: 'center',
+    alignSelf: 'center',
     marginBottom: 16,
     shadowColor: '#1E3A5F',
     shadowOffset: { width: 0, height: 6 },
@@ -1714,6 +1885,8 @@ const styles = StyleSheet.create({
   },
   pinDotsRow: {
     flexDirection: 'row',
+    justifyContent: 'center',
+    alignSelf: 'center',
     gap: 16,
     marginVertical: 16,
   },
@@ -1742,7 +1915,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    width: 280,
+    alignSelf: 'center',
+    width: 264,
     gap: 12,
     marginTop: 6,
   },
@@ -1868,18 +2042,13 @@ const styles = StyleSheet.create({
     marginTop: 16,
     paddingHorizontal: 12,
   },
-  doneMascotBox: {
-    width: 100,
-    height: 100,
-    borderRadius: 32,
-    backgroundColor: colors.coralStrong,
+  doneMascotContainer: {
+    width: 175,
+    height: 160,
+    alignSelf: 'center',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: colors.coralStrong,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 14,
-    elevation: 6,
+    marginTop: 4,
   },
   summaryTopRow: {
     flexDirection: 'row',
@@ -1911,7 +2080,9 @@ const styles = StyleSheet.create({
   summaryDetailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 5,
+    alignItems: 'flex-start',
+    paddingVertical: 6,
+    gap: 12,
   },
   summaryDetailLabel: {
     fontSize: 13,
@@ -1919,6 +2090,8 @@ const styles = StyleSheet.create({
     color: colors.subtext,
   },
   summaryDetailValue: {
+    flex: 1,
+    textAlign: 'right',
     fontSize: 13,
     fontFamily: fontFamilies.extraBold,
     color: colors.text,
@@ -2083,6 +2256,100 @@ const styles = StyleSheet.create({
     backgroundColor: '#95E1A3',
     justifyContent: 'center',
     alignItems: 'center',
+    alignSelf: 'center',
+  },
+  dropdownTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.white,
+    borderWidth: 2,
+    borderColor: '#F0E6D3',
+    borderRadius: 18,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+  },
+  dropdownTriggerText: {
+    fontSize: 16,
+    fontFamily: fontFamilies.bold,
+    color: colors.text,
+  },
+  dropdownChevron: {
+    fontSize: 16,
+    color: colors.subtext,
+  },
+  dropdownModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  dropdownSheet: {
+    width: '100%',
+    maxWidth: 360,
+    maxHeight: '70%',
+    backgroundColor: colors.white,
+    borderRadius: 24,
+    padding: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  dropdownSheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5EFE6',
+  },
+  dropdownSheetTitle: {
+    fontSize: 17,
+    fontFamily: fontFamilies.black,
+    color: colors.text,
+  },
+  dropdownCloseBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#F5EFE6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dropdownCloseText: {
+    fontSize: 14,
+    fontFamily: fontFamilies.bold,
+    color: colors.subtext,
+  },
+  dropdownOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    borderRadius: 14,
+    marginBottom: 4,
+  },
+  dropdownOptionRowSelected: {
+    backgroundColor: 'rgba(255, 107, 107, 0.1)',
+  },
+  dropdownOptionText: {
+    fontSize: 15,
+    fontFamily: fontFamilies.bold,
+    color: colors.text,
+  },
+  dropdownOptionTextSelected: {
+    color: colors.coralStrong,
+    fontFamily: fontFamilies.black,
+  },
+  dropdownCheckMark: {
+    fontSize: 16,
+    fontFamily: fontFamilies.black,
+    color: colors.coralStrong,
   },
   checkGreen: {
     fontSize: 18,

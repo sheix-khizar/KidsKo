@@ -20,6 +20,7 @@ import { AskieCompanion } from '../ui/AskieCompanion';
 import { AskieReactionOverlay, triggerAskieReaction } from '../ui/AskieReactions';
 import { VoiceSession } from '../services/voiceSocket';
 import { getVoiceEligibility } from '../services/api';
+import { vibrateTap } from '../utils/feedback';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const isCompact = SCREEN_HEIGHT < 720;
@@ -29,7 +30,7 @@ type Props = {
   studentName: string;
   initialMode?: 'voice' | 'video';
   onBack: () => void;
-  onLimitReached: () => void;
+  onLimitReached: (reason?: string) => void;
 };
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
@@ -74,16 +75,44 @@ export default function LiveVoiceScreen({
   const [status, setStatus] = useState<'connecting' | 'live' | 'ended'>('connecting');
   const [voiceState, setVoiceState] = useState<'listening' | 'thinking' | 'speaking'>('listening');
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  const limitTriggeredRef = useRef<boolean>(false);
+  const summaryFadeAnim = useRef(new Animated.Value(1)).current;
+  const isGoingHomeRef = useRef<boolean>(false);
+
+  const cleanupCallResources = useCallback(() => {
+    if (quotaTimerRef.current) clearInterval(quotaTimerRef.current);
+    if (durationTimerRef.current) clearInterval(durationTimerRef.current);
+    if (frameIntervalRef.current) clearInterval(frameIntervalRef.current);
+    quotaTimerRef.current = null;
+    durationTimerRef.current = null;
+    frameIntervalRef.current = null;
+    sessionRef.current?.end();
+    setIsVideoActive(false);
+  }, []);
+
+  const triggerLimitPaywall = useCallback(
+    (reason?: string) => {
+      if (limitTriggeredRef.current) return;
+      limitTriggeredRef.current = true;
+      cleanupCallResources();
+      onLimitReached(reason || 'Weekly voice & video limit reached! Upgrade to Premium for more.');
+    },
+    [cleanupCallResources, onLimitReached]
+  );
 
   useEffect(() => {
     getVoiceEligibility()
       .then((res) => {
+        if (res && (!res.allowed || res.minutesRemaining <= 0)) {
+          triggerLimitPaywall(res.reason);
+          return;
+        }
         if (res && typeof res.minutesRemaining === 'number') {
           setSecondsLeft((prev) => (prev === null ? res.minutesRemaining * 60 : prev));
         }
       })
       .catch(() => {});
-  }, []);
+  }, [triggerLimitPaywall]);
   const [callDuration, setCallDuration] = useState<number>(0);
   const [questionCount, setQuestionCount] = useState<number>(1);
   const [errorReason, setErrorReason] = useState<string | null>(null);
@@ -205,6 +234,9 @@ export default function LiveVoiceScreen({
 
   // Start Voice Session
   const startSession = useCallback(() => {
+    limitTriggeredRef.current = false;
+    summaryFadeAnim.setValue(1);
+    isGoingHomeRef.current = false;
     setStatus('connecting');
     setCallDuration(0);
 
@@ -228,16 +260,30 @@ export default function LiveVoiceScreen({
           }, 1000);
         },
         onCapReached: () => {
-          handleEnd();
-          setErrorReason('Voice & video limit reached for this session.');
+          triggerLimitPaywall('Weekly voice & video limit reached! Upgrade to Premium for more.');
         },
         onError: (reason) => {
-          if (reason && reason.toString().toLowerCase().includes('limit')) onLimitReached();
-          setErrorReason(reason?.toString() || 'Connection error');
+          const msg = reason?.toString() || 'Connection error';
+          const lower = msg.toLowerCase();
+          if (lower.includes('limit') || lower.includes('used up') || lower.includes('4002')) {
+            triggerLimitPaywall(msg);
+            return;
+          }
+          setErrorReason(msg);
           handleEnd();
         },
         onClose: (reason) => {
-          if (reason) setErrorReason(reason.toString());
+          const reasonStr = reason?.toString() || '';
+          if (
+            reason === 4002 ||
+            reason === 4003 ||
+            reasonStr.toLowerCase().includes('limit') ||
+            reasonStr.toLowerCase().includes('used up')
+          ) {
+            triggerLimitPaywall(reasonStr || 'Weekly voice & video limit reached! Upgrade to Premium for more.');
+            return;
+          }
+          if (reason) setErrorReason(reasonStr);
           handleEnd();
         },
         onTranscript: (text) => {
@@ -339,18 +385,23 @@ export default function LiveVoiceScreen({
     startSession();
   };
 
-  // Return to home from summary screen
+  // Return to home from summary screen with smooth fade-out animation
   const handleGoHome = () => {
-    if (quotaTimerRef.current) clearInterval(quotaTimerRef.current);
-    if (durationTimerRef.current) clearInterval(durationTimerRef.current);
-    if (frameIntervalRef.current) clearInterval(frameIntervalRef.current);
-    sessionRef.current?.end();
-    onBack();
+    if (isGoingHomeRef.current) return;
+    isGoingHomeRef.current = true;
+    cleanupCallResources();
+    Animated.timing(summaryFadeAnim, {
+      toValue: 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(() => {
+      onBack();
+    });
   };
 
   // Floating Reaction Handler (Google Meet style)
   const handleSendReaction = (emoji: string, e?: any) => {
-    console.log('[LiveVoiceScreen] handleSendReaction:', emoji, 'pageX:', e?.nativeEvent?.pageX, 'pageY:', e?.nativeEvent?.pageY);
+    vibrateTap('light');
     const x = e?.nativeEvent?.pageX ?? Math.random() * (SCREEN_WIDTH - 120) + 60;
     const y = e?.nativeEvent?.pageY ?? SCREEN_HEIGHT * 0.72;
     triggerAskieReaction(emoji, x, y);
@@ -385,11 +436,20 @@ export default function LiveVoiceScreen({
     const starsEarned = Math.max(5, questionCount * 2 + 5);
 
     return (
+      <Animated.View style={[styles.container, { opacity: summaryFadeAnim }]}>
       <LinearGradient colors={GRADIENTS.ended} style={styles.container}>
-        <View style={[styles.summaryInner, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 20 }]}>
-          {/* Celebrating Mascot Hero - Balanced & Friendly */}
+        <View
+          style={[
+            styles.summaryInner,
+            {
+              paddingTop: Math.max(insets.top, 24) + 28,
+              paddingBottom: Math.max(insets.bottom, 20) + 12,
+            },
+          ]}
+        >
+          {/* Calm Grounded Mascot Hero - Inside Safe Area */}
           <View style={styles.summaryMascotContainer}>
-            <AskieCompanion size="l" state="celebrate" standing={true} />
+            <AskieCompanion size="l" state="idle" standing={true} />
           </View>
 
           {/* Heading */}
@@ -444,6 +504,7 @@ export default function LiveVoiceScreen({
           </View>
         </View>
       </LinearGradient>
+      </Animated.View>
     );
   }
 
@@ -1176,11 +1237,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   summaryMascotContainer: {
-    width: 135,
-    height: 135,
+    width: 175,
+    height: 155,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 4,
+    marginTop: 6,
   },
   summaryTitle: {
     fontSize: isCompact ? 24 : 30,

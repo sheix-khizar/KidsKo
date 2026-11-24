@@ -155,3 +155,30 @@ export async function deleteThreadImagesFromStorage(
     return 0;
   }
 }
+
+/**
+ * Resolve a readable URL for a stored homework image (signed URL first, public URL fallback).
+ */
+export async function getHomeworkImageSignedUrl(
+  supabase: SupabaseClient,
+  storagePath: string
+): Promise<string | null> {
+  if (!storagePath) return null;
+  try {
+    const { data, error } = await supabase.storage
+      .from(BUCKET_NAME)
+      .createSignedUrl(storagePath, 3600);
+    if (!error && data?.signedUrl) {
+      return data.signedUrl;
+    }
+  } catch {
+    // Fall back to public URL below
+  }
+
+  try {
+    const { data: pub } = supabase.storage.from(BUCKET_NAME).getPublicUrl(storagePath);
+    return pub?.publicUrl || null;
+  } catch {
+    return null;
+  }
+}

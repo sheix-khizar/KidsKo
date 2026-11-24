@@ -13,7 +13,6 @@ import MainShellScreen from './src/screens/MainShellScreen';
 import PaywallScreen from './src/screens/PaywallScreen';
 import TranscriptScreen from './src/screens/TranscriptScreen';
 import LiveVoiceScreen from './src/screens/LiveVoiceScreen';
-import ParentalGate from './src/components/ParentalGate';
 import { colors, fontFamilies, gradients } from './src/theme';
 import {
   useFonts,
@@ -56,7 +55,10 @@ export default function App() {
   const [activeThread, setActiveThread] = useState<{ id: string; title: string } | null>(null);
   const [initialCallMode, setInitialCallMode] = useState<'voice' | 'video'>('voice');
   const [shellTab, setShellTab] = useState<'home' | 'chat' | 'call' | 'parents'>('home');
-  const [gateVisible, setGateVisible] = useState(false);
+  const [limitBanner, setLimitBanner] = useState<string | null>(null);
+  const [paywallRequiresGate, setPaywallRequiresGate] = useState<boolean>(false);
+  const [homeTransitionKey, setHomeTransitionKey] = useState<number>(0);
+  const [parentsUnlockedFromPaywall, setParentsUnlockedFromPaywall] = useState<boolean>(false);
 
   useEffect(() => {
     console.log('[App.tsx] screen state:', screen, 'activeStudent:', activeStudent?.id);
@@ -114,9 +116,23 @@ export default function App() {
   // Hardware back button on Android
   useEffect(() => {
     const onBackPress = () => {
-      if (screen === 'liveVoice' || screen === 'transcript' || screen === 'paywall') {
-        setActiveThread(null);
+      if (screen === 'liveVoice') {
+        setHomeTransitionKey((k) => k + 1);
         setShellTab('home');
+        setScreen('main');
+        return true;
+      }
+      if (screen === 'transcript') {
+        setActiveThread(null);
+        setScreen('main');
+        return true;
+      }
+      if (screen === 'paywall') {
+        setLimitBanner(null);
+        if (paywallRequiresGate) {
+          setHomeTransitionKey((k) => k + 1);
+          setShellTab('home');
+        }
         setScreen('main');
         return true;
       }
@@ -135,10 +151,12 @@ export default function App() {
     };
     const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => sub.remove();
-  }, [screen]);
+  }, [screen, paywallRequiresGate]);
 
-  const handleLimitReached = () => {
-    setGateVisible(true);
+  const handleLimitReached = (reason?: string) => {
+    setLimitBanner(reason || 'Weekly free limit reached! Ask a parent to unlock Kidsko Premium.');
+    setPaywallRequiresGate(true);
+    setScreen('paywall');
   };
 
   const renderContent = () => {
@@ -278,9 +296,16 @@ export default function App() {
         <View style={[{ flex: 1 }, screen !== 'main' && { display: 'none' }]}>
           <MainShellScreen
             forcedTab={shellTab}
-            onTabChange={setShellTab}
+            onTabChange={(t) => {
+              setParentsUnlockedFromPaywall(false);
+              setShellTab(t);
+            }}
             onLogout={() => setScreen('welcome')}
-            onOpenPaywall={() => setScreen('paywall')}
+            onOpenPaywall={() => {
+              setLimitBanner(null);
+              setPaywallRequiresGate(false);
+              setScreen('paywall');
+            }}
             onOpenTranscript={(student, thread) => {
               setActiveStudent(student);
               setActiveThread(thread || null);
@@ -293,13 +318,35 @@ export default function App() {
             }}
             onLimitReached={handleLimitReached}
             billingVersion={billingVersion}
+            homeTransitionKey={homeTransitionKey}
+            parentsInitiallyUnlocked={parentsUnlockedFromPaywall}
           />
         </View>
 
         {screen === 'paywall' && (
           <PaywallScreen
-            onBack={() => setScreen('main')}
+            limitBanner={limitBanner}
+            requireParentalGate={paywallRequiresGate}
+            onOpenParentsDashboard={
+              paywallRequiresGate
+                ? () => {
+                    setLimitBanner(null);
+                    setParentsUnlockedFromPaywall(true);
+                    setShellTab('parents');
+                    setScreen('main');
+                  }
+                : undefined
+            }
+            onBack={() => {
+              setLimitBanner(null);
+              if (paywallRequiresGate) {
+                setHomeTransitionKey((k) => k + 1);
+                setShellTab('home');
+              }
+              setScreen('main');
+            }}
             onPurchased={() => {
+              setLimitBanner(null);
               setBillingVersion((v) => v + 1);
               setScreen('main');
             }}
@@ -325,21 +372,13 @@ export default function App() {
             studentName={activeStudent.student_name}
             initialMode={initialCallMode}
             onBack={() => {
+              setHomeTransitionKey((k) => k + 1);
               setShellTab('home');
               setScreen('main');
             }}
             onLimitReached={handleLimitReached}
           />
         )}
-
-        <ParentalGate
-          visible={gateVisible}
-          onSuccess={() => {
-            setGateVisible(false);
-            setScreen('paywall');
-          }}
-          onCancel={() => setGateVisible(false)}
-        />
       </View>
       </FadeSlideIn>
     );

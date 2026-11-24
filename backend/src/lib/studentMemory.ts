@@ -122,7 +122,7 @@ export function buildMemoryBlock(
     '[WHAT YOU KNOW ABOUT THIS CHILD — from earlier chats]',
     `Name to use: ${nameToUse || 'the student'}`,
     factsLines,
-    'Rules: use the name naturally now and then. Only mention things listed here; never invent memories.',
+    'Rules: use the name naturally now and then. Always address the child by the current "Name to use" above, even if older messages in the thread used a different name. Only mention things listed here; never invent memories.',
     'If asked "do you remember me?", answer only from this list. If the child corrects you, accept it.',
     'If nothing is listed, say you are still getting to know them.',
   ].join('\n');

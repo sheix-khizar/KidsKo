@@ -23,6 +23,7 @@ type Props = {
   style?: ViewStyle;
   standing?: boolean;
   avatarMode?: boolean;
+  blinkOnly?: boolean;
 };
 
 const SIZE_CONFIG: Record<CompanionSize, { container: number; radius: number; eyeSize: number; beakSize: number }> = {
@@ -46,6 +47,7 @@ export function AskieCompanion({
   style,
   standing,
   avatarMode,
+  blinkOnly = false,
 }: Props) {
   const reduceMotion = useReduceMotion();
   const config = SIZE_CONFIG[size] || SIZE_CONFIG.m;
@@ -73,7 +75,7 @@ export function AskieCompanion({
 
   // 1. Idle Hover & Torso Breathing
   useEffect(() => {
-    if (reduceMotion || isAvatar) {
+    if (reduceMotion || isAvatar || blinkOnly) {
       floatAnim.setValue(0);
       return;
     }
@@ -82,13 +84,13 @@ export function AskieCompanion({
       Animated.sequence([
         Animated.timing(floatAnim, {
           toValue: 1,
-          duration: state === 'celebrate' ? 300 : (isStanding ? 2000 : 1600),
+          duration: state === 'celebrate' ? 900 : (isStanding ? 2000 : 1600),
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
         Animated.timing(floatAnim, {
           toValue: 0,
-          duration: state === 'celebrate' ? 300 : (isStanding ? 2000 : 1600),
+          duration: state === 'celebrate' ? 900 : (isStanding ? 2000 : 1600),
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
@@ -97,11 +99,11 @@ export function AskieCompanion({
 
     hover.start();
     return () => hover.stop();
-  }, [state, isAvatar, isStanding, reduceMotion]);
+  }, [state, isAvatar, isStanding, blinkOnly, reduceMotion]);
 
   // 2. Rich Expressive Mascot Animations (periodic wave, curious tilt, ear wiggle, wing flutter, pupil glance)
   useEffect(() => {
-    if (reduceMotion || !isStanding || isAvatar) {
+    if (reduceMotion || !isStanding || isAvatar || blinkOnly) {
       waveAnim.setValue(0);
       waveLiftAnim.setValue(0);
       leftWingAngleAnim.setValue(-6);
@@ -118,18 +120,18 @@ export function AskieCompanion({
     let timer: any;
 
     if (state === 'celebrate') {
-      // Joyful fast waving loop in celebration state
+      // Gentle cheerful wave loop in celebration state (grounded, calm motion)
       const celebrateLoop = Animated.loop(
         Animated.sequence([
           Animated.parallel([
-            Animated.timing(leftWingAngleAnim, { toValue: 145, duration: 160, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-            Animated.timing(rightWingAngleAnim, { toValue: -50, duration: 160, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-            Animated.timing(waveLiftAnim, { toValue: 1, duration: 160, useNativeDriver: true }),
+            Animated.timing(leftWingAngleAnim, { toValue: 132, duration: 420, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+            Animated.timing(rightWingAngleAnim, { toValue: -20, duration: 420, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+            Animated.timing(waveLiftAnim, { toValue: 0.9, duration: 420, useNativeDriver: true }),
           ]),
           Animated.parallel([
-            Animated.timing(leftWingAngleAnim, { toValue: 115, duration: 160, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-            Animated.timing(rightWingAngleAnim, { toValue: -30, duration: 160, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-            Animated.timing(waveLiftAnim, { toValue: 0.8, duration: 160, useNativeDriver: true }),
+            Animated.timing(leftWingAngleAnim, { toValue: 112, duration: 380, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+            Animated.timing(rightWingAngleAnim, { toValue: -10, duration: 380, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+            Animated.timing(waveLiftAnim, { toValue: 0.75, duration: 380, useNativeDriver: true }),
           ]),
         ])
       );
@@ -257,7 +259,7 @@ export function AskieCompanion({
       isMounted = false;
       if (timer) clearTimeout(timer);
     };
-  }, [isStanding, isAvatar, state, reduceMotion]);
+  }, [isStanding, isAvatar, blinkOnly, state, reduceMotion]);
 
   // 3. Natural Blinking Loop (every ~3.5 seconds)
   useEffect(() => {
@@ -287,7 +289,7 @@ export function AskieCompanion({
 
   // 3. Speaking Mouth Movement
   useEffect(() => {
-    if (reduceMotion || state !== 'speaking') {
+    if (reduceMotion || state !== 'speaking' || blinkOnly) {
       mouthAnim.setValue(0);
       return;
     }
@@ -439,34 +441,34 @@ export function AskieCompanion({
 
   const hopTranslateY = bounceHopAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, -7],
+    outputRange: [0, -3],
   });
 
-  const translateY = isAvatar
+  const translateY = isAvatar || blinkOnly
     ? 0
     : isStandingAndIdle
     ? hopTranslateY
     : floatAnim.interpolate({
         inputRange: [0, 1],
-        outputRange: [0, state === 'celebrate' ? -12 : -6],
+        outputRange: [0, state === 'celebrate' ? -4 : -6],
       });
 
   // Torso subtle breathing scale (standing character breathes naturally without jumping off floor)
-  const torsoScaleY = isStandingAndIdle && !isAvatar
+  const torsoScaleY = isStandingAndIdle && !isAvatar && !blinkOnly
     ? floatAnim.interpolate({
         inputRange: [0, 1],
         outputRange: [1, 1.022],
       })
     : 1;
 
-  const torsoScaleX = isStandingAndIdle && !isAvatar
+  const torsoScaleX = isStandingAndIdle && !isAvatar && !blinkOnly
     ? floatAnim.interpolate({
         inputRange: [0, 1],
         outputRange: [1, 0.988],
       })
     : 1;
 
-  const rotate = isAvatar
+  const rotate = isAvatar || blinkOnly
     ? '0deg'
     : state === 'thinking'
     ? tiltAnim.interpolate({
@@ -896,17 +898,17 @@ export function AskieCompanion({
               </View>
             </View>
 
-            {/* Beak / Talking Mouth - tucked between bottom of eyes */}
+            {/* Beak / Talking Mouth - tucked cleanly below eyes */}
             <Animated.View
               style={[
                 styles.beak,
                 {
                   width: config.container * 0.18,
-                  height: config.container * 0.09,
-                  borderRadius: config.container * 0.045,
-                  marginTop: -config.eyeSize * 0.20,
+                  height: isAvatar ? config.container * 0.105 : config.container * 0.09,
+                  borderRadius: config.container * 0.05,
+                  marginTop: isAvatar ? -config.eyeSize * 0.12 : -config.eyeSize * 0.16,
                   borderWidth: Math.max(1, config.container * 0.015),
-                  transform: [{ scaleY: state === 'celebrate' ? 1.4 : mouthScaleY }],
+                  transform: [{ scaleY: blinkOnly ? 1 : state === 'celebrate' ? 1.15 : mouthScaleY }],
                 },
               ]}
             >

@@ -6,7 +6,7 @@ import {
   Pressable,
   StyleSheet,
   FlatList,
-  KeyboardAvoidingView,
+  Keyboard,
   Platform,
   Modal,
   Image,
@@ -24,7 +24,9 @@ import {
   AskieCompanion,
   AskieReactionOverlay,
   triggerAskieReaction,
+  KeyboardAwareView,
 } from '../ui';
+import { vibrateTap } from '../utils/feedback';
 import { sendMessage, Message } from '../services/chat';
 import { analyzeHomework } from '../services/homework';
 import { useVoiceInput } from '../hooks/useVoiceInput';
@@ -66,7 +68,7 @@ type Props = {
   onBack: () => void;
   initialThreadId?: string;
   initialExplanation?: string;
-  onLimitReached?: () => void;
+  onLimitReached?: (reason?: string) => void;
   embedded?: boolean;
   onSwitchStudent?: () => void;
 };
@@ -96,9 +98,10 @@ export default function ChatScreen({
   const [remaining, setRemaining] = useState<number | null>(null);
   const [isPremium, setIsPremium] = useState(false);
 
-  // Image upload states
+  // Image upload & fullscreen viewer states
   const [showImagePickerModal, setShowImagePickerModal] = useState(false);
   const [previewImage, setPreviewImage] = useState<ProcessedImage | null>(null);
+  const [fullscreenImageUri, setFullscreenImageUri] = useState<string | null>(null);
 
   // History drawer and continuity states
   const [showDrawer, setShowDrawer] = useState(false);
@@ -112,6 +115,16 @@ export default function ChatScreen({
   const { listening, startListening, stopListening } = useVoiceInput((transcript) => {
     setInput(transcript);
   });
+
+  // Auto-scroll messages above keyboard when opened
+  useEffect(() => {
+    const sub = Keyboard.addListener('keyboardDidShow', () => {
+      if (messages.length > 0) {
+        setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80);
+      }
+    });
+    return () => sub.remove();
+  }, [messages.length]);
 
   // Fetch recent thread on mount or when studentId changes
   useEffect(() => {
@@ -144,6 +157,7 @@ export default function ChatScreen({
         return {
           role: m.role,
           content: content || '',
+          imageUri: m.imageExpired ? undefined : m.imageUrl,
         };
       });
       setMessages(formattedMessages);
@@ -210,7 +224,10 @@ export default function ChatScreen({
       const promptForBackend = userText || 'Please look at this image and help me understand it.';
       const displayContent = userText ? `📸 ${userText}` : '📸 [Homework photo submitted]';
 
-      setMessages((prev) => [...prev, { role: 'user', content: displayContent }]);
+      setMessages((prev) => [
+        ...prev,
+        { role: 'user', content: displayContent, imageUri: imageToSend.uri },
+      ]);
       setSending(true);
       setPreviewImage(null);
       setInput('');
@@ -224,7 +241,7 @@ export default function ChatScreen({
         if (userText) setInput(userText);
         setPreviewImage(imageToSend); // keep image preview on failure
         if (err.status === 429 && onLimitReached) {
-          onLimitReached();
+          onLimitReached(err.message);
         }
       } finally {
         setSending(false);
@@ -248,7 +265,7 @@ export default function ChatScreen({
         } else if (err.status === 429) {
           setErrorMsg(err.message || 'Weekly question limit reached. Try again later!');
           setRemaining(0);
-          if (onLimitReached) onLimitReached();
+          if (onLimitReached) onLimitReached(err.message);
         } else {
           setErrorMsg(err.message || 'Something went wrong. Please try again.');
         }
@@ -285,10 +302,7 @@ export default function ChatScreen({
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+    <KeyboardAwareView style={styles.container}>
       {/* ── Topbar Matching Prototype ── */}
       <View style={styles.topbar}>
         <View style={styles.topbarLeft}>
@@ -376,6 +390,7 @@ export default function ChatScreen({
                       pressed && styles.qpPressed,
                     ]}
                     onPress={() => {
+                      vibrateTap('light');
                       triggerAskieReaction(pill.icon);
                       handleSend(pill.ask);
                     }}
@@ -423,6 +438,23 @@ export default function ChatScreen({
                       item.role === 'user' && styles.bubbleUser,
                     ]}
                   >
+                    {item.imageUri ? (
+                      <Pressable
+                        onPress={() => setFullscreenImageUri(item.imageUri!)}
+                        style={styles.sentImageWrapper}
+                        accessibilityRole="imagebutton"
+                        accessibilityLabel="View attached homework photo"
+                      >
+                        <Image
+                          source={{ uri: item.imageUri }}
+                          style={styles.sentImageThumbnail}
+                          resizeMode="cover"
+                        />
+                        <View style={styles.sentImageZoomBadge}>
+                          <Text style={styles.sentImageZoomText}>🔍 Tap to view</Text>
+                        </View>
+                      </Pressable>
+                    ) : null}
                     <Text
                       style={[
                         styles.bubbleText,
@@ -448,7 +480,10 @@ export default function ChatScreen({
                         <Pressable
                           key={emoji}
                           style={styles.msgReactionPill}
-                          onPress={() => triggerAskieReaction(emoji)}
+                          onPress={() => {
+                            vibrateTap('medium');
+                            triggerAskieReaction(emoji);
+                          }}
                           accessibilityRole="button"
                           accessibilityLabel={`React ${emoji}`}
                         >
@@ -467,14 +502,20 @@ export default function ChatScreen({
       {/* Homework photo preview bar if image selected */}
       {previewImage && (
         <View style={styles.attachmentBar}>
-          <Image
-            source={{ uri: previewImage.uri }}
-            style={styles.attachmentThumbnail}
-          />
+          <Pressable
+            onPress={() => setFullscreenImageUri(previewImage.uri)}
+            accessibilityRole="imagebutton"
+            accessibilityLabel="Preview attached homework photo"
+          >
+            <Image
+              source={{ uri: previewImage.uri }}
+              style={styles.attachmentThumbnail}
+            />
+          </Pressable>
           <View style={styles.attachmentInfo}>
             <Text style={styles.attachmentTitle}>Homework Photo Attached 📷</Text>
             <Text style={styles.attachmentSub}>
-              Type your question below or tap send
+              Tap photo to inspect · Type your question below
             </Text>
           </View>
           <Pressable
@@ -568,7 +609,13 @@ export default function ChatScreen({
       </View>
 
       {/* Image Selection Modal */}
-      <Modal visible={showImagePickerModal} transparent animationType="slide">
+      <Modal
+        visible={showImagePickerModal}
+        transparent
+        statusBarTranslucent
+        animationType="slide"
+        onRequestClose={() => setShowImagePickerModal(false)}
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Select Homework Photo</Text>
@@ -625,9 +672,36 @@ export default function ChatScreen({
         }}
       />
 
+      {/* Full-Screen Attached Image Viewer Modal */}
+      <Modal
+        visible={!!fullscreenImageUri}
+        transparent
+        statusBarTranslucent
+        animationType="fade"
+        onRequestClose={() => setFullscreenImageUri(null)}
+      >
+        <View style={styles.imageViewerOverlay}>
+          <Pressable
+            style={styles.imageViewerCloseBtn}
+            onPress={() => setFullscreenImageUri(null)}
+            accessibilityRole="button"
+            accessibilityLabel="Close image viewer"
+          >
+            <Text style={styles.imageViewerCloseText}>✕ Close</Text>
+          </Pressable>
+          {fullscreenImageUri ? (
+            <Image
+              source={{ uri: fullscreenImageUri }}
+              style={styles.imageViewerFull}
+              resizeMode="contain"
+            />
+          ) : null}
+        </View>
+      </Modal>
+
       {/* Floating 3D Emoji Celebration Overlay */}
       <AskieReactionOverlay />
-    </KeyboardAvoidingView>
+    </KeyboardAwareView>
   );
 }
 
@@ -1246,5 +1320,59 @@ const styles = StyleSheet.create({
     color: colors.subtext,
     fontFamily: fontFamilies.bold,
     fontSize: 15,
+  },
+  sentImageWrapper: {
+    marginBottom: 8,
+    borderRadius: 14,
+    overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: 'rgba(0,0,0,0.08)',
+  },
+  sentImageThumbnail: {
+    width: 195,
+    height: 150,
+    borderRadius: 14,
+  },
+  sentImageZoomBadge: {
+    position: 'absolute',
+    bottom: 6,
+    right: 6,
+    backgroundColor: 'rgba(0,0,0,0.62)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  sentImageZoomText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontFamily: fontFamilies.bold,
+  },
+  imageViewerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(10, 14, 24, 0.94)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  imageViewerCloseBtn: {
+    position: 'absolute',
+    top: 48,
+    right: 20,
+    zIndex: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+  },
+  imageViewerCloseText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontFamily: fontFamilies.black,
+  },
+  imageViewerFull: {
+    width: '100%',
+    height: '80%',
   },
 });

@@ -20,6 +20,7 @@ import {
   FadeSlideIn,
   useSafeAreaInsets,
   AskieCompanion,
+  KeyboardAwareView,
 } from '../ui';
 import { colors, fontFamilies, gradients } from '../theme';
 
@@ -148,10 +149,7 @@ export default function RegisterScreen({ onRegistered, onRequireVerification, on
       </LinearGradient>
 
       {/* ── Body / Form Area ── */}
-      <KeyboardAvoidingView
-        style={styles.keyboardContainer}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      <KeyboardAwareView style={styles.keyboardContainer}>
         <ScrollView
           contentContainerStyle={[
             styles.scrollContent,
@@ -362,7 +360,7 @@ export default function RegisterScreen({ onRegistered, onRequireVerification, on
             </Pressable>
           </FadeSlideIn>
         </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAwareView>
 
       <ServerConfigModal
         visible={showServerModal}

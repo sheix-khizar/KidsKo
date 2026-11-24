@@ -8,7 +8,9 @@ import {
   Animated,
   TextInput,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
+import { KeyboardAwareView } from '../ui';
 import { fontFamilies, colors } from '../theme';
 import {
   isPinConfigured,
@@ -185,10 +187,15 @@ export default function ParentalGate({ visible, onSuccess, onCancel }: Props) {
   if (!visible) return null;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
-      <View style={styles.backdrop}>
-        {/* Ambient radial glow container */}
-        <View style={styles.cardContainer}>
+    <Modal visible={visible} transparent statusBarTranslucent animationType="fade" onRequestClose={onCancel}>
+      <KeyboardAwareView style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}>
+        <ScrollView
+          contentContainerStyle={styles.backdropScroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Ambient radial glow container */}
+          <View style={styles.cardContainer}>
           <View style={styles.glowOrb} />
 
           {/* Close button */}
@@ -355,8 +362,9 @@ export default function ParentalGate({ visible, onSuccess, onCancel }: Props) {
               )}
             </View>
           )}
-        </View>
-      </View>
+          </View>
+        </ScrollView>
+      </KeyboardAwareView>
     </Modal>
   );
 }
@@ -365,6 +373,12 @@ const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  backdropScroll: {
+    flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,

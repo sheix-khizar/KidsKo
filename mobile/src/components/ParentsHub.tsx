@@ -44,6 +44,8 @@ import { isPremiumActive } from '../services/billing';
 import { colors, radii, spacing, fontFamilies, gradients, shadows } from '../theme';
 import { LinearGradient } from '../ui/LinearGradient';
 import { PressScale, FadeSlideIn } from '../ui/motion';
+import { KeyboardAwareView } from '../ui/KeyboardAware';
+import { loadFeedbackPreferences, setVibrationEnabled as persistVibrationEnabled, vibrateTap } from '../utils/feedback';
 import ParentalGate from './ParentalGate';
 
 type SubTab = 'overview' | 'history' | 'limits' | 'settings';
@@ -171,9 +173,11 @@ export default function ParentsHub({
   const [curfewEnabled, setCurfewEnabled] = useState<boolean>(false);
   const [chatRetention, setChatRetention] = useState<'30' | '90' | 'forever'>('forever');
 
-  // Notifications State
+  // Notifications & Preferences State
   const [dailyReport, setDailyReport] = useState<boolean>(true);
   const [limitAlerts, setLimitAlerts] = useState<boolean>(true);
+  const [vibrationEnabled, setVibrationEnabledState] = useState<boolean>(true);
+  const [showAddGradeDropdown, setShowAddGradeDropdown] = useState<boolean>(false);
 
   // Student Memory State
   const [memory, setMemory] = useState<StudentMemoryData | null>(null);
@@ -220,6 +224,9 @@ export default function ParentsHub({
 
         const savedLimitAlerts = await SecureStore.getItemAsync('kidsko_parent_limit_alerts');
         if (savedLimitAlerts !== null) setLimitAlerts(savedLimitAlerts === 'true');
+
+        const vibPref = await loadFeedbackPreferences();
+        setVibrationEnabledState(vibPref);
       } catch {}
     })();
   }, []);
@@ -349,6 +356,14 @@ export default function ParentsHub({
     } catch {}
   };
 
+  const handleToggleVibration = async (val: boolean) => {
+    setVibrationEnabledState(val);
+    await persistVibrationEnabled(val);
+    if (val) {
+      vibrateTap('medium');
+    }
+  };
+
   // Add Child
   const handleConfirmAddChild = async () => {
     if (!newChildName.trim()) {
@@ -359,6 +374,16 @@ export default function ParentsHub({
     setAddChildError(null);
     try {
       const created = await createStudent(newChildName.trim());
+      if (created?.id) {
+        const facts: string[] = [];
+        if (newChildAge.trim()) facts.push(`Age: ${newChildAge.trim()}`);
+        if (newChildGrade) facts.push(`Grade: ${newChildGrade}`);
+        await updateStudentMemory(created.id, {
+          enabled: true,
+          preferredName: newChildName.trim(),
+          facts,
+        }).catch(() => {});
+      }
       const updatedList = await onRefreshStudents();
       if (Array.isArray(updatedList) && updatedList.length > 0) {
         const found = updatedList.find((s) => s.id === created.id) || updatedList[0];
@@ -1446,7 +1471,7 @@ export default function ParentsHub({
 
               <TouchableOpacity
                 onPress={() => Alert.alert('Content Filter', 'Child safe strict AI filtering is actively turned on.')}
-                style={[styles.groupedRow, { borderBottomWidth: 0 }]}
+                style={styles.groupedRow}
               >
                 <View style={[styles.groupedIconSquircle, { backgroundColor: '#FFF0F0' }]}>
                   <Text style={{ fontSize: 18 }}>🚫</Text>
@@ -1457,6 +1482,22 @@ export default function ParentsHub({
                 </View>
                 <Text style={styles.groupedChevron}>›</Text>
               </TouchableOpacity>
+
+              <View style={[styles.groupedRow, { borderBottomWidth: 0 }]}>
+                <View style={[styles.groupedIconSquircle, { backgroundColor: '#F3EEFF' }]}>
+                  <Text style={{ fontSize: 18 }}>📳</Text>
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.groupedRowTitle}>Vibration</Text>
+                  <Text style={styles.groupedRowSubtitle}>Vibrate when clicking emojis & buttons</Text>
+                </View>
+                <Switch
+                  value={vibrationEnabled}
+                  onValueChange={handleToggleVibration}
+                  trackColor={{ false: colors.disabledBg, true: colors.green }}
+                  thumbColor={colors.white}
+                />
+              </View>
             </View>
 
             {/* PARENT ACCOUNT & SECURITY Section */}
@@ -1581,160 +1622,181 @@ export default function ParentsHub({
       <Modal
         visible={showAddModal}
         transparent
+        statusBarTranslucent
         animationType="slide"
         onRequestClose={() => !addingChild && setShowAddModal(false)}
       >
-        <View style={styles.modalBackdrop}>
+        <KeyboardAwareView style={styles.modalBackdrop}>
           <View style={styles.modalSheetCard}>
-            <View style={styles.modalSheetHeader}>
-              <Text style={styles.modalSheetTitle}>➕ Add Child</Text>
+            <ScrollView keyboardShouldPersistTaps="handled" bounces={false} showsVerticalScrollIndicator={false}>
+              <View style={styles.modalSheetHeader}>
+                <Text style={styles.modalSheetTitle}>➕ Add Child</Text>
+                <TouchableOpacity
+                  onPress={() => setShowAddModal(false)}
+                  style={styles.modalCloseBtn}
+                  disabled={addingChild}
+                >
+                  <Text style={{ fontSize: 16, color: colors.subtext }}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.modalFieldLabel}>Child's Name</Text>
+              <TextInput
+                style={styles.modalTextInput}
+                value={newChildName}
+                onChangeText={(t) => {
+                  setNewChildName(t);
+                  if (addChildError) setAddChildError(null);
+                }}
+                placeholder="e.g. Sara"
+                placeholderTextColor={colors.subtext}
+                editable={!addingChild}
+              />
+
+              <Text style={styles.modalFieldLabel}>Age</Text>
+              <TextInput
+                style={styles.modalTextInput}
+                value={newChildAge}
+                onChangeText={setNewChildAge}
+                placeholder="e.g. 8"
+                keyboardType="number-pad"
+                placeholderTextColor={colors.subtext}
+                editable={!addingChild}
+              />
+
+              <Text style={styles.modalFieldLabel}>Grade</Text>
               <TouchableOpacity
-                onPress={() => setShowAddModal(false)}
-                style={styles.modalCloseBtn}
+                onPress={() => setShowAddGradeDropdown((prev) => !prev)}
+                style={styles.gradeDropdownTrigger}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.gradeDropdownText}>🎓 {newChildGrade}</Text>
+                <Text style={styles.gradeDropdownArrow}>{showAddGradeDropdown ? '▲' : '▼'}</Text>
+              </TouchableOpacity>
+              {showAddGradeDropdown && (
+                <View style={styles.gradeDropdownMenu}>
+                  {['Kindergarten', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7', 'Grade 8'].map((gr) => (
+                    <TouchableOpacity
+                      key={gr}
+                      onPress={() => {
+                        setNewChildGrade(gr);
+                        setShowAddGradeDropdown(false);
+                      }}
+                      style={[
+                        styles.gradeDropdownOption,
+                        newChildGrade === gr && styles.gradeDropdownOptionActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.gradeDropdownOptionText,
+                          newChildGrade === gr && styles.gradeDropdownOptionTextActive,
+                        ]}
+                      >
+                        {gr}
+                      </Text>
+                      {newChildGrade === gr && <Text style={styles.gradeDropdownCheck}>✓</Text>}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+
+              {addChildError ? (
+                <Text style={styles.modalErrorText}>{addChildError}</Text>
+              ) : null}
+
+              <TouchableOpacity
+                onPress={handleConfirmAddChild}
+                style={[styles.modalPrimaryBtn, addingChild && { opacity: 0.7 }]}
                 disabled={addingChild}
               >
-                <Text style={{ fontSize: 16, color: colors.subtext }}>✕</Text>
+                {addingChild ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={styles.modalPrimaryBtnText}>Add Child 🎉</Text>
+                )}
               </TouchableOpacity>
-            </View>
-
-            <Text style={styles.modalFieldLabel}>Child's Name</Text>
-            <TextInput
-              style={styles.modalTextInput}
-              value={newChildName}
-              onChangeText={(t) => {
-                setNewChildName(t);
-                if (addChildError) setAddChildError(null);
-              }}
-              placeholder="e.g. Sara"
-              placeholderTextColor={colors.subtext}
-              editable={!addingChild}
-            />
-
-            <Text style={styles.modalFieldLabel}>Age</Text>
-            <TextInput
-              style={styles.modalTextInput}
-              value={newChildAge}
-              onChangeText={setNewChildAge}
-              placeholder="e.g. 8"
-              keyboardType="number-pad"
-              placeholderTextColor={colors.subtext}
-              editable={!addingChild}
-            />
-
-            <Text style={styles.modalFieldLabel}>Grade</Text>
-            <View style={styles.gradePickerRow}>
-              {['Grade 1', 'Grade 3', 'Grade 5', 'Grade 7'].map((gr) => (
-                <TouchableOpacity
-                  key={gr}
-                  onPress={() => setNewChildGrade(gr)}
-                  style={[
-                    styles.gradePickerPill,
-                    newChildGrade === gr && styles.gradePickerPillActive,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.gradePickerText,
-                      newChildGrade === gr && styles.gradePickerTextActive,
-                    ]}
-                  >
-                    {gr}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {addChildError ? (
-              <Text style={styles.modalErrorText}>{addChildError}</Text>
-            ) : null}
-
-            <TouchableOpacity
-              onPress={handleConfirmAddChild}
-              style={[styles.modalPrimaryBtn, addingChild && { opacity: 0.7 }]}
-              disabled={addingChild}
-            >
-              {addingChild ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <Text style={styles.modalPrimaryBtnText}>Add Child 🎉</Text>
-              )}
-            </TouchableOpacity>
+            </ScrollView>
           </View>
-        </View>
+        </KeyboardAwareView>
       </Modal>
 
       {/* ── MODAL 2: Edit Child Modal ── */}
       <Modal
         visible={editingStudent !== null}
         transparent
+        statusBarTranslucent
         animationType="fade"
         onRequestClose={() => !updatingChild && setEditingStudent(null)}
       >
-        <View style={styles.modalBackdrop}>
+        <KeyboardAwareView style={styles.modalBackdrop}>
           <View style={styles.modalSheetCard}>
-            <View style={styles.modalSheetHeader}>
-              <Text style={styles.modalSheetTitle}>✏️ Edit Child Profile</Text>
-              <TouchableOpacity
-                onPress={() => setEditingStudent(null)}
-                style={styles.modalCloseBtn}
-                disabled={updatingChild}
-              >
-                <Text style={{ fontSize: 16, color: colors.subtext }}>✕</Text>
-              </TouchableOpacity>
-            </View>
+            <ScrollView keyboardShouldPersistTaps="handled" bounces={false} showsVerticalScrollIndicator={false}>
+              <View style={styles.modalSheetHeader}>
+                <Text style={styles.modalSheetTitle}>✏️ Edit Child Profile</Text>
+                <TouchableOpacity
+                  onPress={() => setEditingStudent(null)}
+                  style={styles.modalCloseBtn}
+                  disabled={updatingChild}
+                >
+                  <Text style={{ fontSize: 16, color: colors.subtext }}>✕</Text>
+                </TouchableOpacity>
+              </View>
 
-            <Text style={styles.modalFieldLabel}>Child's Name</Text>
-            <TextInput
-              style={styles.modalTextInput}
-              value={editChildName}
-              onChangeText={(t) => {
-                setEditChildName(t);
-                if (editChildError) setEditChildError(null);
-              }}
-              placeholder="Child's Name"
-              placeholderTextColor={colors.subtext}
-              editable={!updatingChild}
-            />
-
-            {editChildError ? (
-              <Text style={styles.modalErrorText}>{editChildError}</Text>
-            ) : null}
-
-            <TouchableOpacity
-              onPress={handleSaveEditChild}
-              style={[styles.modalPrimaryBtn, updatingChild && { opacity: 0.7 }]}
-              disabled={updatingChild}
-            >
-              {updatingChild ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <Text style={styles.modalPrimaryBtnText}>Save Changes</Text>
-              )}
-            </TouchableOpacity>
-
-            {editingStudent && (
-              <TouchableOpacity
-                onPress={() => {
-                  const toDelete = editingStudent;
-                  setEditingStudent(null);
-                  handleRequestDeleteChild(toDelete);
+              <Text style={styles.modalFieldLabel}>Child's Name</Text>
+              <TextInput
+                style={styles.modalTextInput}
+                value={editChildName}
+                onChangeText={(t) => {
+                  setEditChildName(t);
+                  if (editChildError) setEditChildError(null);
                 }}
-                style={styles.modalDangerBtn}
+                placeholder="Child's Name"
+                placeholderTextColor={colors.subtext}
+                editable={!updatingChild}
+              />
+
+              {editChildError ? (
+                <Text style={styles.modalErrorText}>{editChildError}</Text>
+              ) : null}
+
+              <TouchableOpacity
+                onPress={handleSaveEditChild}
+                style={[styles.modalPrimaryBtn, updatingChild && { opacity: 0.7 }]}
                 disabled={updatingChild}
               >
-                <Text style={styles.modalDangerBtnText}>
-                  🗑️ Delete {editingStudent.student_name}'s Profile
-                </Text>
+                {updatingChild ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={styles.modalPrimaryBtnText}>Save Changes</Text>
+                )}
               </TouchableOpacity>
-            )}
+
+              {editingStudent && (
+                <TouchableOpacity
+                  onPress={() => {
+                    const toDelete = editingStudent;
+                    setEditingStudent(null);
+                    handleRequestDeleteChild(toDelete);
+                  }}
+                  style={styles.modalDangerBtn}
+                  disabled={updatingChild}
+                >
+                  <Text style={styles.modalDangerBtnText}>
+                    🗑️ Delete {editingStudent.student_name}'s Profile
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </ScrollView>
           </View>
-        </View>
+        </KeyboardAwareView>
       </Modal>
 
       {/* ── MODAL 3: Password Confirmation for Permanent Account Deletion ── */}
       <Modal
         visible={accountDeleteModalVisible}
         transparent
+        statusBarTranslucent
         animationType="fade"
         onRequestClose={() => {
           if (!deletingAccount) {
@@ -1744,438 +1806,450 @@ export default function ParentsHub({
           }
         }}
       >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCardCenter}>
-            <Text style={styles.deleteModalTitle}>⚠️ Confirm Password</Text>
-            <Text style={styles.deleteModalSub}>
-              This will permanently delete your account, your children's profiles, learning history, and memory. This action cannot be undone.
-            </Text>
-            <Text style={styles.deleteModalSub}>
-              Please enter your Kidsko password to confirm:
-            </Text>
+        <KeyboardAwareView style={{ backgroundColor: 'rgba(0, 0, 0, 0.55)' }}>
+          <ScrollView
+            contentContainerStyle={styles.modalCenterScroll}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.modalCardCenter}>
+              <Text style={styles.deleteModalTitle}>⚠️ Confirm Password</Text>
+              <Text style={styles.deleteModalSub}>
+                This will permanently delete your account, your children's profiles, learning history, and memory. This action cannot be undone.
+              </Text>
+              <Text style={styles.deleteModalSub}>
+                Please enter your Kidsko password to confirm:
+              </Text>
 
-            <TextInput
-              style={styles.modalTextInput}
-              value={accountDeletePassword}
-              onChangeText={(t) => {
-                setAccountDeletePassword(t);
-                if (accountDeleteError) setAccountDeleteError(null);
-              }}
-              placeholder="Your Account Password"
-              placeholderTextColor={colors.subtext}
-              secureTextEntry
-              autoCapitalize="none"
-              editable={!deletingAccount}
-            />
-
-            {accountDeleteError ? (
-              <Text style={styles.modalErrorText}>{accountDeleteError}</Text>
-            ) : null}
-
-            <View style={styles.deleteModalActions}>
-              <TouchableOpacity
-                style={styles.modalCancelBtn}
-                onPress={() => {
-                  setAccountDeleteModalVisible(false);
-                  setAccountDeletePassword('');
-                  setAccountDeleteError(null);
+              <TextInput
+                style={styles.modalTextInput}
+                value={accountDeletePassword}
+                onChangeText={(t) => {
+                  setAccountDeletePassword(t);
+                  if (accountDeleteError) setAccountDeleteError(null);
                 }}
-                disabled={deletingAccount}
-              >
-                <Text style={styles.modalCancelBtnText}>Cancel</Text>
-              </TouchableOpacity>
+                placeholder="Your Account Password"
+                placeholderTextColor={colors.subtext}
+                secureTextEntry
+                autoCapitalize="none"
+                editable={!deletingAccount}
+              />
 
-              <TouchableOpacity
-                style={[
-                  styles.modalConfirmDeleteBtn,
-                  deletingAccount && { opacity: 0.6 },
-                ]}
-                onPress={handleConfirmAccountDeletion}
-                disabled={deletingAccount}
-              >
-                {deletingAccount ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
-                ) : (
-                  <Text style={styles.modalConfirmDeleteBtnText}>Permanently Delete</Text>
-                )}
-              </TouchableOpacity>
+              {accountDeleteError ? (
+                <Text style={styles.modalErrorText}>{accountDeleteError}</Text>
+              ) : null}
+
+              <View style={styles.deleteModalActions}>
+                <TouchableOpacity
+                  style={styles.modalCancelBtn}
+                  onPress={() => {
+                    setAccountDeleteModalVisible(false);
+                    setAccountDeletePassword('');
+                    setAccountDeleteError(null);
+                  }}
+                  disabled={deletingAccount}
+                >
+                  <Text style={styles.modalCancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.modalConfirmDeleteBtn,
+                    deletingAccount && { opacity: 0.6 },
+                  ]}
+                  onPress={handleConfirmAccountDeletion}
+                  disabled={deletingAccount}
+                >
+                  {deletingAccount ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                  ) : (
+                    <Text style={styles.modalConfirmDeleteBtnText}>Permanently Delete</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        </View>
+          </ScrollView>
+        </KeyboardAwareView>
       </Modal>
 
       {/* ── MODAL 4: Change Parent Email / Gmail ── */}
       <Modal
         visible={changeEmailModalVisible}
         transparent
+        statusBarTranslucent
         animationType="slide"
         onRequestClose={() => !updatingEmail && setChangeEmailModalVisible(false)}
       >
-        <View style={styles.modalBackdrop}>
+        <KeyboardAwareView style={styles.modalBackdrop}>
           <View style={styles.modalSheetCard}>
-            <View style={styles.modalSheetHeader}>
-              <Text style={styles.modalSheetTitle}>📧 Account Email</Text>
-              <TouchableOpacity
-                onPress={() => setChangeEmailModalVisible(false)}
-                style={styles.modalCloseBtn}
-                disabled={updatingEmail}
-              >
-                <Text style={{ fontSize: 16, color: colors.subtext }}>✕</Text>
-              </TouchableOpacity>
-            </View>
-
-            {emailStep === 'form' ? (
-              <>
-                <Text style={{ fontSize: 13, fontFamily: fontFamilies.regular, color: colors.subtext, marginBottom: 14 }}>
-                  Enter your new email address and current password. We will send a verification code to verify the new email.
-                </Text>
-
-                <Text style={styles.modalFieldLabel}>New Email Address</Text>
-                <TextInput
-                  style={styles.modalTextInput}
-                  value={newEmailInput}
-                  onChangeText={(t) => {
-                    setNewEmailInput(t);
-                    if (emailError) setEmailError(null);
-                  }}
-                  placeholder="e.g. parent@gmail.com"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  placeholderTextColor={colors.subtext}
-                  editable={!updatingEmail}
-                />
-
-                <Text style={styles.modalFieldLabel}>Confirm New Email Address</Text>
-                <TextInput
-                  style={styles.modalTextInput}
-                  value={confirmEmailInput}
-                  onChangeText={(t) => {
-                    setConfirmEmailInput(t);
-                    if (emailError) setEmailError(null);
-                  }}
-                  placeholder="Re-type new email"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  placeholderTextColor={colors.subtext}
-                  editable={!updatingEmail}
-                />
-
-                <Text style={styles.modalFieldLabel}>Current Account Password</Text>
-                <TextInput
-                  style={styles.modalTextInput}
-                  value={emailPasswordInput}
-                  onChangeText={(t) => {
-                    setEmailPasswordInput(t);
-                    if (emailError) setEmailError(null);
-                  }}
-                  placeholder="Enter password to confirm"
-                  secureTextEntry
-                  autoCapitalize="none"
-                  placeholderTextColor={colors.subtext}
-                  editable={!updatingEmail}
-                />
-
-                {emailError ? (
-                  <Text style={styles.modalErrorText}>{emailError}</Text>
-                ) : null}
-
+            <ScrollView keyboardShouldPersistTaps="handled" bounces={false} showsVerticalScrollIndicator={false}>
+              <View style={styles.modalSheetHeader}>
+                <Text style={styles.modalSheetTitle}>📧 Account Email</Text>
                 <TouchableOpacity
-                  onPress={handleRequestEmailOtp}
-                  style={[styles.modalPrimaryBtn, updatingEmail && { opacity: 0.6 }]}
+                  onPress={() => setChangeEmailModalVisible(false)}
+                  style={styles.modalCloseBtn}
                   disabled={updatingEmail}
                 >
-                  {updatingEmail ? (
-                    <ActivityIndicator color="#FFFFFF" size="small" />
-                  ) : (
-                    <Text style={styles.modalPrimaryBtnText}>Send Verification Code 📩</Text>
-                  )}
+                  <Text style={{ fontSize: 16, color: colors.subtext }}>✕</Text>
                 </TouchableOpacity>
-              </>
-            ) : (
-              <>
-                <View style={{ alignItems: 'center', marginVertical: 10 }}>
-                  <Text style={{ fontSize: 36, marginBottom: 6 }}>📬</Text>
-                  <Text style={{ fontSize: 16, fontFamily: fontFamilies.bold, color: colors.text, textAlign: 'center' }}>
-                    Verify Your New Email
-                  </Text>
-                  <Text style={{ fontSize: 13, fontFamily: fontFamilies.regular, color: colors.subtext, textAlign: 'center', marginTop: 4 }}>
-                    Enter the code sent to{'\n'}
-                    <Text style={{ fontFamily: fontFamilies.bold, color: colors.text }}>{newEmailInput.trim().toLowerCase()}</Text>
-                  </Text>
-                </View>
+              </View>
 
-                <Text style={styles.modalFieldLabel}>Verification Code</Text>
-                <TextInput
-                  style={[styles.modalTextInput, { textAlign: 'center', fontSize: 24, letterSpacing: 6, fontFamily: fontFamilies.bold }]}
-                  value={emailOtpInput}
-                  onChangeText={(t) => {
-                    setEmailOtpInput(t);
-                    if (emailError) setEmailError(null);
-                  }}
-                  placeholder="••••••"
-                  keyboardType="number-pad"
-                  maxLength={8}
-                  placeholderTextColor={colors.subtext}
-                  editable={!updatingEmail}
-                  autoFocus
-                />
-
-                <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 12 }}>
-                  <Text style={{ fontSize: 12, color: colors.subtext, fontFamily: fontFamilies.regular }}>
-                    Didn't receive code?{' '}
+              {emailStep === 'form' ? (
+                <>
+                  <Text style={{ fontSize: 13, fontFamily: fontFamilies.regular, color: colors.subtext, marginBottom: 14 }}>
+                    Enter your new email address and current password. We will send a verification code to verify the new email.
                   </Text>
-                  {emailResendTimer > 0 ? (
-                    <Text style={{ fontSize: 12, color: colors.subtext, fontFamily: fontFamilies.semiBold }}>
-                      Resend in {emailResendTimer}s
+
+                  <Text style={styles.modalFieldLabel}>New Email Address</Text>
+                  <TextInput
+                    style={styles.modalTextInput}
+                    value={newEmailInput}
+                    onChangeText={(t) => {
+                      setNewEmailInput(t);
+                      if (emailError) setEmailError(null);
+                    }}
+                    placeholder="e.g. parent@gmail.com"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    placeholderTextColor={colors.subtext}
+                    editable={!updatingEmail}
+                  />
+
+                  <Text style={styles.modalFieldLabel}>Confirm New Email Address</Text>
+                  <TextInput
+                    style={styles.modalTextInput}
+                    value={confirmEmailInput}
+                    onChangeText={(t) => {
+                      setConfirmEmailInput(t);
+                      if (emailError) setEmailError(null);
+                    }}
+                    placeholder="Re-type new email"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    placeholderTextColor={colors.subtext}
+                    editable={!updatingEmail}
+                  />
+
+                  <Text style={styles.modalFieldLabel}>Current Account Password</Text>
+                  <TextInput
+                    style={styles.modalTextInput}
+                    value={emailPasswordInput}
+                    onChangeText={(t) => {
+                      setEmailPasswordInput(t);
+                      if (emailError) setEmailError(null);
+                    }}
+                    placeholder="Enter password to confirm"
+                    secureTextEntry
+                    autoCapitalize="none"
+                    placeholderTextColor={colors.subtext}
+                    editable={!updatingEmail}
+                  />
+
+                  {emailError ? (
+                    <Text style={styles.modalErrorText}>{emailError}</Text>
+                  ) : null}
+
+                  <TouchableOpacity
+                    onPress={handleRequestEmailOtp}
+                    style={[styles.modalPrimaryBtn, updatingEmail && { opacity: 0.6 }]}
+                    disabled={updatingEmail}
+                  >
+                    {updatingEmail ? (
+                      <ActivityIndicator color="#FFFFFF" size="small" />
+                    ) : (
+                      <Text style={styles.modalPrimaryBtnText}>Send Verification Code 📩</Text>
+                    )}
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <View style={{ alignItems: 'center', marginVertical: 10 }}>
+                    <Text style={{ fontSize: 36, marginBottom: 6 }}>📬</Text>
+                    <Text style={{ fontSize: 16, fontFamily: fontFamilies.bold, color: colors.text, textAlign: 'center' }}>
+                      Verify Your New Email
                     </Text>
-                  ) : (
-                    <TouchableOpacity onPress={handleRequestEmailOtp} disabled={updatingEmail}>
-                      <Text style={{ fontSize: 12, color: colors.coral, fontFamily: fontFamilies.bold }}>
-                        Resend Code
+                    <Text style={{ fontSize: 13, fontFamily: fontFamilies.regular, color: colors.subtext, textAlign: 'center', marginTop: 4 }}>
+                      Enter the code sent to{'\n'}
+                      <Text style={{ fontFamily: fontFamilies.bold, color: colors.text }}>{newEmailInput.trim().toLowerCase()}</Text>
+                    </Text>
+                  </View>
+
+                  <Text style={styles.modalFieldLabel}>Verification Code</Text>
+                  <TextInput
+                    style={[styles.modalTextInput, { textAlign: 'center', fontSize: 24, letterSpacing: 6, fontFamily: fontFamilies.bold }]}
+                    value={emailOtpInput}
+                    onChangeText={(t) => {
+                      setEmailOtpInput(t);
+                      if (emailError) setEmailError(null);
+                    }}
+                    placeholder="••••••"
+                    keyboardType="number-pad"
+                    maxLength={8}
+                    placeholderTextColor={colors.subtext}
+                    editable={!updatingEmail}
+                    autoFocus
+                  />
+
+                  <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 12 }}>
+                    <Text style={{ fontSize: 12, color: colors.subtext, fontFamily: fontFamilies.regular }}>
+                      Didn't receive code?{' '}
+                    </Text>
+                    {emailResendTimer > 0 ? (
+                      <Text style={{ fontSize: 12, color: colors.subtext, fontFamily: fontFamilies.semiBold }}>
+                        Resend in {emailResendTimer}s
                       </Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
+                    ) : (
+                      <TouchableOpacity onPress={handleRequestEmailOtp} disabled={updatingEmail}>
+                        <Text style={{ fontSize: 12, color: colors.coral, fontFamily: fontFamilies.bold }}>
+                          Resend Code
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
 
-                {emailError ? (
-                  <Text style={styles.modalErrorText}>{emailError}</Text>
-                ) : null}
+                  {emailError ? (
+                    <Text style={styles.modalErrorText}>{emailError}</Text>
+                  ) : null}
 
-                <TouchableOpacity
-                  onPress={handleConfirmEmailOtp}
-                  style={[styles.modalPrimaryBtn, updatingEmail && { opacity: 0.6 }]}
-                  disabled={updatingEmail}
-                >
-                  {updatingEmail ? (
-                    <ActivityIndicator color="#FFFFFF" size="small" />
-                  ) : (
-                    <Text style={styles.modalPrimaryBtnText}>Verify & Update Email</Text>
-                  )}
-                </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleConfirmEmailOtp}
+                    style={[styles.modalPrimaryBtn, updatingEmail && { opacity: 0.6 }]}
+                    disabled={updatingEmail}
+                  >
+                    {updatingEmail ? (
+                      <ActivityIndicator color="#FFFFFF" size="small" />
+                    ) : (
+                      <Text style={styles.modalPrimaryBtnText}>Verify & Update Email</Text>
+                    )}
+                  </TouchableOpacity>
 
-                <TouchableOpacity
-                  onPress={() => {
-                    setEmailStep('form');
-                    setEmailOtpInput('');
-                    setEmailError(null);
-                  }}
-                  style={{ marginTop: 12, alignItems: 'center', paddingVertical: 8 }}
-                  disabled={updatingEmail}
-                >
-                  <Text style={{ fontSize: 13, color: colors.subtext, fontFamily: fontFamilies.semiBold }}>
-                    ← Change Email Address
-                  </Text>
-                </TouchableOpacity>
-              </>
-            )}
+                  <TouchableOpacity
+                    onPress={() => {
+                      setEmailStep('form');
+                      setEmailOtpInput('');
+                      setEmailError(null);
+                    }}
+                    style={{ marginTop: 12, alignItems: 'center', paddingVertical: 8 }}
+                    disabled={updatingEmail}
+                  >
+                    <Text style={{ fontSize: 13, color: colors.subtext, fontFamily: fontFamilies.semiBold }}>
+                      ← Change Email Address
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </ScrollView>
           </View>
-        </View>
+        </KeyboardAwareView>
       </Modal>
 
       {/* ── MODAL 5: Change Account Password ── */}
       <Modal
         visible={changePasswordModalVisible}
         transparent
+        statusBarTranslucent
         animationType="slide"
         onRequestClose={() => !updatingPassword && setChangePasswordModalVisible(false)}
       >
-        <View style={styles.modalBackdrop}>
+        <KeyboardAwareView style={styles.modalBackdrop}>
           <View style={styles.modalSheetCard}>
-            <View style={styles.modalSheetHeader}>
-              <Text style={styles.modalSheetTitle}>🔑 Change Password</Text>
-              <TouchableOpacity
-                onPress={() => setChangePasswordModalVisible(false)}
-                style={styles.modalCloseBtn}
-                disabled={updatingPassword}
-              >
-                <Text style={{ fontSize: 16, color: colors.subtext }}>✕</Text>
-              </TouchableOpacity>
-            </View>
-
-            {passwordStep === 'form' ? (
-              <>
-                <Text style={{ fontSize: 13, fontFamily: fontFamilies.regular, color: colors.subtext, marginBottom: 14 }}>
-                  {isForgotPasswordMode
-                    ? `Forgot your current password? We will send a security code to ${parentEmail || 'your email'} to reset it.`
-                    : 'Enter your current password and choose a new password. We will send a verification code to your registered email.'}
-                </Text>
-
-                {!isForgotPasswordMode ? (
-                  <>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Text style={styles.modalFieldLabel}>Current Password</Text>
-                      <TouchableOpacity
-                        onPress={() => {
-                          setIsForgotPasswordMode(true);
-                          setPasswordError(null);
-                        }}
-                        disabled={updatingPassword}
-                      >
-                        <Text style={{ fontSize: 12, color: colors.coral, fontFamily: fontFamilies.bold }}>
-                          Forgot Password?
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                    <TextInput
-                      style={styles.modalTextInput}
-                      value={currentPasswordInput}
-                      onChangeText={(t) => {
-                        setCurrentPasswordInput(t);
-                        if (passwordError) setPasswordError(null);
-                      }}
-                      placeholder="Current password"
-                      secureTextEntry
-                      autoCapitalize="none"
-                      placeholderTextColor={colors.subtext}
-                      editable={!updatingPassword}
-                    />
-                  </>
-                ) : null}
-
-                <Text style={styles.modalFieldLabel}>New Password</Text>
-                <TextInput
-                  style={styles.modalTextInput}
-                  value={newPasswordInput}
-                  onChangeText={(t) => {
-                    setNewPasswordInput(t);
-                    if (passwordError) setPasswordError(null);
-                  }}
-                  placeholder="At least 8 characters"
-                  secureTextEntry
-                  autoCapitalize="none"
-                  placeholderTextColor={colors.subtext}
-                  editable={!updatingPassword}
-                />
-
-                <Text style={styles.modalFieldLabel}>Confirm New Password</Text>
-                <TextInput
-                  style={styles.modalTextInput}
-                  value={confirmPasswordInput}
-                  onChangeText={(t) => {
-                    setConfirmPasswordInput(t);
-                    if (passwordError) setPasswordError(null);
-                  }}
-                  placeholder="Re-type new password"
-                  secureTextEntry
-                  autoCapitalize="none"
-                  placeholderTextColor={colors.subtext}
-                  editable={!updatingPassword}
-                />
-
-                {passwordError ? (
-                  <Text style={styles.modalErrorText}>{passwordError}</Text>
-                ) : null}
-
+            <ScrollView keyboardShouldPersistTaps="handled" bounces={false} showsVerticalScrollIndicator={false}>
+              <View style={styles.modalSheetHeader}>
+                <Text style={styles.modalSheetTitle}>🔑 Change Password</Text>
                 <TouchableOpacity
-                  onPress={handleRequestPasswordOtp}
-                  style={[styles.modalPrimaryBtn, updatingPassword && { opacity: 0.6 }]}
+                  onPress={() => setChangePasswordModalVisible(false)}
+                  style={styles.modalCloseBtn}
                   disabled={updatingPassword}
                 >
-                  {updatingPassword ? (
-                    <ActivityIndicator color="#FFFFFF" size="small" />
-                  ) : (
-                    <Text style={styles.modalPrimaryBtnText}>
-                      {isForgotPasswordMode ? 'Send Reset Code 📩' : 'Send Verification Code 🔐'}
-                    </Text>
-                  )}
+                  <Text style={{ fontSize: 16, color: colors.subtext }}>✕</Text>
                 </TouchableOpacity>
+              </View>
 
-                {isForgotPasswordMode ? (
+              {passwordStep === 'form' ? (
+                <>
+                  <Text style={{ fontSize: 13, fontFamily: fontFamilies.regular, color: colors.subtext, marginBottom: 14 }}>
+                    {isForgotPasswordMode
+                      ? `Forgot your current password? We will send a security code to ${parentEmail || 'your email'} to reset it.`
+                      : 'Enter your current password and choose a new password. We will send a verification code to your registered email.'}
+                  </Text>
+
+                  {!isForgotPasswordMode ? (
+                    <>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Text style={styles.modalFieldLabel}>Current Password</Text>
+                        <TouchableOpacity
+                          onPress={() => {
+                            setIsForgotPasswordMode(true);
+                            setPasswordError(null);
+                          }}
+                          disabled={updatingPassword}
+                        >
+                          <Text style={{ fontSize: 12, color: colors.coral, fontFamily: fontFamilies.bold }}>
+                            Forgot Password?
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                      <TextInput
+                        style={styles.modalTextInput}
+                        value={currentPasswordInput}
+                        onChangeText={(t) => {
+                          setCurrentPasswordInput(t);
+                          if (passwordError) setPasswordError(null);
+                        }}
+                        placeholder="Current password"
+                        secureTextEntry
+                        autoCapitalize="none"
+                        placeholderTextColor={colors.subtext}
+                        editable={!updatingPassword}
+                      />
+                    </>
+                  ) : null}
+
+                  <Text style={styles.modalFieldLabel}>New Password</Text>
+                  <TextInput
+                    style={styles.modalTextInput}
+                    value={newPasswordInput}
+                    onChangeText={(t) => {
+                      setNewPasswordInput(t);
+                      if (passwordError) setPasswordError(null);
+                    }}
+                    placeholder="At least 8 characters"
+                    secureTextEntry
+                    autoCapitalize="none"
+                    placeholderTextColor={colors.subtext}
+                    editable={!updatingPassword}
+                  />
+
+                  <Text style={styles.modalFieldLabel}>Confirm New Password</Text>
+                  <TextInput
+                    style={styles.modalTextInput}
+                    value={confirmPasswordInput}
+                    onChangeText={(t) => {
+                      setConfirmPasswordInput(t);
+                      if (passwordError) setPasswordError(null);
+                    }}
+                    placeholder="Re-type new password"
+                    secureTextEntry
+                    autoCapitalize="none"
+                    placeholderTextColor={colors.subtext}
+                    editable={!updatingPassword}
+                  />
+
+                  {passwordError ? (
+                    <Text style={styles.modalErrorText}>{passwordError}</Text>
+                  ) : null}
+
+                  <TouchableOpacity
+                    onPress={handleRequestPasswordOtp}
+                    style={[styles.modalPrimaryBtn, updatingPassword && { opacity: 0.6 }]}
+                    disabled={updatingPassword}
+                  >
+                    {updatingPassword ? (
+                      <ActivityIndicator color="#FFFFFF" size="small" />
+                    ) : (
+                      <Text style={styles.modalPrimaryBtnText}>
+                        {isForgotPasswordMode ? 'Send Reset Code 📩' : 'Send Verification Code 🔐'}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+
+                  {isForgotPasswordMode ? (
+                    <TouchableOpacity
+                      onPress={() => {
+                        setIsForgotPasswordMode(false);
+                        setPasswordError(null);
+                      }}
+                      style={{ marginTop: 12, alignItems: 'center', paddingVertical: 8 }}
+                      disabled={updatingPassword}
+                    >
+                      <Text style={{ fontSize: 13, color: colors.subtext, fontFamily: fontFamilies.semiBold }}>
+                        ← I remember my password
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <View style={{ alignItems: 'center', marginVertical: 10 }}>
+                    <Text style={{ fontSize: 36, marginBottom: 6 }}>🔐</Text>
+                    <Text style={{ fontSize: 16, fontFamily: fontFamilies.bold, color: colors.text, textAlign: 'center' }}>
+                      {isForgotPasswordMode ? 'Reset Password Security Code' : 'Enter Security Code'}
+                    </Text>
+                    <Text style={{ fontSize: 13, fontFamily: fontFamilies.regular, color: colors.subtext, textAlign: 'center', marginTop: 4 }}>
+                      Enter the verification code sent to{'\n'}
+                      <Text style={{ fontFamily: fontFamilies.bold, color: colors.text }}>{parentEmail || 'your email'}</Text>
+                    </Text>
+                  </View>
+
+                  <Text style={styles.modalFieldLabel}>Verification Code</Text>
+                  <TextInput
+                    style={[styles.modalTextInput, { textAlign: 'center', fontSize: 24, letterSpacing: 6, fontFamily: fontFamilies.bold }]}
+                    value={passwordOtpInput}
+                    onChangeText={(t) => {
+                      setPasswordOtpInput(t);
+                      if (passwordError) setPasswordError(null);
+                    }}
+                    placeholder="••••••"
+                    keyboardType="number-pad"
+                    maxLength={8}
+                    placeholderTextColor={colors.subtext}
+                    editable={!updatingPassword}
+                    autoFocus
+                  />
+
+                  <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 12 }}>
+                    <Text style={{ fontSize: 12, color: colors.subtext, fontFamily: fontFamilies.regular }}>
+                      Didn't receive code?{' '}
+                    </Text>
+                    {passwordResendTimer > 0 ? (
+                      <Text style={{ fontSize: 12, color: colors.subtext, fontFamily: fontFamilies.semiBold }}>
+                        Resend in {passwordResendTimer}s
+                      </Text>
+                    ) : (
+                      <TouchableOpacity onPress={handleRequestPasswordOtp} disabled={updatingPassword}>
+                        <Text style={{ fontSize: 12, color: colors.coral, fontFamily: fontFamilies.bold }}>
+                          Resend Code
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+
+                  {passwordError ? (
+                    <Text style={styles.modalErrorText}>{passwordError}</Text>
+                  ) : null}
+
+                  <TouchableOpacity
+                    onPress={handleConfirmPasswordOtp}
+                    style={[styles.modalPrimaryBtn, updatingPassword && { opacity: 0.6 }]}
+                    disabled={updatingPassword}
+                  >
+                    {updatingPassword ? (
+                      <ActivityIndicator color="#FFFFFF" size="small" />
+                    ) : (
+                      <Text style={styles.modalPrimaryBtnText}>
+                        {isForgotPasswordMode ? 'Verify & Reset Password' : 'Verify & Update Password'}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+
                   <TouchableOpacity
                     onPress={() => {
-                      setIsForgotPasswordMode(false);
+                      setPasswordStep('form');
+                      setPasswordOtpInput('');
                       setPasswordError(null);
                     }}
                     style={{ marginTop: 12, alignItems: 'center', paddingVertical: 8 }}
                     disabled={updatingPassword}
                   >
                     <Text style={{ fontSize: 13, color: colors.subtext, fontFamily: fontFamilies.semiBold }}>
-                      ← I remember my password
+                      {isForgotPasswordMode ? '← Change New Password' : '← Edit Password'}
                     </Text>
                   </TouchableOpacity>
-                ) : null}
-              </>
-            ) : (
-              <>
-                <View style={{ alignItems: 'center', marginVertical: 10 }}>
-                  <Text style={{ fontSize: 36, marginBottom: 6 }}>🔐</Text>
-                  <Text style={{ fontSize: 16, fontFamily: fontFamilies.bold, color: colors.text, textAlign: 'center' }}>
-                    {isForgotPasswordMode ? 'Reset Password Security Code' : 'Enter Security Code'}
-                  </Text>
-                  <Text style={{ fontSize: 13, fontFamily: fontFamilies.regular, color: colors.subtext, textAlign: 'center', marginTop: 4 }}>
-                    Enter the verification code sent to{'\n'}
-                    <Text style={{ fontFamily: fontFamilies.bold, color: colors.text }}>{parentEmail || 'your email'}</Text>
-                  </Text>
-                </View>
-
-                <Text style={styles.modalFieldLabel}>Verification Code</Text>
-                <TextInput
-                  style={[styles.modalTextInput, { textAlign: 'center', fontSize: 24, letterSpacing: 6, fontFamily: fontFamilies.bold }]}
-                  value={passwordOtpInput}
-                  onChangeText={(t) => {
-                    setPasswordOtpInput(t);
-                    if (passwordError) setPasswordError(null);
-                  }}
-                  placeholder="••••••"
-                  keyboardType="number-pad"
-                  maxLength={8}
-                  placeholderTextColor={colors.subtext}
-                  editable={!updatingPassword}
-                  autoFocus
-                />
-
-                <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 12 }}>
-                  <Text style={{ fontSize: 12, color: colors.subtext, fontFamily: fontFamilies.regular }}>
-                    Didn't receive code?{' '}
-                  </Text>
-                  {passwordResendTimer > 0 ? (
-                    <Text style={{ fontSize: 12, color: colors.subtext, fontFamily: fontFamilies.semiBold }}>
-                      Resend in {passwordResendTimer}s
-                    </Text>
-                  ) : (
-                    <TouchableOpacity onPress={handleRequestPasswordOtp} disabled={updatingPassword}>
-                      <Text style={{ fontSize: 12, color: colors.coral, fontFamily: fontFamilies.bold }}>
-                        Resend Code
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-
-                {passwordError ? (
-                  <Text style={styles.modalErrorText}>{passwordError}</Text>
-                ) : null}
-
-                <TouchableOpacity
-                  onPress={handleConfirmPasswordOtp}
-                  style={[styles.modalPrimaryBtn, updatingPassword && { opacity: 0.6 }]}
-                  disabled={updatingPassword}
-                >
-                  {updatingPassword ? (
-                    <ActivityIndicator color="#FFFFFF" size="small" />
-                  ) : (
-                    <Text style={styles.modalPrimaryBtnText}>
-                      {isForgotPasswordMode ? 'Verify & Reset Password' : 'Verify & Update Password'}
-                    </Text>
-                  )}
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={() => {
-                    setPasswordStep('form');
-                    setPasswordOtpInput('');
-                    setPasswordError(null);
-                  }}
-                  style={{ marginTop: 12, alignItems: 'center', paddingVertical: 8 }}
-                  disabled={updatingPassword}
-                >
-                  <Text style={{ fontSize: 13, color: colors.subtext, fontFamily: fontFamilies.semiBold }}>
-                    {isForgotPasswordMode ? '← Change New Password' : '← Edit Password'}
-                  </Text>
-                </TouchableOpacity>
-              </>
-            )}
+                </>
+              )}
+            </ScrollView>
           </View>
-        </View>
+        </KeyboardAwareView>
       </Modal>
 
       {/* ── PIN Confirmation Gate for Profile Deletion & Account Deletion ── */}
@@ -3051,13 +3125,75 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.55)',
     justifyContent: 'flex-end',
   },
+  modalCenterScroll: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
   modalSheetCard: {
     width: '100%',
+    maxHeight: '88%',
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     padding: 24,
-    paddingBottom: 40,
+    paddingBottom: 32,
+  },
+  gradeDropdownTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: radii.md,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    backgroundColor: '#F8FAFC',
+    marginTop: 2,
+  },
+  gradeDropdownText: {
+    fontSize: 15,
+    fontFamily: fontFamilies.bold,
+    color: colors.text,
+  },
+  gradeDropdownArrow: {
+    fontSize: 12,
+    color: colors.subtext,
+  },
+  gradeDropdownMenu: {
+    marginTop: 6,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: radii.md,
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
+  },
+  gradeDropdownOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  gradeDropdownOptionActive: {
+    backgroundColor: 'rgba(255, 107, 107, 0.08)',
+  },
+  gradeDropdownOptionText: {
+    fontSize: 14,
+    fontFamily: fontFamilies.semiBold,
+    color: colors.text,
+  },
+  gradeDropdownOptionTextActive: {
+    color: colors.coralStrong,
+    fontFamily: fontFamilies.bold,
+  },
+  gradeDropdownCheck: {
+    fontSize: 14,
+    color: colors.coralStrong,
+    fontFamily: fontFamilies.black,
   },
   modalCardCenter: {
     width: '90%',
