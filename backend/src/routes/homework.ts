@@ -145,7 +145,7 @@ router.post('/analyze', requireAuth, imageRateLimit, uploadMiddleware, async (re
     return res.status(200).json({
       threadId: activeThreadId,
       explanation,
-      imageUrl: storageResult?.publicUrl || undefined,
+      imageUrl: storageResult?.signedUrl || undefined,
       remaining: usage.remaining,
       isPremium: usage.isPremium,
     });

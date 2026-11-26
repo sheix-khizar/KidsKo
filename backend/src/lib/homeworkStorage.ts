@@ -5,25 +5,28 @@ import { supabaseAdmin } from './supabase';
 const BUCKET_NAME = 'homework-snapshots';
 let bucketChecked = false;
 
-// Automatically ensures that the Supabase Storage bucket exists
+// Automatically ensures that the Supabase Storage bucket exists as a private bucket
 async function ensureBucketExists(supabase: SupabaseClient) {
   if (bucketChecked) return;
   try {
     const { data: bucket } = await supabase.storage.getBucket(BUCKET_NAME);
     if (!bucket) {
-      console.log(`[Supabase Storage]: Bucket '${BUCKET_NAME}' not found. Auto-creating public bucket...`);
+      console.log(`[Supabase Storage]: Bucket '${BUCKET_NAME}' not found. Auto-creating private bucket...`);
       const { error: createErr } = await supabase.storage.createBucket(BUCKET_NAME, {
-        public: true,
+        public: false,
         fileSizeLimit: 10485760, // 10MB
         allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
       });
       if (createErr) {
-        console.warn(`[Supabase Storage Auto-Create Notice]: ${createErr.message}. If using anon client, create bucket in Supabase Dashboard.`);
+        console.warn(`[Supabase Storage Auto-Create Notice]: ${createErr.message}. If using anon client, create private bucket in Supabase Dashboard.`);
       } else {
-        console.log(`[Supabase Storage]: Bucket '${BUCKET_NAME}' created automatically!`);
+        console.log(`[Supabase Storage]: Private bucket '${BUCKET_NAME}' created automatically!`);
         bucketChecked = true;
       }
     } else {
+      if (bucket.public) {
+        console.warn(`[Supabase Storage Security Notice]: Existing bucket '${BUCKET_NAME}' is still marked public in Supabase. Flip it to Private in the Supabase Dashboard.`);
+      }
       bucketChecked = true;
     }
   } catch (err: any) {
@@ -33,7 +36,7 @@ async function ensureBucketExists(supabase: SupabaseClient) {
 
 export type StorageResult = {
   storagePath: string;
-  publicUrl?: string;
+  signedUrl?: string;
 };
 
 // Uploads a compressed JPEG buffer to Supabase Storage bucket using versioned paths
@@ -49,7 +52,7 @@ export async function uploadHomeworkImageToStorage(
   await ensureBucketExists(supabaseAdmin);
 
   try {
-    const { data, error } = await supabaseAdmin.storage
+    const { error } = await supabaseAdmin.storage
       .from(BUCKET_NAME)
       .upload(fileName, imageBuffer, {
         contentType: 'image/jpeg',
@@ -61,11 +64,11 @@ export async function uploadHomeworkImageToStorage(
       return null;
     }
 
-    const { data: urlData } = supabaseAdmin.storage.from(BUCKET_NAME).getPublicUrl(fileName);
+    const signedUrl = await getHomeworkImageSignedUrl(supabaseAdmin, fileName);
 
     return {
       storagePath: fileName,
-      publicUrl: urlData?.publicUrl,
+      signedUrl: signedUrl || undefined,
     };
   } catch (err: any) {
     console.error(`[Supabase Storage Upload Exception]: Path '${fileName}' error:`, err.message);
@@ -157,7 +160,8 @@ export async function deleteThreadImagesFromStorage(
 }
 
 /**
- * Resolve a readable URL for a stored homework image (signed URL first, public URL fallback).
+ * Resolve a short-lived signed URL for a stored homework image.
+ * Never falls back to a public URL (returns null on failure).
  */
 export async function getHomeworkImageSignedUrl(
   supabase: SupabaseClient,
@@ -171,14 +175,11 @@ export async function getHomeworkImageSignedUrl(
     if (!error && data?.signedUrl) {
       return data.signedUrl;
     }
-  } catch {
-    // Fall back to public URL below
+    if (error) {
+      console.warn(`[Supabase Signed URL Error]: Path '${storagePath}': ${error.message}`);
+    }
+  } catch (err: any) {
+    console.warn(`[Supabase Signed URL Exception]: Path '${storagePath}': ${err?.message || err}`);
   }
-
-  try {
-    const { data: pub } = supabase.storage.from(BUCKET_NAME).getPublicUrl(storagePath);
-    return pub?.publicUrl || null;
-  } catch {
-    return null;
-  }
+  return null;
 }
