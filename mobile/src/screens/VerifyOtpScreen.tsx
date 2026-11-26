@@ -20,6 +20,7 @@ import {
   Mascot,
   KeyboardAwareView,
   useSafeAreaInsets,
+  AppIcon,
 } from '../ui';
 import { colors, fontFamilies, gradients } from '../theme';
 
@@ -111,7 +112,7 @@ export default function VerifyOtpScreen({ email, onVerified, onBack }: Props) {
         <FadeSlideIn delay={0}>
           <View style={styles.topBar}>
             <Pressable onPress={onBack} style={styles.backButton} accessibilityLabel="Back to sign up">
-              <Text style={styles.backButtonText}>←</Text>
+              <AppIcon name="arrowLeft" size={18} color="#FFFFFF" strokeWidth={2.5} />
             </Pressable>
             <View style={styles.mascotBadge}>
               <Mascot size="m" />

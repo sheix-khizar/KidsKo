@@ -25,8 +25,10 @@ import {
   AskieReactionOverlay,
   triggerAskieReaction,
   KeyboardAwareView,
+  AppIcon,
 } from '../ui';
 import { vibrateTap } from '../utils/feedback';
+import { getAvatarOption } from '../utils/avatars';
 import { sendMessage, Message } from '../services/chat';
 import { analyzeHomework } from '../services/homework';
 import { useVoiceInput } from '../hooks/useVoiceInput';
@@ -65,6 +67,9 @@ const PROMPT_CARDS = [
 type Props = {
   studentId: string;
   studentName: string;
+  studentAvatar?: string | null;
+  queuedTopic?: { id: number; prompt: string } | null;
+  onTopicConsumed?: () => void;
   onBack: () => void;
   initialThreadId?: string;
   initialExplanation?: string;
@@ -76,6 +81,9 @@ type Props = {
 export default function ChatScreen({
   studentId,
   studentName,
+  studentAvatar,
+  queuedTopic,
+  onTopicConsumed,
   onBack,
   initialThreadId,
   initialExplanation,
@@ -83,6 +91,8 @@ export default function ChatScreen({
   embedded = false,
   onSwitchStudent,
 }: Props) {
+  const avatarOption = getAvatarOption(studentAvatar);
+  const lastTopicIdRef = useRef<number | null>(null);
   const [messages, setMessages] = useState<Message[]>(
     initialExplanation
       ? [
@@ -140,6 +150,55 @@ export default function ChatScreen({
       isMounted = false;
     };
   }, [studentId]);
+
+  // Launch topic chosen on HomeScreen ("Learn something new") into a fresh chat turn
+  useEffect(() => {
+    if (!queuedTopic || lastTopicIdRef.current === queuedTopic.id) return;
+    lastTopicIdRef.current = queuedTopic.id;
+    const topicPrompt = queuedTopic.prompt.trim();
+    onTopicConsumed?.();
+    if (!topicPrompt) return;
+
+    if (listening) stopListening();
+    setPreviewImage(null);
+    setInput('');
+    setErrorMsg(null);
+    setLastThread(null);
+    setThreadId(undefined);
+    setMessages([{ role: 'user', content: topicPrompt }]);
+    setSending(true);
+
+    sendMessage(studentId, topicPrompt, undefined)
+      .then((result) => {
+        setThreadId(result.threadId);
+        setMessages((prev) => [...prev, { role: 'assistant', content: result.reply }]);
+        setRemaining(result.remaining);
+        setIsPremium(result.isPremium);
+        getThreads(studentId)
+          .then((res) => {
+            if (res.threads && res.threads.length > 0) {
+              setLastThread(res.threads.find((t) => t.id === result.threadId) || res.threads[0]);
+            }
+          })
+          .catch(() => {});
+      })
+      .catch((err: any) => {
+        if (err.status === 401 || err.message?.includes('expired') || err.message?.includes('token')) {
+          setErrorMsg('Session expired. Please log in again.');
+        } else if (err.status === 429) {
+          setErrorMsg(err.message || 'Weekly question limit reached. Try again later!');
+          setRemaining(0);
+          if (onLimitReached) onLimitReached(err.message);
+        } else {
+          setErrorMsg(err.message || 'Something went wrong. Please try again.');
+        }
+        setInput(topicPrompt);
+      })
+      .finally(() => {
+        setSending(false);
+        setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
+      });
+  }, [queuedTopic?.id, studentId]);
 
   const handleSelectThread = async (thread: ThreadSummary) => {
     try {
@@ -317,7 +376,7 @@ export default function ChatScreen({
             style={styles.backButtonTouch}
             accessibilityLabel="Back to home"
           >
-            <Text style={styles.backButton}>‹</Text>
+            <AppIcon name="chevronLeft" size={18} color={colors.text} strokeWidth={2.6} />
           </Pressable>
         </View>
 
@@ -426,7 +485,7 @@ export default function ChatScreen({
                   ]}
                 >
                   {item.role === 'user' ? (
-                    <Text style={styles.avatarEmoji}>👧</Text>
+                    <Text style={styles.avatarEmoji}>{avatarOption.emoji}</Text>
                   ) : (
                     <AskieCompanion size="xs" shape="circle" state="idle" standing={false} avatarMode={true} />
                   )}
@@ -524,7 +583,7 @@ export default function ChatScreen({
             accessibilityRole="button"
             accessibilityLabel="Remove attached photo"
           >
-            <Text style={styles.removeAttachmentText}>✕</Text>
+            <AppIcon name="close" size={14} color={colors.subtext} strokeWidth={2.5} />
           </Pressable>
         </View>
       )}
@@ -603,7 +662,7 @@ export default function ChatScreen({
             accessibilityRole="button"
             accessibilityLabel="Send message"
           >
-            <Text style={styles.sendButtonText}>➤</Text>
+            <AppIcon name="send" size={18} color="#FFFFFF" strokeWidth={2.6} />
           </Pressable>
         </PressScale>
       </View>
@@ -687,7 +746,10 @@ export default function ChatScreen({
             accessibilityRole="button"
             accessibilityLabel="Close image viewer"
           >
-            <Text style={styles.imageViewerCloseText}>✕ Close</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <AppIcon name="close" size={13} color={colors.white} strokeWidth={2.5} />
+              <Text style={styles.imageViewerCloseText}>Close</Text>
+            </View>
           </Pressable>
           {fullscreenImageUri ? (
             <Image

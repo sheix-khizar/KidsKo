@@ -19,6 +19,7 @@ import { LinearGradient } from '../ui/LinearGradient';
 import { PressScale, FadeSlideIn, Bounce } from '../ui/motion';
 import { useSafeAreaInsets } from '../ui/safeArea';
 import { AskieCompanion } from '../ui/AskieCompanion';
+import { AppIcon } from '../ui/AppIcon';
 import ParentalGate from '../components/ParentalGate';
 
 type Props = {
@@ -142,8 +143,9 @@ export default function PaywallScreen({
       {/* Top Navigation Bar */}
       <View style={styles.topNav}>
         <PressScale onPress={onBack}>
-          <View style={styles.backBtn}>
-            <Text style={styles.backBtnText}>✕ Close</Text>
+          <View style={[styles.backBtn, { flexDirection: 'row', alignItems: 'center', gap: 6 }]}>
+            <AppIcon name="close" size={13} color={colors.text} strokeWidth={2.4} />
+            <Text style={styles.backBtnText}>Close</Text>
           </View>
         </PressScale>
       </View>
@@ -263,31 +265,31 @@ export default function PaywallScreen({
             Everything included with Premium:
           </Text>
           <View style={styles.featureItem}>
-            <Text style={styles.checkIcon}>✓</Text>
+            <AppIcon name="check" size={16} color={colors.green} strokeWidth={2.8} />
             <Text style={styles.featureText}>
               100 Voice & Video minutes / week (vs. 10 free)
             </Text>
           </View>
           <View style={styles.featureItem}>
-            <Text style={styles.checkIcon}>✓</Text>
+            <AppIcon name="check" size={16} color={colors.green} strokeWidth={2.8} />
             <Text style={styles.featureText}>
               200 text chat messages / week (vs. 30 free)
             </Text>
           </View>
           <View style={styles.featureItem}>
-            <Text style={styles.checkIcon}>✓</Text>
+            <AppIcon name="check" size={16} color={colors.green} strokeWidth={2.8} />
             <Text style={styles.featureText}>
               15 homework photo uploads / week (vs. 3 free)
             </Text>
           </View>
           <View style={styles.featureItem}>
-            <Text style={styles.checkIcon}>✓</Text>
+            <AppIcon name="check" size={16} color={colors.green} strokeWidth={2.8} />
             <Text style={styles.featureText}>
               Shared pooled family allowance across all children
             </Text>
           </View>
           <View style={styles.featureItem}>
-            <Text style={styles.checkIcon}>✓</Text>
+            <AppIcon name="check" size={16} color={colors.green} strokeWidth={2.8} />
             <Text style={styles.featureText}>
               Detailed parent progress reports & transcripts
             </Text>

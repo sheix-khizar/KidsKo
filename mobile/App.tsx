@@ -28,7 +28,7 @@ import { loadSavedApiUrl } from './src/services/config';
 // Keep native splash screen visible while JS bundle boots
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
-type Student = { id: string; student_name: string };
+type Student = { id: string; student_name: string; avatar?: string | null };
 type Screen =
   | 'checking'
   | 'welcome'
@@ -153,6 +153,14 @@ export default function App() {
     return () => sub.remove();
   }, [screen, paywallRequiresGate]);
 
+  const resetShellToKidsHome = () => {
+    setShellTab('home');
+    setParentsUnlockedFromPaywall(false);
+    setPaywallRequiresGate(false);
+    setLimitBanner(null);
+    setHomeTransitionKey((k) => k + 1);
+  };
+
   const handleLimitReached = (reason?: string) => {
     setLimitBanner(reason || 'Weekly free limit reached! Ask a parent to unlock Kidsko Premium.');
     setPaywallRequiresGate(true);
@@ -219,10 +227,15 @@ export default function App() {
         <FadeSlideIn key='register' duration={220} style={{ flex: 1 }}>
           <RegisterScreen
             onRegistered={async () => {
+              resetShellToKidsHome();
               try {
                 const students = await getStudents();
-                if (students && students.length > 0) setScreen('main');
-                else setScreen('onboarding');
+                if (students && students.length > 0) {
+                  setActiveStudent(students[0]);
+                  setScreen('main');
+                } else {
+                  setScreen('onboarding');
+                }
               } catch {
                 setScreen('onboarding');
               }
@@ -243,10 +256,15 @@ export default function App() {
           <VerifyOtpScreen
             email={pendingVerificationEmail}
             onVerified={async () => {
+              resetShellToKidsHome();
               try {
                 const students = await getStudents();
-                if (students && students.length > 0) setScreen('main');
-                else setScreen('onboarding');
+                if (students && students.length > 0) {
+                  setActiveStudent(students[0]);
+                  setScreen('main');
+                } else {
+                  setScreen('onboarding');
+                }
               } catch {
                 setScreen('onboarding');
               }
@@ -262,10 +280,15 @@ export default function App() {
         <FadeSlideIn key='login' duration={220} style={{ flex: 1 }}>
           <LoginScreen
             onLoggedIn={async () => {
+              resetShellToKidsHome();
               try {
                 const students = await getStudents();
-                if (students && students.length > 0) setScreen('main');
-                else setScreen('onboarding');
+                if (students && students.length > 0) {
+                  setActiveStudent(students[0]);
+                  setScreen('main');
+                } else {
+                  setScreen('onboarding');
+                }
               } catch {
                 setScreen('main');
               }
@@ -282,6 +305,7 @@ export default function App() {
           <OnboardingScreen
             onFinish={(student) => {
               setActiveStudent(student);
+              resetShellToKidsHome();
               setScreen('main');
             }}
           />
@@ -295,12 +319,18 @@ export default function App() {
       <View style={{ flex: 1 }}>
         <View style={[{ flex: 1 }, screen !== 'main' && { display: 'none' }]}>
           <MainShellScreen
+            initialStudent={activeStudent}
             forcedTab={shellTab}
             onTabChange={(t) => {
               setParentsUnlockedFromPaywall(false);
               setShellTab(t);
             }}
-            onLogout={() => setScreen('welcome')}
+            onLogout={() => {
+              resetShellToKidsHome();
+              setActiveStudent(null);
+              setActiveThread(null);
+              setScreen('welcome');
+            }}
             onOpenPaywall={() => {
               setLimitBanner(null);
               setPaywallRequiresGate(false);

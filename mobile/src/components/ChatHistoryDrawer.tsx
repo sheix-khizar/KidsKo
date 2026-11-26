@@ -22,6 +22,7 @@ import {
   gradients,
 } from '../theme';
 import { LinearGradient } from '../ui/LinearGradient';
+import { AppIcon } from '../ui/AppIcon';
 import { useReduceMotion, PressScale, FadeSlideIn } from '../ui/motion';
 import { useSafeAreaInsets } from '../ui/safeArea';
 import { ThreadSummary, getThreads } from '../services/threads';
@@ -257,7 +258,7 @@ export default function ChatHistoryDrawer({
                   accessibilityRole="button"
                   accessibilityLabel="Close drawer"
                 >
-                  <Text style={styles.closeBtnText}>✕</Text>
+                  <AppIcon name="close" size={16} color={colors.subtext} strokeWidth={2.5} />
                 </Pressable>
               </PressScale>
             </View>
@@ -343,7 +344,16 @@ export default function ChatHistoryDrawer({
                           {formatThreadTime(item.updatedAt, section.title)}
                         </Text>
                       </View>
-                      {isActive && <Text style={styles.activeCheck}>●</Text>}
+                      {isActive && (
+                        <View
+                          style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: 4,
+                            backgroundColor: colors.coralStrong,
+                          }}
+                        />
+                      )}
                     </Pressable>
                   </PressScale>
                 );

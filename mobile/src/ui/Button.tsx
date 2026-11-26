@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { colors, radii, shadows, typography, gradients, fontFamilies } from '../theme';
 import { LinearGradient } from './LinearGradient';
+import { AppIcon, AppIconName } from './AppIcon';
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
@@ -20,6 +21,8 @@ type ButtonProps = {
   disabled?: boolean;
   loading?: boolean;
   icon?: string;
+  leftIcon?: AppIconName;
+  rightIcon?: AppIconName;
   style?: ViewStyle;
   textStyle?: TextStyle;
 };
@@ -31,6 +34,8 @@ export function Button({
   disabled = false,
   loading = false,
   icon,
+  leftIcon,
+  rightIcon,
   style,
   textStyle,
 }: ButtonProps) {
@@ -38,6 +43,23 @@ export function Button({
   const isSecondary = variant === 'secondary';
   const isDanger = variant === 'danger';
   const isGhost = variant === 'ghost';
+
+  // Strip raw Unicode arrow glyphs missing from bundled Nunito font and render AppIcon instead
+  const hasTrailingArrow = !rightIcon && /\s*→$/.test(title);
+  const hasLeadingArrow = !leftIcon && /^←\s*/.test(title);
+  let displayTitle = title;
+  if (hasTrailingArrow) displayTitle = displayTitle.replace(/\s*→$/, '');
+  if (hasLeadingArrow) displayTitle = displayTitle.replace(/^←\s*/, '');
+
+  const resolvedLeftIcon = leftIcon ?? (hasLeadingArrow ? 'arrowLeft' : undefined);
+  const resolvedRightIcon = rightIcon ?? (hasTrailingArrow ? 'arrowRight' : undefined);
+  const iconColor = disabled
+    ? colors.subtext
+    : isPrimary || isDanger
+    ? colors.white
+    : isGhost
+    ? colors.coral
+    : colors.text;
 
   return (
     <Pressable
@@ -72,6 +94,9 @@ export function Button({
       ) : (
         <View style={styles.contentRow} pointerEvents="none">
           {icon ? <Text style={styles.iconText}>{icon}</Text> : null}
+          {resolvedLeftIcon ? (
+            <AppIcon name={resolvedLeftIcon} size={16} color={iconColor} strokeWidth={2.5} />
+          ) : null}
           <Text
             style={[
               styles.textBase,
@@ -83,8 +108,11 @@ export function Button({
               textStyle,
             ]}
           >
-            {title}
+            {displayTitle}
           </Text>
+          {resolvedRightIcon ? (
+            <AppIcon name={resolvedRightIcon} size={16} color={iconColor} strokeWidth={2.5} />
+          ) : null}
         </View>
       )}
     </Pressable>

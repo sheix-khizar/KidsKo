@@ -21,12 +21,14 @@ import {
   AskieEmoji,
   AskieCompanion,
   KeyboardAwareView,
+  AppIcon,
   useSafeAreaInsets,
 } from '../ui';
 import { colors, fontFamilies, gradients } from '../theme';
 import { createStudent, updateStudentMemory } from '../services/api';
 import { savePin } from '../services/pinService';
 import { triggerKidFeedback, vibrateTap } from '../utils/feedback';
+import { CHILD_AVATARS } from '../utils/avatars';
 
 type Props = {
   onFinish: (student: { id: string; student_name: string }) => void;
@@ -47,14 +49,7 @@ type Step =
   | 'workflow'
   | 'finish';
 
-const AVATARS = [
-  { colors: ['#FF6B6B', '#FF9F43'] as const, emoji: '👧' },
-  { colors: ['#4ECDC4', '#74B9FF'] as const, emoji: '👦' },
-  { colors: ['#A78BFA', '#FD79A8'] as const, emoji: '🧒' },
-  { colors: ['#95E1A3', '#4ECDC4'] as const, emoji: '👩‍🚀' },
-  { colors: ['#FFE66D', '#FF9F43'] as const, emoji: '🦸' },
-  { colors: ['#FD79A8', '#A78BFA'] as const, emoji: '🧚' },
-];
+const AVATARS = CHILD_AVATARS;
 
 const INTERESTS = [
   { emoji: '🔬', label: 'Science' },
@@ -210,15 +205,15 @@ export default function OnboardingScreen({ onFinish }: Props) {
         await savePin('1234');
       }
 
-      // 2. Create the child profile on the backend
+      // 2. Create the child profile on the backend (with persisted avatar choice)
       const finalName = childName.trim() || 'My Child';
-      const student = await createStudent(finalName);
+      const chosenAvatar = AVATARS[avatarIndex] || AVATARS[0];
+      const student = await createStudent(finalName, chosenAvatar.id);
 
-      // 3. Save memory facts (age, grade, avatar, interests, limit)
+      // 3. Save memory facts (age, grade, interests, limit)
       const facts = [
         `Age: ${age || 7}`,
         `Grade: ${grade}`,
-        `Avatar: ${AVATARS[avatarIndex].emoji}`,
         `Interests: ${Array.from(selectedInterests).join(', ')}`,
         `Weekly Question Limit: ${dailyLimit === '∞' ? 'Unlimited' : dailyLimit + ' questions'}`,
         `Safety Filter: ${strictFilter ? 'Strict' : 'Standard'}`,
@@ -322,7 +317,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
               accessibilityState={{ checked: consent }}
             >
               <View style={[styles.checkbox, consent && styles.checkboxActive]}>
-                {consent && <Text style={styles.checkIcon}>✓</Text>}
+                {consent && <AppIcon name="check" size={14} color={colors.white} strokeWidth={2.8} />}
               </View>
               <Text style={styles.consentLabel}>
                 I'm a <Text style={styles.boldText}>parent or legal guardian</Text> and I agree to the{' '}
@@ -362,7 +357,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
             }}
             style={styles.backCircle}
           >
-            <Text style={styles.backCircleText}>‹</Text>
+            <AppIcon name="chevronLeft" size={18} color={colors.text} strokeWidth={2.5} />
           </Pressable>
           <View style={styles.progressBarBg}>
             <View style={[styles.progressBarFill, { width: '20%' }]} />
@@ -415,7 +410,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
                         <Text style={styles.avatarEmoji}>{item.emoji}</Text>
                         {isSel && (
                           <View style={styles.checkBadge}>
-                            <Text style={styles.checkBadgeText}>✓</Text>
+                            <AppIcon name="check" size={12} color="#FFFFFF" strokeWidth={2.8} />
                           </View>
                         )}
                       </LinearGradient>
@@ -456,7 +451,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
             }}
             style={styles.backCircle}
           >
-            <Text style={styles.backCircleText}>‹</Text>
+            <AppIcon name="chevronLeft" size={18} color={colors.text} strokeWidth={2.5} />
           </Pressable>
           <View style={styles.progressBarBg}>
             <View style={[styles.progressBarFill, { width: '40%' }]} />
@@ -500,7 +495,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
               accessibilityLabel={`Selected grade ${grade}. Tap to change`}
             >
               <Text style={styles.dropdownTriggerText}>🎓  {grade}</Text>
-              <Text style={styles.dropdownChevron}>▾</Text>
+              <AppIcon name="chevronDown" size={16} color={colors.subtext} strokeWidth={2.5} />
             </Pressable>
 
             <View style={styles.tipCard}>
@@ -537,7 +532,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
               <View style={styles.dropdownSheetHeader}>
                 <Text style={styles.dropdownSheetTitle}>Select Grade / Class</Text>
                 <Pressable onPress={() => setShowGradeDropdown(false)} style={styles.dropdownCloseBtn}>
-                  <Text style={styles.dropdownCloseText}>✕</Text>
+                  <AppIcon name="close" size={16} color={colors.subtext} strokeWidth={2.5} />
                 </Pressable>
               </View>
               <ScrollView showsVerticalScrollIndicator={false}>
@@ -559,7 +554,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
                       <Text style={[styles.dropdownOptionText, isSel && styles.dropdownOptionTextSelected]}>
                         {g}
                       </Text>
-                      {isSel ? <Text style={styles.dropdownCheckMark}>✓</Text> : null}
+                      {isSel ? <AppIcon name="check" size={16} color={colors.coralStrong} strokeWidth={2.8} /> : null}
                     </Pressable>
                   );
                 })}
@@ -586,7 +581,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
             }}
             style={styles.backCircle}
           >
-            <Text style={styles.backCircleText}>‹</Text>
+            <AppIcon name="chevronLeft" size={18} color={colors.text} strokeWidth={2.5} />
           </Pressable>
           <View style={styles.progressBarBg}>
             <View style={[styles.progressBarFill, { width: '60%' }]} />
@@ -659,7 +654,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
             }}
             style={styles.backCircle}
           >
-            <Text style={styles.backCircleText}>‹</Text>
+            <AppIcon name="chevronLeft" size={18} color={colors.text} strokeWidth={2.5} />
           </Pressable>
           <View style={styles.progressBarBg}>
             <View style={[styles.progressBarFill, { width: '80%' }]} />
@@ -712,7 +707,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
                     accessibilityRole="button"
                     accessibilityLabel={isBack ? 'Backspace' : k}
                   >
-                    <Text style={[styles.keyBtnText, isBack && { fontSize: 22 }]}>{k}</Text>
+                    <AppIcon name="backspace" size={22} color={colors.text} strokeWidth={2.2} />
                   </Pressable>
                 );
               })}
@@ -737,7 +732,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
             }}
             style={styles.backCircle}
           >
-            <Text style={styles.backCircleText}>‹</Text>
+            <AppIcon name="chevronLeft" size={18} color={colors.text} strokeWidth={2.5} />
           </Pressable>
           <View style={styles.progressBarBg}>
             <View style={[styles.progressBarFill, { width: '100%' }]} />
@@ -867,7 +862,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
             }}
             style={styles.backCircle}
           >
-            <Text style={styles.backCircleText}>‹</Text>
+            <AppIcon name="chevronLeft" size={18} color={colors.text} strokeWidth={2.5} />
           </Pressable>
           <View style={{ flex: 1 }} />
         </View>
@@ -900,9 +895,12 @@ export default function OnboardingScreen({ onFinish }: Props) {
                   }}
                   style={[styles.permBtn, permMic && styles.permBtnAllowed]}
                 >
-                  <Text style={[styles.permBtnText, permMic && styles.permBtnTextAllowed]}>
-                    {permMic ? 'Allowed ✓' : 'Allow'}
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                    <Text style={[styles.permBtnText, permMic && styles.permBtnTextAllowed]}>
+                      {permMic ? 'Allowed' : 'Allow'}
+                    </Text>
+                    {permMic ? <AppIcon name="check" size={13} color="#009474" strokeWidth={2.8} /> : null}
+                  </View>
                 </Pressable>
               </View>
 
@@ -921,9 +919,12 @@ export default function OnboardingScreen({ onFinish }: Props) {
                   }}
                   style={[styles.permBtn, permCam && styles.permBtnAllowed]}
                 >
-                  <Text style={[styles.permBtnText, permCam && styles.permBtnTextAllowed]}>
-                    {permCam ? 'Allowed ✓' : 'Allow'}
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                    <Text style={[styles.permBtnText, permCam && styles.permBtnTextAllowed]}>
+                      {permCam ? 'Allowed' : 'Allow'}
+                    </Text>
+                    {permCam ? <AppIcon name="check" size={13} color="#009474" strokeWidth={2.8} /> : null}
+                  </View>
                 </Pressable>
               </View>
 
@@ -942,9 +943,12 @@ export default function OnboardingScreen({ onFinish }: Props) {
                   }}
                   style={[styles.permBtn, permNotif && styles.permBtnAllowed]}
                 >
-                  <Text style={[styles.permBtnText, permNotif && styles.permBtnTextAllowed]}>
-                    {permNotif ? 'Allowed ✓' : 'Allow'}
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                    <Text style={[styles.permBtnText, permNotif && styles.permBtnTextAllowed]}>
+                      {permNotif ? 'Allowed' : 'Allow'}
+                    </Text>
+                    {permNotif ? <AppIcon name="check" size={13} color="#009474" strokeWidth={2.8} /> : null}
+                  </View>
                 </Pressable>
               </View>
             </View>
@@ -1043,7 +1047,10 @@ export default function OnboardingScreen({ onFinish }: Props) {
             {saving ? (
               <ActivityIndicator color={colors.coralStrong} />
             ) : (
-              <Text style={styles.skipTourText}>Skip the tour and open app →</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={styles.skipTourText}>Skip the tour and open app</Text>
+                <AppIcon name="arrowRight" size={14} color={colors.subtext} strokeWidth={2.4} />
+              </View>
             )}
           </Pressable>
         </View>
@@ -1065,7 +1072,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
             }}
             style={styles.backCircle}
           >
-            <Text style={styles.backCircleText}>‹</Text>
+            <AppIcon name="chevronLeft" size={18} color={colors.text} strokeWidth={2.5} />
           </Pressable>
           <View style={{ flex: 1 }} />
         </View>
@@ -1092,7 +1099,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
                   Hand over the phone! Kidsko shows how to chat, call, and use AI Vision.
                 </Text>
               </View>
-              <Text style={{ fontSize: 20 }}>{kidTourDone ? '✅' : '›'}</Text>
+              {kidTourDone ? <Text style={{ fontSize: 20 }}>✅</Text> : <AppIcon name="chevronRight" size={18} color={colors.subtext} strokeWidth={2.4} />}
             </Pressable>
 
             {/* Parent's tour card */}
@@ -1112,7 +1119,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
                   Learn how the dashboard, limits, and safety controls protect your child.
                 </Text>
               </View>
-              <Text style={{ fontSize: 20 }}>{parentTourDone ? '✅' : '›'}</Text>
+              {parentTourDone ? <Text style={{ fontSize: 20 }}>✅</Text> : <AppIcon name="chevronRight" size={18} color={colors.subtext} strokeWidth={2.4} />}
             </Pressable>
           </FadeSlideIn>
         </ScrollView>
@@ -1227,7 +1234,14 @@ export default function OnboardingScreen({ onFinish }: Props) {
             }}
             style={[styles.tourNextBtn, { flex: 1 }]}
           >
-            <Text style={styles.tourNextBtnText}>{isLast ? "Let's go! 🚀" : 'Next →'}</Text>
+            {isLast ? (
+              <Text style={styles.tourNextBtnText}>Let's go! 🚀</Text>
+            ) : (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={styles.tourNextBtnText}>Next</Text>
+                <AppIcon name="arrowRight" size={15} color={colors.white} strokeWidth={2.5} />
+              </View>
+            )}
           </Pressable>
         </View>
       </View>
@@ -1326,9 +1340,10 @@ export default function OnboardingScreen({ onFinish }: Props) {
             }}
             style={[styles.tourNextBtn, { flex: 1, backgroundColor: '#1E3A5F' }]}
           >
-            <Text style={styles.tourNextBtnText}>
-              {isLast ? 'See how it works →' : 'Next →'}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={styles.tourNextBtnText}>{isLast ? 'See how it works' : 'Next'}</Text>
+              <AppIcon name="arrowRight" size={15} color={colors.white} strokeWidth={2.5} />
+            </View>
           </Pressable>
         </View>
       </View>
@@ -1349,7 +1364,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
             }}
             style={styles.backCircle}
           >
-            <Text style={styles.backCircleText}>‹</Text>
+            <AppIcon name="chevronLeft" size={18} color={colors.text} strokeWidth={2.5} />
           </Pressable>
           <View style={{ flex: 1 }} />
         </View>
@@ -1444,13 +1459,13 @@ export default function OnboardingScreen({ onFinish }: Props) {
           <View style={[styles.card, { width: '100%', marginTop: 22 }]}>
             <View style={styles.stepRow}>
               <View style={[styles.stepIcon, { backgroundColor: '#FFE8E8' }]}>
-                <Text style={{ fontSize: 20 }}>👧</Text>
+                <Text style={{ fontSize: 20 }}>{AVATARS[avatarIndex].emoji}</Text>
               </View>
               <View style={styles.stepInfo}>
                 <Text style={styles.stepTitle}>{childName.trim() || 'Child'}'s profile</Text>
                 <Text style={styles.stepDesc}>Age {age} · {grade}</Text>
               </View>
-              <Text style={styles.checkGreen}>✓</Text>
+              <AppIcon name="check" size={17} color="#00B894" strokeWidth={2.8} />
             </View>
 
             <View style={styles.stepRow}>
@@ -1461,7 +1476,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
                 <Text style={styles.stepTitle}>Parent PIN</Text>
                 <Text style={styles.stepDesc}>Set and ready</Text>
               </View>
-              <Text style={styles.checkGreen}>✓</Text>
+              <AppIcon name="check" size={17} color="#00B894" strokeWidth={2.8} />
             </View>
 
             <View style={styles.stepRow}>
@@ -1474,7 +1489,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
                   {dailyLimit === '∞' ? 'No limit' : `${dailyLimit} questions / week`}
                 </Text>
               </View>
-              <Text style={styles.checkGreen}>✓</Text>
+              <AppIcon name="check" size={17} color="#00B894" strokeWidth={2.8} />
             </View>
 
             <View style={[styles.stepRow, { borderBottomWidth: 0 }]}>
@@ -1487,7 +1502,7 @@ export default function OnboardingScreen({ onFinish }: Props) {
                   {kidTourDone || parentTourDone ? 'Completed' : 'Available anytime in Parents Area'}
                 </Text>
               </View>
-              <Text style={styles.checkGreen}>✓</Text>
+              <AppIcon name="check" size={17} color="#00B894" strokeWidth={2.8} />
             </View>
           </View>
         </FadeSlideIn>

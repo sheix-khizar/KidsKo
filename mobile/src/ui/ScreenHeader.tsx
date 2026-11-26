@@ -2,6 +2,7 @@ import { fontFamilies } from '../theme';
 import React from 'react';
 import { View, Text, Pressable, StyleSheet, ViewStyle } from 'react-native';
 import { colors, typography } from '../theme';
+import { AppIcon } from './AppIcon';
 
 type ScreenHeaderProps = {
   title: string;
@@ -21,7 +22,7 @@ export function ScreenHeader({ title, onBack, rightElement, style }: ScreenHeade
           accessibilityRole="button"
           hitSlop={8}
         >
-          <Text style={styles.backText}>←</Text>
+          <AppIcon name="arrowLeft" size={18} color={colors.text} strokeWidth={2.4} />
         </Pressable>
       ) : (
         <View style={styles.spacer} />

@@ -4,8 +4,104 @@ import { getMemory, filterFact, filterPreferredName } from '../lib/studentMemory
 import { supabaseAdmin } from '../lib/supabase';
 import { deleteThreadImagesFromStorage } from '../lib/homeworkStorage';
 import { checkVoiceEligibility } from '../lib/voiceLimits';
+import { logUsageEvent } from '../lib/usageEvents';
 
 const router = Router();
+
+const VALID_AVATAR_IDS = new Set(['girl', 'boy', 'kid', 'astronaut', 'hero', 'fairy']);
+function sanitizeAvatar(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (VALID_AVATAR_IDS.has(trimmed)) return trimmed;
+  // Accept known emoji values directly too
+  const emojiMap: Record<string, string> = {
+    '👧': 'girl',
+    '👦': 'boy',
+    '🧒': 'kid',
+    '👩‍🚀': 'astronaut',
+    '🦸': 'hero',
+    '🧚': 'fairy',
+  };
+  return emojiMap[trimmed] || null;
+}
+
+async function getParentStudentMeta(userId: string): Promise<{
+  avatars: Record<string, string>;
+  voiceStars: Record<string, number>;
+  rawMeta: Record<string, any>;
+}> {
+  try {
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return { avatars: {}, voiceStars: {}, rawMeta: {} };
+    }
+    const { data } = await supabaseAdmin.auth.admin.getUserById(userId);
+    const meta = (data?.user?.user_metadata || {}) as Record<string, any>;
+    return {
+      avatars: meta.student_avatars && typeof meta.student_avatars === 'object' ? { ...meta.student_avatars } : {},
+      voiceStars: meta.student_voice_stars && typeof meta.student_voice_stars === 'object' ? { ...meta.student_voice_stars } : {},
+      rawMeta: meta,
+    };
+  } catch {
+    return { avatars: {}, voiceStars: {}, rawMeta: {} };
+  }
+}
+
+async function setParentStudentAvatar(userId: string, studentId: string, avatar: string | null): Promise<void> {
+  try {
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return;
+    const { avatars, rawMeta } = await getParentStudentMeta(userId);
+    if (avatar) {
+      avatars[studentId] = avatar;
+    } else {
+      delete avatars[studentId];
+    }
+    await supabaseAdmin.auth.admin.updateUserById(userId, {
+      user_metadata: {
+        ...rawMeta,
+        student_avatars: avatars,
+      },
+    });
+  } catch (err: any) {
+    console.warn('[students avatar meta sync warning]:', err?.message);
+  }
+}
+
+async function addParentVoiceStars(userId: string, studentId: string, deltaStars: number): Promise<number> {
+  try {
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return deltaStars;
+    const { voiceStars, rawMeta } = await getParentStudentMeta(userId);
+    const current = Number(voiceStars[studentId] || 0);
+    const nextTotal = current + deltaStars;
+    voiceStars[studentId] = nextTotal;
+    await supabaseAdmin.auth.admin.updateUserById(userId, {
+      user_metadata: {
+        ...rawMeta,
+        student_voice_stars: voiceStars,
+      },
+    });
+    return nextTotal;
+  } catch (err: any) {
+    console.warn('[students voice stars sync warning]:', err?.message);
+    return deltaStars;
+  }
+}
+
+async function clearParentStudentMeta(userId: string, studentId: string): Promise<void> {
+  try {
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return;
+    const { avatars, voiceStars, rawMeta } = await getParentStudentMeta(userId);
+    delete avatars[studentId];
+    delete voiceStars[studentId];
+    await supabaseAdmin.auth.admin.updateUserById(userId, {
+      user_metadata: {
+        ...rawMeta,
+        student_avatars: avatars,
+        student_voice_stars: voiceStars,
+      },
+    });
+  } catch {}
+}
 
 function isTableMissingError(error: any): boolean {
   if (!error) return false;
@@ -21,15 +117,18 @@ function isTableMissingError(error: any): boolean {
 }
 
 router.post('/', requireAuth, async (req: Request, res: Response) => {
-  const { student_name } = req.body;
+  const { student_name, avatar } = req.body;
 
-  if (!student_name) {
+  if (!student_name || !String(student_name).trim()) {
     return res.status(400).json({ error: 'student_name is required' });
   }
 
+  const trimmedName = String(student_name).trim();
+  const cleanAvatar = sanitizeAvatar(avatar) || 'girl';
+
   const { data, error } = await req.supabase!
     .from('students')
-    .insert({ parent_id: req.user!.id, student_name })
+    .insert({ parent_id: req.user!.id, student_name: trimmedName })
     .select()
     .single();
 
@@ -37,7 +136,9 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
     return res.status(500).json({ error: error.message });
   }
 
-  return res.status(201).json({ student: data });
+  await setParentStudentAvatar(req.user!.id, data.id, cleanAvatar);
+
+  return res.status(201).json({ student: { ...data, avatar: cleanAvatar } });
 });
 
 router.get('/', requireAuth, async (req: Request, res: Response) => {
@@ -47,7 +148,13 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
     return res.status(500).json({ error: error.message });
   }
 
-  return res.status(200).json({ students: data });
+  const { avatars } = await getParentStudentMeta(req.user!.id);
+  const enriched = (data || []).map((st: any) => ({
+    ...st,
+    avatar: avatars[st.id] || null,
+  }));
+
+  return res.status(200).json({ students: enriched });
 });
 
 // GET /api/students/:id/memory (Step 9.5 / 4.5)
@@ -192,8 +299,10 @@ router.get('/:id/activity', requireAuth, async (req: Request, res: Response) => 
     }
   }
 
-  // Real total stars earned: 5 stars per question + 10 stars per topic + 15 stars per streak day
-  const totalStars = Math.max(25, (userMessages.length * 5) + (topicsExplored * 10) + (streak * 15));
+  // Real total stars earned: 5 stars per question + 10 stars per topic + 15 stars per streak day + real voice call stars
+  const { voiceStars: voiceStarsMap } = await getParentStudentMeta(req.user!.id);
+  const voiceStars = Number(voiceStarsMap[id] || 0);
+  const totalStars = (userMessages.length * 5) + (topicsExplored * 10) + (streak * 15) + voiceStars;
 
   // Real weekly remaining voice minutes from family usage
   let weeklyVoiceMinutesRemaining = 10;
@@ -217,6 +326,36 @@ router.get('/:id/activity', requireAuth, async (req: Request, res: Response) => 
     dailyCounts,
     topics,
   });
+});
+
+// POST /api/students/:id/voice-complete - Record real earned stars after a live voice/video call
+router.post('/:id/voice-complete', requireAuth, async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const rawDuration = Number(req.body?.durationSeconds ?? 0);
+  const durationSeconds = Number.isFinite(rawDuration) ? Math.max(0, Math.round(rawDuration)) : 0;
+
+  const { data: student, error: studentError } = await req.supabase!
+    .from('students')
+    .select('id')
+    .eq('id', id)
+    .eq('parent_id', req.user!.id)
+    .maybeSingle();
+
+  if (studentError || !student) {
+    return res.status(404).json({ error: 'Student not found' });
+  }
+
+  if (durationSeconds < 10) {
+    return res.status(200).json({ starsEarned: 0 });
+  }
+
+  const starsEarned = Math.min(20, Math.max(1, Math.floor(durationSeconds / 15)));
+  try {
+    await logUsageEvent(req.supabase!, req.user!.id, id, 'voice_trial');
+  } catch {}
+  const totalVoiceStars = await addParentVoiceStars(req.user!.id, id, starsEarned);
+
+  return res.status(200).json({ starsEarned, totalVoiceStars });
 });
 
 // PUT /api/students/:id/memory (Step 9.5 / 4.5)
@@ -429,6 +568,7 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Child profile could not be removed or was already deleted' });
     }
 
+    await clearParentStudentMeta(req.user!.id, id);
     console.log(`[Child Profile Deleted]: StudentId=${id}, Name=${student.student_name}, DeletedRows=${deletedRows?.length || 0}`);
     return res.status(200).json({
       success: true,
@@ -441,63 +581,90 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
-// PATCH /api/students/:id - Update child profile name
+// PATCH /api/students/:id - Update child profile name and/or avatar
 router.patch('/:id', requireAuth, async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { student_name } = req.body;
-  if (!student_name || !student_name.trim()) {
-    return res.status(400).json({ error: 'student_name is required' });
+  const { student_name, avatar } = req.body;
+  const trimmedName = typeof student_name === 'string' ? student_name.trim() : '';
+  const cleanAvatar = sanitizeAvatar(avatar);
+
+  if (!trimmedName && !cleanAvatar) {
+    return res.status(400).json({ error: 'student_name or avatar is required' });
   }
 
-  const trimmedName = student_name.trim();
-  const { data, error } = await req.supabase!
-    .from('students')
-    .update({ student_name: trimmedName })
-    .eq('id', id)
-    .eq('parent_id', req.user!.id)
-    .select()
-    .single();
+  let data: any = null;
+  if (trimmedName) {
+    const result = await req.supabase!
+      .from('students')
+      .update({ student_name: trimmedName })
+      .eq('id', id)
+      .eq('parent_id', req.user!.id)
+      .select()
+      .single();
 
-  if (error) {
-    return res.status(500).json({ error: error.message });
-  }
-
-  // Keep student_memory.preferred_name in sync so AI chat & memory immediately use the new name
-  try {
-    const cleanPref =
-      filterPreferredName(trimmedName) ||
-      filterPreferredName(trimmedName.split(/\s+/)[0]) ||
-      null;
-    const { data: existingMem } = await req.supabase!
-      .from('student_memory')
-      .select('student_id, facts, enabled')
-      .eq('student_id', id)
-      .maybeSingle();
-
-    if (existingMem) {
-      await req.supabase!
-        .from('student_memory')
-        .update({
-          preferred_name: cleanPref,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('student_id', id);
-    } else if (cleanPref) {
-      await req.supabase!
-        .from('student_memory')
-        .upsert({
-          student_id: id,
-          preferred_name: cleanPref,
-          facts: [],
-          enabled: true,
-          updated_at: new Date().toISOString(),
-        });
+    if (result.error) {
+      return res.status(500).json({ error: result.error.message });
     }
-  } catch (memSyncErr: any) {
-    console.warn('[PATCH /students/:id] Could not sync preferred_name in student_memory:', memSyncErr?.message);
+    data = result.data;
+
+    // Keep student_memory.preferred_name in sync so AI chat & memory immediately use the new name
+    try {
+      const cleanPref =
+        filterPreferredName(trimmedName) ||
+        filterPreferredName(trimmedName.split(/\s+/)[0]) ||
+        null;
+      const { data: existingMem } = await req.supabase!
+        .from('student_memory')
+        .select('student_id, facts, enabled')
+        .eq('student_id', id)
+        .maybeSingle();
+
+      if (existingMem) {
+        await req.supabase!
+          .from('student_memory')
+          .update({
+            preferred_name: cleanPref,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('student_id', id);
+      } else if (cleanPref) {
+        await req.supabase!
+          .from('student_memory')
+          .upsert({
+            student_id: id,
+            preferred_name: cleanPref,
+            facts: [],
+            enabled: true,
+            updated_at: new Date().toISOString(),
+          });
+      }
+    } catch (memSyncErr: any) {
+      console.warn('[PATCH /students/:id] Could not sync preferred_name in student_memory:', memSyncErr?.message);
+    }
+  } else {
+    const existing = await req.supabase!
+      .from('students')
+      .select('*')
+      .eq('id', id)
+      .eq('parent_id', req.user!.id)
+      .maybeSingle();
+    if (existing.error || !existing.data) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+    data = existing.data;
   }
 
-  return res.status(200).json({ student: data });
+  if (cleanAvatar) {
+    await setParentStudentAvatar(req.user!.id, id, cleanAvatar);
+  }
+  const { avatars } = await getParentStudentMeta(req.user!.id);
+
+  return res.status(200).json({
+    student: {
+      ...data,
+      avatar: cleanAvatar || avatars[id] || null,
+    },
+  });
 });
 
 export default router;

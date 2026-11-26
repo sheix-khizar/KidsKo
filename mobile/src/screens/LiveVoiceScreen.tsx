@@ -18,8 +18,9 @@ import { LinearGradient } from '../ui/LinearGradient';
 import { WaveBars, PressScale } from '../ui/motion';
 import { AskieCompanion } from '../ui/AskieCompanion';
 import { AskieReactionOverlay, triggerAskieReaction } from '../ui/AskieReactions';
+import { AppIcon } from '../ui/AppIcon';
 import { VoiceSession } from '../services/voiceSocket';
-import { getVoiceEligibility } from '../services/api';
+import { getVoiceEligibility, recordVoiceCallStars } from '../services/api';
 import { vibrateTap } from '../utils/feedback';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -114,7 +115,9 @@ export default function LiveVoiceScreen({
       .catch(() => {});
   }, [triggerLimitPaywall]);
   const [callDuration, setCallDuration] = useState<number>(0);
-  const [questionCount, setQuestionCount] = useState<number>(1);
+  const callDurationRef = useRef<number>(0);
+  const callEndedRef = useRef<boolean>(false);
+  const [endedStarsEarned, setEndedStarsEarned] = useState<number>(0);
   const [errorReason, setErrorReason] = useState<string | null>(null);
   const [lastSpokenTranscript, setLastSpokenTranscript] = useState<string>('');
   const [networkNotice, setNetworkNotice] = useState<string | null>(null);
@@ -235,6 +238,9 @@ export default function LiveVoiceScreen({
   // Start Voice Session
   const startSession = useCallback(() => {
     limitTriggeredRef.current = false;
+    callEndedRef.current = false;
+    callDurationRef.current = 0;
+    setEndedStarsEarned(0);
     summaryFadeAnim.setValue(1);
     isGoingHomeRef.current = false;
     setStatus('connecting');
@@ -256,6 +262,7 @@ export default function LiveVoiceScreen({
 
           // Call duration counter
           durationTimerRef.current = setInterval(() => {
+            callDurationRef.current += 1;
             setCallDuration((d) => d + 1);
           }, 1000);
         },
@@ -289,7 +296,6 @@ export default function LiveVoiceScreen({
         onTranscript: (text) => {
           if (text && text.trim().length > 0) {
             setLastSpokenTranscript(text.trim());
-            setQuestionCount((prev) => prev + 1);
           }
         },
         onStateChange: (state) => {
@@ -366,14 +372,24 @@ export default function LiveVoiceScreen({
     sessionRef.current?.end();
     setIsVideoActive(false);
 
-    // Save earned stars persistently
-    const starsEarned = Math.max(5, questionCount * 2 + 5);
-    SecureStore.getItemAsync(`@kidsko_stars_${studentId}`)
-      .then((saved) => {
-        const cur = saved ? parseInt(saved, 10) : 25;
-        SecureStore.setItemAsync(`@kidsko_stars_${studentId}`, String(cur + starsEarned)).catch(() => {});
-      })
-      .catch(() => {});
+    if (!callEndedRef.current) {
+      callEndedRef.current = true;
+      const elapsedSec = callDurationRef.current;
+      // Real earned stars strictly based on genuine active call time (>= 10s), zero fake baseline
+      const realStars = elapsedSec >= 10 ? Math.min(20, Math.max(1, Math.floor(elapsedSec / 15))) : 0;
+      setEndedStarsEarned(realStars);
+
+      if (realStars > 0) {
+        recordVoiceCallStars(studentId, elapsedSec).catch(() => {});
+        SecureStore.getItemAsync(`@kidsko_stars_${studentId}`)
+          .then((saved) => {
+            const cur = saved ? parseInt(saved, 10) : 0;
+            const safeCur = isNaN(cur) ? 0 : cur;
+            SecureStore.setItemAsync(`@kidsko_stars_${studentId}`, String(safeCur + realStars)).catch(() => {});
+          })
+          .catch(() => {});
+      }
+    }
 
     setStatus('ended');
   };
@@ -432,8 +448,9 @@ export default function LiveVoiceScreen({
   // SCREEN 3: POST-CALL SUMMARY SCREEN (IMAGE 4)
   // ═══════════════════════════════════════════════════════════════
   if (status === 'ended') {
-    const durationMinutes = Math.max(1, Math.round(callDuration / 60));
-    const starsEarned = Math.max(5, questionCount * 2 + 5);
+    const mins = Math.floor(callDuration / 60);
+    const secs = callDuration % 60;
+    const realMinutesDisplay = `${mins}:${secs.toString().padStart(2, '0')}`;
 
     return (
       <Animated.View style={[styles.container, { opacity: summaryFadeAnim }]}>
@@ -456,20 +473,15 @@ export default function LiveVoiceScreen({
           <Text style={styles.summaryTitle}>Great talking, {studentName}! 🎉</Text>
           <Text style={styles.summarySubtitle}>You are getting so smart!</Text>
 
-          {/* 3 Stat Cards in a Row */}
+          {/* 2 Real Stat Cards in a Row (Minutes & Stars) */}
           <View style={styles.statsRow}>
             <View style={styles.statCard}>
-              <Text style={styles.statValue}>{durationMinutes}</Text>
+              <Text style={styles.statValue}>{realMinutesDisplay}</Text>
               <Text style={styles.statLabel}>⏱️ Minutes</Text>
             </View>
 
             <View style={styles.statCard}>
-              <Text style={styles.statValue}>{questionCount}</Text>
-              <Text style={styles.statLabel}>❓ Questions</Text>
-            </View>
-
-            <View style={styles.statCard}>
-              <Text style={styles.statValue}>+{starsEarned}</Text>
+              <Text style={styles.statValue}>+{endedStarsEarned}</Text>
               <Text style={styles.statLabel}>⭐ Stars</Text>
             </View>
           </View>
@@ -602,7 +614,7 @@ export default function LiveVoiceScreen({
               accessibilityRole="button"
               accessibilityLabel="Stop camera mode"
             >
-              <Text style={styles.camRoundBtnStopIcon}>✕</Text>
+              <AppIcon name="close" size={22} color="#FFFFFF" strokeWidth={2.8} />
             </Pressable>
             <Text style={styles.camDockLabel}>Stop</Text>
           </View>
@@ -713,14 +725,24 @@ export default function LiveVoiceScreen({
 
         {/* Live Caption Card */}
         <View style={styles.captionCard}>
-          <Text
-            style={[
-              styles.captionSpeaker,
-              { color: voiceState === 'speaking' ? '#FFE66D' : '#C8FFF9' },
-            ]}
-          >
-            ● {voiceState === 'speaking' ? 'KIDSKO' : studentName.toUpperCase()}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <View
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: 4,
+                backgroundColor: voiceState === 'speaking' ? '#FFE66D' : '#C8FFF9',
+              }}
+            />
+            <Text
+              style={[
+                styles.captionSpeaker,
+                { color: voiceState === 'speaking' ? '#FFE66D' : '#C8FFF9' },
+              ]}
+            >
+              {voiceState === 'speaking' ? 'KIDSKO' : studentName.toUpperCase()}
+            </Text>
+          </View>
           <Text style={styles.captionText} numberOfLines={3}>
             {captionText}
           </Text>

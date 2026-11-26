@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
   ScrollView,
 } from 'react-native';
-import { KeyboardAwareView } from '../ui';
+import { KeyboardAwareView, AppIcon } from '../ui';
 import { fontFamilies, colors } from '../theme';
 import {
   isPinConfigured,
@@ -205,7 +205,7 @@ export default function ParentalGate({ visible, onSuccess, onCancel }: Props) {
             accessibilityLabel="Close"
             accessibilityRole="button"
           >
-            <Text style={styles.closeBtnText}>✕</Text>
+            <AppIcon name="close" size={18} color="#FFFFFF" strokeWidth={2.6} />
           </Pressable>
 
           {/* Password verification sub-screen (First-time setup or Forgot PIN) */}
@@ -246,7 +246,10 @@ export default function ParentalGate({ visible, onSuccess, onCancel }: Props) {
                 {loading ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
-                  <Text style={styles.actionBtnText}>Continue →</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Text style={styles.actionBtnText}>Continue</Text>
+                    <AppIcon name="arrowRight" size={16} color="#FFFFFF" strokeWidth={2.5} />
+                  </View>
                 )}
               </Pressable>
 
@@ -347,7 +350,7 @@ export default function ParentalGate({ visible, onSuccess, onCancel }: Props) {
                   disabled={lockoutSec > 0}
                   accessibilityLabel="Backspace"
                 >
-                  <Text style={styles.keyBackSymbol}>⌫</Text>
+                  <AppIcon name="backspace" size={24} color="#FFFFFF" strokeWidth={2.2} />
                 </Pressable>
               </View>
 

@@ -23,6 +23,7 @@ import {
   useSafeAreaInsets,
   AskieCompanion,
   KeyboardAwareView,
+  AppIcon,
 } from '../ui';
 import { colors, fontFamilies, gradients } from '../theme';
 
@@ -349,7 +350,7 @@ export default function LoginScreen({ onLoggedIn, onGoToRegister }: Props) {
                 style={styles.modalCloseBtn}
                 accessibilityLabel="Close"
               >
-                <Text style={styles.modalCloseText}>✕</Text>
+                <AppIcon name="close" size={16} color={colors.subtext} strokeWidth={2.4} />
               </Pressable>
             </View>
 
@@ -445,9 +446,10 @@ export default function LoginScreen({ onLoggedIn, onGoToRegister }: Props) {
 
                 <Pressable
                   onPress={() => setForgotStep('email')}
-                  style={{ marginTop: 14, alignItems: 'center' }}
+                  style={{ marginTop: 14, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }}
                 >
-                  <Text style={styles.forgotBackLink}>← Change email</Text>
+                  <AppIcon name="arrowLeft" size={14} color={colors.coral} strokeWidth={2.4} />
+                  <Text style={styles.forgotBackLink}>Change email</Text>
                 </Pressable>
               </View>
             )}

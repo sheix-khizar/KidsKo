@@ -25,13 +25,15 @@ import { getStudents, createStudent, clearToken, getSavedUserId, getVoiceEligibi
 import { configureBilling, isPremiumActive } from '../services/billing';
 import { TabBar, TabKey } from '../ui/TabBar';
 import { LinearGradient } from '../ui/LinearGradient';
-import { Screen, Mascot, Button, Card, Pill, FadeSlideIn, Bounce, PressScale, KeyboardAwareView } from '../ui';
+import { Screen, Mascot, Button, Card, Pill, FadeSlideIn, Bounce, PressScale, KeyboardAwareView, AppIcon } from '../ui';
 import { AskieCompanion } from '../ui/AskieCompanion';
+import { getAvatarOption } from '../utils/avatars';
 import { colors, radii, typography, spacing, gradients, shadows } from '../theme';
 
-export type Student = { id: string; student_name: string };
+export type Student = { id: string; student_name: string; avatar?: string | null };
 
 type Props = {
+  initialStudent?: Student | null;
   onLogout: () => void;
   onOpenPaywall: () => void;
   onOpenTranscript: (student: Student, thread?: { id: string; title: string }) => void;
@@ -45,6 +47,7 @@ type Props = {
 };
 
 export default function MainShellScreen({
+  initialStudent = null,
   onLogout,
   onOpenPaywall,
   onOpenTranscript,
@@ -86,9 +89,31 @@ export default function MainShellScreen({
   };
   const [isPremium, setIsPremium] = useState(false);
   const [weeklyVoiceMinutes, setWeeklyVoiceMinutes] = useState<number | null>(null);
-  const [students, setStudents] = useState<Student[]>([]);
-  const [activeStudent, setActiveStudent] = useState<Student | null>(null);
-  const [loadingStudents, setLoadingStudents] = useState(true);
+  const [students, setStudents] = useState<Student[]>(initialStudent ? [initialStudent] : []);
+  const [activeStudent, setActiveStudent] = useState<Student | null>(initialStudent);
+  const [loadingStudents, setLoadingStudents] = useState(!initialStudent);
+  const [queuedTopic, setQueuedTopic] = useState<{ id: number; prompt: string } | null>(null);
+  const [homeStatsRefreshKey, setHomeStatsRefreshKey] = useState(0);
+
+  // Sync student passed in immediately after onboarding / login
+  useEffect(() => {
+    if (!initialStudent) return;
+    setActiveStudent(initialStudent);
+    setStudents((prev) => {
+      const idx = prev.findIndex((s) => s.id === initialStudent.id);
+      if (idx === -1) return [initialStudent, ...prev];
+      const next = [...prev];
+      next[idx] = { ...prev[idx], ...initialStudent };
+      return next;
+    });
+    setLoadingStudents(false);
+  }, [initialStudent?.id, initialStudent?.student_name, initialStudent?.avatar]);
+
+  useEffect(() => {
+    if (tab === 'home') {
+      setHomeStatsRefreshKey((k) => k + 1);
+    }
+  }, [tab, homeTransitionKey]);
 
   // Child switcher & First-run state
   const [showSwitcherModal, setShowSwitcherModal] = useState(false);
@@ -223,8 +248,8 @@ export default function MainShellScreen({
       setFirstRunName('');
       const updatedList = await getStudents();
       setStudents(updatedList);
-      if (res && res.student) {
-        setActiveStudent(res.student);
+      if (res && res.id) {
+        setActiveStudent(res);
       } else if (updatedList.length > 0) {
         setActiveStudent(updatedList[0]);
       }
@@ -256,6 +281,7 @@ export default function MainShellScreen({
             {activeStudent ? (
               <HomeScreen
                 student={activeStudent}
+                refreshKey={homeStatsRefreshKey}
                 onStartVoice={() => {
                   onStartCall(activeStudent, 'voice');
                 }}
@@ -263,11 +289,40 @@ export default function MainShellScreen({
                   onStartCall(activeStudent, 'video');
                 }}
                 onSelectTopic={(prompt) => {
+                  setQueuedTopic({ id: Date.now() + Math.random(), prompt });
                   changeTab('chat');
                 }}
                 onOpenProfile={() => setShowSwitcherModal(true)}
               />
-            ) : null}
+            ) : (
+              <KeyboardAwareView>
+                <ScrollView contentContainerStyle={styles.firstRunContent} keyboardShouldPersistTaps="handled">
+                  <Mascot size="l" style={styles.firstRunMascot} />
+                  <Text style={styles.firstRunTitle}>Welcome to Kidsko!</Text>
+                  <Text style={styles.firstRunSub}>
+                    Add your child's name to get started with friendly homework help and chats.
+                  </Text>
+                  <Card style={styles.firstRunCard}>
+                    <Text style={styles.firstRunLabel}>Child's Name</Text>
+                    <TextInput
+                      style={styles.firstRunInput}
+                      placeholder="e.g. Aisha"
+                      placeholderTextColor={colors.subtext}
+                      value={firstRunName}
+                      onChangeText={setFirstRunName}
+                    />
+                    {firstRunError && <Text style={styles.firstRunErrorText}>{firstRunError}</Text>}
+                    <Button
+                      title="Add Child & Start Learning"
+                      onPress={handleAddFirstChild}
+                      loading={addingFirstRun}
+                      variant="primary"
+                      style={{ marginTop: 8 }}
+                    />
+                  </Card>
+                </ScrollView>
+              </KeyboardAwareView>
+            )}
           </FadeSlideIn>
         )}
 
@@ -321,6 +376,9 @@ export default function MainShellScreen({
               key={activeStudent.id}
               studentId={activeStudent.id}
               studentName={activeStudent.student_name}
+              studentAvatar={activeStudent.avatar}
+              queuedTopic={queuedTopic}
+              onTopicConsumed={() => setQueuedTopic(null)}
               embedded={true}
               onBack={() => {
                 changeTab('home');
@@ -483,7 +541,7 @@ export default function MainShellScreen({
                       setShowSwitcherModal(false);
                     }}
                   >
-                    <Text style={styles.switcherItemIcon}>🧒</Text>
+                    <Text style={styles.switcherItemIcon}>{getAvatarOption(st.avatar).emoji}</Text>
                     <Text
                       style={[
                         styles.switcherItemName,
@@ -492,7 +550,7 @@ export default function MainShellScreen({
                     >
                       {st.student_name}
                     </Text>
-                    {isSelected && <Text style={styles.checkmark}>✓</Text>}
+                    {isSelected && <AppIcon name="check" size={16} color={colors.coralStrong} strokeWidth={2.8} />}
                   </Pressable>
                 );
               })}

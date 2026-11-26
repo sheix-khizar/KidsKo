@@ -17,6 +17,8 @@ import { AskieEmoji } from '../ui/AskieEmoji';
 import { triggerAskieReaction } from '../ui/AskieReactions';
 import { FadeSlideIn, PressScale, Bounce } from '../ui/motion';
 import { getStudentActivity } from '../services/api';
+import { getAvatarOption } from '../utils/avatars';
+import { vibrateTap } from '../utils/feedback';
 import { Student } from './MainShellScreen';
 
 type HomeScreenProps = {
@@ -25,6 +27,7 @@ type HomeScreenProps = {
   onStartCamera: () => void;
   onSelectTopic: (prompt: string) => void;
   onOpenProfile?: () => void;
+  refreshKey?: number;
 };
 
 const HERO_MESSAGES = [
@@ -80,13 +83,15 @@ export default function HomeScreen({
   onStartCamera,
   onSelectTopic,
   onOpenProfile,
+  refreshKey = 0,
 }: HomeScreenProps) {
   const insets = useSafeAreaInsets();
   const firstName = student.student_name ? student.student_name.split(' ')[0] : 'Learner';
+  const avatarOption = getAvatarOption(student.avatar);
 
   // Gamification state (dynamic, real learning analytics)
   const [streak, setStreak] = useState(0);
-  const [stars, setStars] = useState(25);
+  const [stars, setStars] = useState(0);
   const [goalQuestions, setGoalQuestions] = useState(0);
   const goalTotal = 5;
 
@@ -101,15 +106,16 @@ export default function HomeScreen({
       if (activity) {
         setStreak(activity.streak || 0);
         setGoalQuestions(activity.questionsToday || 0);
-        const baseStars = activity.stars || Math.max(25, ((activity.questionsThisWeek || 0) * 5) + ((activity.streak || 0) * 15));
+        const backendStars = activity.stars ?? 0;
         const savedStars = savedStarsStr ? parseInt(savedStarsStr, 10) : 0;
-        const finalStars = Math.max(baseStars, savedStars);
+        const finalStars = Math.max(backendStars, isNaN(savedStars) ? 0 : savedStars);
         setStars(finalStars);
         if (finalStars > savedStars) {
           SecureStore.setItemAsync(`@kidsko_stars_${student.id}`, String(finalStars)).catch(() => {});
         }
       } else if (savedStarsStr) {
-        setStars(parseInt(savedStarsStr, 10));
+        const parsed = parseInt(savedStarsStr, 10);
+        setStars(isNaN(parsed) ? 0 : parsed);
       }
     } catch (err) {
       console.warn('[HomeScreen] Failed to load student stats:', err);
@@ -118,7 +124,7 @@ export default function HomeScreen({
 
   useEffect(() => {
     loadStudentStats();
-  }, [loadStudentStats]);
+  }, [loadStudentStats, refreshKey]);
 
   // Hero greeting speech bubble rotation
   const [msgIdx, setMsgIdx] = useState(0);
@@ -204,7 +210,7 @@ export default function HomeScreen({
           {/* Child Profile Chip */}
           <PressScale style={styles.profileTouch} onPress={onOpenProfile}>
             <View style={styles.profileBadge}>
-              <Text style={styles.profileEmoji}>👧</Text>
+              <Text style={styles.profileEmoji}>{avatarOption.emoji}</Text>
               <Text style={styles.profileName} numberOfLines={1}>
                 {firstName}
               </Text>
@@ -310,7 +316,10 @@ export default function HomeScreen({
                     { backgroundColor: topic.bg, borderColor: topic.border },
                     pressed && styles.tilePressed,
                   ]}
-                  onPress={() => onSelectTopic(topic.prompt)}
+                  onPress={() => {
+                    vibrateTap('light');
+                    onSelectTopic(topic.prompt);
+                  }}
                   accessibilityRole="button"
                   accessibilityLabel={topic.title}
                 >

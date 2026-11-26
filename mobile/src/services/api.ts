@@ -2,6 +2,7 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { getApiUrl, setCustomApiUrl } from './config';
 import { clearPin } from './pinService';
+import { getLocalStudentAvatar, saveLocalStudentAvatar, removeLocalStudentAvatar } from '../utils/avatars';
 
 import { configureBilling } from './billing';
 
@@ -254,7 +255,9 @@ export async function login(email: string, password: string) {
 }
 
 // ---- Student endpoints (require a token) ----
-export async function createStudent(studentName: string) {
+export type ApiStudent = { id: string; student_name: string; avatar?: string | null };
+
+export async function createStudent(studentName: string, avatar?: string) {
   const token = await getToken();
   const res = await fetchWithTimeout(`${getApiUrl()}/api/students`, {
     method: 'POST',
@@ -262,14 +265,26 @@ export async function createStudent(studentName: string) {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ student_name: studentName }),
+    body: JSON.stringify({ student_name: studentName, avatar }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Could not create student');
-  return data.student;
+  const created = data.student as ApiStudent;
+  const resolvedAvatar = created.avatar || avatar || 'girl';
+  if (created?.id) {
+    await saveLocalStudentAvatar(created.id, resolvedAvatar);
+  }
+  return { ...created, avatar: resolvedAvatar };
 }
 
-export async function updateStudent(studentId: string, studentName: string) {
+export async function updateStudent(
+  studentId: string,
+  studentNameOrUpdates: string | { student_name?: string; avatar?: string }
+) {
+  const payload =
+    typeof studentNameOrUpdates === 'string'
+      ? { student_name: studentNameOrUpdates }
+      : studentNameOrUpdates;
   const token = await getToken();
   const res = await fetchWithTimeout(`${getApiUrl()}/api/students/${studentId}`, {
     method: 'PATCH',
@@ -277,11 +292,16 @@ export async function updateStudent(studentId: string, studentName: string) {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ student_name: studentName }),
+    body: JSON.stringify(payload),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Could not update student');
-  return data.student as { id: string; student_name: string };
+  const updated = data.student as ApiStudent;
+  const resolvedAvatar = updated.avatar || payload.avatar || (await getLocalStudentAvatar(studentId));
+  if (resolvedAvatar) {
+    await saveLocalStudentAvatar(studentId, resolvedAvatar);
+  }
+  return { ...updated, avatar: resolvedAvatar };
 }
 
 export async function getStudents() {
@@ -291,7 +311,19 @@ export async function getStudents() {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Could not load students');
-  return data.students as { id: string; student_name: string }[];
+  const rawList = (data.students || []) as ApiStudent[];
+  const enriched = await Promise.all(
+    rawList.map(async (st) => {
+      const serverAvatar = st.avatar;
+      if (serverAvatar) {
+        await saveLocalStudentAvatar(st.id, serverAvatar);
+        return st;
+      }
+      const localAvatar = await getLocalStudentAvatar(st.id);
+      return localAvatar ? { ...st, avatar: localAvatar } : st;
+    })
+  );
+  return enriched;
 }
 
 export async function getTranscript(studentId: string) {
@@ -381,7 +413,26 @@ export async function deleteStudent(studentId: string): Promise<{ success: boole
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Could not delete child profile');
+  await removeLocalStudentAvatar(studentId);
   return data as { success: boolean; deletedStudentId: string };
+}
+
+export async function recordVoiceCallStars(
+  studentId: string,
+  durationSeconds: number
+): Promise<{ starsEarned: number; totalVoiceStars?: number }> {
+  const token = await getToken();
+  const res = await fetchWithTimeout(`${getApiUrl()}/api/students/${studentId}/voice-complete`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ durationSeconds }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Could not record call stars');
+  return data as { starsEarned: number; totalVoiceStars?: number };
 }
 
 // Real Learning Activity endpoints

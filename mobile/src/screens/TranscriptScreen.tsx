@@ -5,6 +5,7 @@ import { getThreadMessages } from '../services/threads';
 import { cleanMessageText, parseFormattedText } from '../utils/messageText';
 import { colors, radii, spacing, typography, fontFamilies, shadows } from '../theme';
 import { PressScale, FadeSlideIn } from '../ui/motion';
+import { AppIcon } from '../ui/AppIcon';
 import { useSafeAreaInsets } from '../ui/safeArea';
 
 type Message = { role: string; content: string; message_type?: string; created_at: string };
@@ -116,11 +117,12 @@ export default function TranscriptScreen({ studentId, studentName, threadId, thr
       >
         <PressScale onPress={onBack}>
           <View
-            style={styles.backBtn}
+            style={[styles.backBtn, { flexDirection: 'row', alignItems: 'center', gap: 5 }]}
             accessibilityRole="button"
             accessibilityLabel="Back to Parents Hub"
           >
-            <Text style={styles.backText}>← Back</Text>
+            <AppIcon name="arrowLeft" size={14} color={colors.text} strokeWidth={2.4} />
+            <Text style={styles.backText}>Back</Text>
           </View>
         </PressScale>
         <View style={styles.headerTitleWrap}>

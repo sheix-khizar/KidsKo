@@ -45,7 +45,9 @@ import { colors, radii, spacing, fontFamilies, gradients, shadows } from '../the
 import { LinearGradient } from '../ui/LinearGradient';
 import { PressScale, FadeSlideIn } from '../ui/motion';
 import { KeyboardAwareView } from '../ui/KeyboardAware';
+import { AppIcon } from '../ui/AppIcon';
 import { loadFeedbackPreferences, setVibrationEnabled as persistVibrationEnabled, vibrateTap } from '../utils/feedback';
+import { CHILD_AVATARS, AvatarId, getAvatarOption } from '../utils/avatars';
 import ParentalGate from './ParentalGate';
 
 type SubTab = 'overview' | 'history' | 'limits' | 'settings';
@@ -83,12 +85,14 @@ export default function ParentsHub({
   const [newChildName, setNewChildName] = useState('');
   const [newChildAge, setNewChildAge] = useState('');
   const [newChildGrade, setNewChildGrade] = useState('Grade 1');
+  const [newChildAvatar, setNewChildAvatar] = useState<AvatarId>('girl');
   const [addingChild, setAddingChild] = useState(false);
   const [addChildError, setAddChildError] = useState<string | null>(null);
 
   // Edit Child Modal State
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [editChildName, setEditChildName] = useState('');
+  const [editChildAvatar, setEditChildAvatar] = useState<AvatarId>('girl');
   const [updatingChild, setUpdatingChild] = useState(false);
   const [editChildError, setEditChildError] = useState<string | null>(null);
 
@@ -373,7 +377,7 @@ export default function ParentsHub({
     setAddingChild(true);
     setAddChildError(null);
     try {
-      const created = await createStudent(newChildName.trim());
+      const created = await createStudent(newChildName.trim(), newChildAvatar);
       if (created?.id) {
         const facts: string[] = [];
         if (newChildAge.trim()) facts.push(`Age: ${newChildAge.trim()}`);
@@ -391,6 +395,7 @@ export default function ParentsHub({
       }
       setNewChildName('');
       setNewChildAge('');
+      setNewChildAvatar('girl');
       setShowAddModal(false);
     } catch (err: any) {
       setAddChildError(err?.message || 'Could not add child profile');
@@ -403,6 +408,7 @@ export default function ParentsHub({
   const handleOpenEditChild = (student: Student) => {
     setEditingStudent(student);
     setEditChildName(student.student_name);
+    setEditChildAvatar(getAvatarOption(student.avatar).id);
     setEditChildError(null);
   };
 
@@ -414,8 +420,17 @@ export default function ParentsHub({
     setUpdatingChild(true);
     setEditChildError(null);
     try {
-      await updateStudent(editingStudent.id, editChildName.trim());
-      await onRefreshStudents();
+      const updated = await updateStudent(editingStudent.id, {
+        student_name: editChildName.trim(),
+        avatar: editChildAvatar,
+      });
+      const updatedList = await onRefreshStudents();
+      if (activeStudent?.id === editingStudent.id) {
+        const refreshed =
+          (Array.isArray(updatedList) && updatedList.find((s) => s.id === editingStudent.id)) ||
+          updated;
+        onSelectStudent(refreshed);
+      }
       setEditingStudent(null);
     } catch (err: any) {
       setEditChildError(err?.message || 'Failed to update child profile');
@@ -783,7 +798,7 @@ export default function ParentsHub({
               accessibilityRole="button"
               accessibilityLabel="Close parent dashboard"
             >
-              <Text style={styles.closeBtnText}>✕</Text>
+              <AppIcon name="close" size={16} color="#FFFFFF" strokeWidth={2.5} />
             </TouchableOpacity>
           )}
         </View>
@@ -794,9 +809,9 @@ export default function ParentsHub({
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.childrenPillsContainer}
         >
-          {localStudents.map((st, idx) => {
+          {localStudents.map((st) => {
             const isSelected = activeStudent?.id === st.id;
-            const isAlternate = idx % 2 !== 0;
+            const avatarOpt = getAvatarOption(st.avatar);
             return (
               <TouchableOpacity
                 key={st.id}
@@ -809,15 +824,11 @@ export default function ParentsHub({
                     styles.childPillSquircle,
                     isSelected ? styles.childPillActiveSquircle : styles.childPillInactiveSquircle,
                     {
-                      backgroundColor: isSelected
-                        ? '#FF6B6B'
-                        : isAlternate
-                        ? 'rgba(78, 205, 196, 0.4)'
-                        : 'rgba(255, 107, 107, 0.35)',
+                      backgroundColor: isSelected ? avatarOpt.colors[0] : 'rgba(255, 255, 255, 0.25)',
                     },
                   ]}
                 >
-                  <Text style={styles.childPillEmoji}>{isAlternate ? '👦' : '👧'}</Text>
+                  <Text style={styles.childPillEmoji}>{avatarOpt.emoji}</Text>
                 </View>
                 <Text
                   style={[
@@ -837,6 +848,7 @@ export default function ParentsHub({
             onPress={() => {
               setNewChildName('');
               setNewChildAge('');
+              setNewChildAvatar('girl');
               setAddChildError(null);
               setShowAddModal(true);
             }}
@@ -882,10 +894,12 @@ export default function ParentsHub({
                 <View style={styles.card}>
                   <View style={styles.activeChildCardRow}>
                     <LinearGradient
-                      colors={['#FF6B6B', '#FF9F43']}
+                      colors={getAvatarOption(activeStudent.avatar).colors}
                       style={styles.activeChildAvatarCircle}
                     >
-                      <Text style={styles.activeChildAvatarEmoji}>👧</Text>
+                      <Text style={styles.activeChildAvatarEmoji}>
+                        {getAvatarOption(activeStudent.avatar).emoji}
+                      </Text>
                     </LinearGradient>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.activeChildName}>{activeStudent.student_name}</Text>
@@ -1042,7 +1056,7 @@ export default function ParentsHub({
                             onPress={() => handleRemoveFact(idx)}
                             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                           >
-                            <Text style={styles.factChipRemove}>✕</Text>
+                            <AppIcon name="close" size={12} color={colors.coralStrong} strokeWidth={2.4} />
                           </TouchableOpacity>
                         </View>
                       ))}
@@ -1416,13 +1430,15 @@ export default function ParentsHub({
             <View style={styles.card}>
               <Text style={styles.cardHeaderTitle}>👨‍👩‍👧‍👦 Manage Children</Text>
               <View style={{ marginTop: 8 }}>
-                {localStudents.map((st, idx) => (
+                {localStudents.map((st) => {
+                  const av = getAvatarOption(st.avatar);
+                  return (
                   <View key={st.id} style={styles.manageChildRow}>
                     <LinearGradient
-                      colors={idx % 2 === 0 ? ['#FF6B6B', '#FF9F43'] : ['#4ECDC4', '#74B9FF']}
+                      colors={av.colors}
                       style={styles.manageChildAvatar}
                     >
-                      <Text style={{ fontSize: 20 }}>{idx % 2 === 0 ? '👧' : '👦'}</Text>
+                      <Text style={{ fontSize: 20 }}>{av.emoji}</Text>
                     </LinearGradient>
                     <View style={{ flex: 1, marginLeft: 12 }}>
                       <Text style={styles.manageChildName}>{st.student_name}</Text>
@@ -1435,7 +1451,8 @@ export default function ParentsHub({
                       <Text style={styles.manageChildEditText}>Edit</Text>
                     </TouchableOpacity>
                   </View>
-                ))}
+                  );
+                })}
               </View>
 
               {/* ➕ Add Another Child Button */}
@@ -1443,6 +1460,7 @@ export default function ParentsHub({
                 onPress={() => {
                   setNewChildName('');
                   setNewChildAge('');
+                  setNewChildAvatar('girl');
                   setAddChildError(null);
                   setShowAddModal(true);
                 }}
@@ -1636,8 +1654,31 @@ export default function ParentsHub({
                   style={styles.modalCloseBtn}
                   disabled={addingChild}
                 >
-                  <Text style={{ fontSize: 16, color: colors.subtext }}>✕</Text>
+                  <AppIcon name="close" size={16} color={colors.subtext} strokeWidth={2.4} />
                 </TouchableOpacity>
+              </View>
+
+              <Text style={styles.modalFieldLabel}>Avatar</Text>
+              <View style={styles.avatarPickRow}>
+                {CHILD_AVATARS.map((av) => {
+                  const isSel = newChildAvatar === av.id;
+                  return (
+                    <TouchableOpacity
+                      key={av.id}
+                      onPress={() => {
+                        vibrateTap('light');
+                        setNewChildAvatar(av.id);
+                      }}
+                      disabled={addingChild}
+                      style={[
+                        styles.avatarPickBtn,
+                        isSel && { borderColor: colors.coralStrong, backgroundColor: av.bg },
+                      ]}
+                    >
+                      <Text style={{ fontSize: 24 }}>{av.emoji}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
 
               <Text style={styles.modalFieldLabel}>Child's Name</Text>
@@ -1671,7 +1712,12 @@ export default function ParentsHub({
                 activeOpacity={0.8}
               >
                 <Text style={styles.gradeDropdownText}>🎓 {newChildGrade}</Text>
-                <Text style={styles.gradeDropdownArrow}>{showAddGradeDropdown ? '▲' : '▼'}</Text>
+                <AppIcon
+                  name={showAddGradeDropdown ? 'chevronUp' : 'chevronDown'}
+                  size={14}
+                  color={colors.subtext}
+                  strokeWidth={2.5}
+                />
               </TouchableOpacity>
               {showAddGradeDropdown && (
                 <View style={styles.gradeDropdownMenu}>
@@ -1695,7 +1741,9 @@ export default function ParentsHub({
                       >
                         {gr}
                       </Text>
-                      {newChildGrade === gr && <Text style={styles.gradeDropdownCheck}>✓</Text>}
+                      {newChildGrade === gr && (
+                        <AppIcon name="check" size={14} color={colors.coralStrong} strokeWidth={2.8} />
+                      )}
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -1739,8 +1787,31 @@ export default function ParentsHub({
                   style={styles.modalCloseBtn}
                   disabled={updatingChild}
                 >
-                  <Text style={{ fontSize: 16, color: colors.subtext }}>✕</Text>
+                  <AppIcon name="close" size={16} color={colors.subtext} strokeWidth={2.4} />
                 </TouchableOpacity>
+              </View>
+
+              <Text style={styles.modalFieldLabel}>Avatar</Text>
+              <View style={styles.avatarPickRow}>
+                {CHILD_AVATARS.map((av) => {
+                  const isSel = editChildAvatar === av.id;
+                  return (
+                    <TouchableOpacity
+                      key={av.id}
+                      onPress={() => {
+                        vibrateTap('light');
+                        setEditChildAvatar(av.id);
+                      }}
+                      disabled={updatingChild}
+                      style={[
+                        styles.avatarPickBtn,
+                        isSel && { borderColor: colors.coralStrong, backgroundColor: av.bg },
+                      ]}
+                    >
+                      <Text style={{ fontSize: 24 }}>{av.emoji}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
 
               <Text style={styles.modalFieldLabel}>Child's Name</Text>
@@ -1890,7 +1961,7 @@ export default function ParentsHub({
                   style={styles.modalCloseBtn}
                   disabled={updatingEmail}
                 >
-                  <Text style={{ fontSize: 16, color: colors.subtext }}>✕</Text>
+                  <AppIcon name="close" size={16} color={colors.subtext} strokeWidth={2.4} />
                 </TouchableOpacity>
               </View>
 
@@ -2029,11 +2100,12 @@ export default function ParentsHub({
                       setEmailOtpInput('');
                       setEmailError(null);
                     }}
-                    style={{ marginTop: 12, alignItems: 'center', paddingVertical: 8 }}
+                    style={{ marginTop: 12, alignItems: 'center', paddingVertical: 8, flexDirection: 'row', justifyContent: 'center', gap: 6 }}
                     disabled={updatingEmail}
                   >
+                    <AppIcon name="arrowLeft" size={13} color={colors.subtext} strokeWidth={2.2} />
                     <Text style={{ fontSize: 13, color: colors.subtext, fontFamily: fontFamilies.semiBold }}>
-                      ← Change Email Address
+                      Change Email Address
                     </Text>
                   </TouchableOpacity>
                 </>
@@ -2061,7 +2133,7 @@ export default function ParentsHub({
                   style={styles.modalCloseBtn}
                   disabled={updatingPassword}
                 >
-                  <Text style={{ fontSize: 16, color: colors.subtext }}>✕</Text>
+                  <AppIcon name="close" size={16} color={colors.subtext} strokeWidth={2.4} />
                 </TouchableOpacity>
               </View>
 
@@ -2159,11 +2231,12 @@ export default function ParentsHub({
                         setIsForgotPasswordMode(false);
                         setPasswordError(null);
                       }}
-                      style={{ marginTop: 12, alignItems: 'center', paddingVertical: 8 }}
+                      style={{ marginTop: 12, alignItems: 'center', paddingVertical: 8, flexDirection: 'row', justifyContent: 'center', gap: 6 }}
                       disabled={updatingPassword}
                     >
+                      <AppIcon name="arrowLeft" size={13} color={colors.subtext} strokeWidth={2.2} />
                       <Text style={{ fontSize: 13, color: colors.subtext, fontFamily: fontFamilies.semiBold }}>
-                        ← I remember my password
+                        I remember my password
                       </Text>
                     </TouchableOpacity>
                   ) : null}
@@ -2238,11 +2311,12 @@ export default function ParentsHub({
                       setPasswordOtpInput('');
                       setPasswordError(null);
                     }}
-                    style={{ marginTop: 12, alignItems: 'center', paddingVertical: 8 }}
+                    style={{ marginTop: 12, alignItems: 'center', paddingVertical: 8, flexDirection: 'row', justifyContent: 'center', gap: 6 }}
                     disabled={updatingPassword}
                   >
+                    <AppIcon name="arrowLeft" size={13} color={colors.subtext} strokeWidth={2.2} />
                     <Text style={{ fontSize: 13, color: colors.subtext, fontFamily: fontFamilies.semiBold }}>
-                      {isForgotPasswordMode ? '← Change New Password' : '← Edit Password'}
+                      {isForgotPasswordMode ? 'Change New Password' : 'Edit Password'}
                     </Text>
                   </TouchableOpacity>
                 </>
@@ -3259,6 +3333,23 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: fontFamilies.bold,
     color: colors.text,
+  },
+  avatarPickRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 4,
+  },
+  avatarPickBtn: {
+    flex: 1,
+    aspectRatio: 1,
+    maxWidth: 50,
+    borderRadius: 14,
+    backgroundColor: '#F8F9FA',
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   gradePickerTextActive: {
     color: colors.white,

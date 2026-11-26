@@ -21,6 +21,7 @@ import {
   useSafeAreaInsets,
   AskieCompanion,
   KeyboardAwareView,
+  AppIcon,
 } from '../ui';
 import { colors, fontFamilies, gradients } from '../theme';
 
@@ -284,7 +285,7 @@ export default function RegisterScreen({ onRegistered, onRequireVerification, on
               accessibilityState={{ checked: parentConsentChecked }}
             >
               <View style={[styles.checkbox, parentConsentChecked && styles.checkboxChecked]}>
-                {parentConsentChecked && <Text style={styles.checkmark}>✓</Text>}
+                {parentConsentChecked && <AppIcon name="check" size={14} color={colors.white} strokeWidth={2.8} />}
               </View>
               <Text style={styles.consentText}>
                 I confirm I am an adult parent or legal guardian (Age 18+).
