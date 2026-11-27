@@ -1,6 +1,6 @@
 # KidsKo.ai Mobile App 🚀
 
-AI powered homework helper for kids. React Native (Expo) + Node.js backend + Supabase + Gemini 3.1 Flash-Lite.
+AI-powered homework helper for kids. React Native (Expo) + Node.js backend + Supabase + Gemini 3.1 Flash-Lite.
 
 ## Structure:
 - `/backend` — Node.js/Express API
