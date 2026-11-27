@@ -53,6 +53,13 @@ export default function LoginScreen({ onLoggedIn, onGoToRegister }: Props) {
   const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotError, setForgotError] = useState<string | null>(null);
   const [forgotSuccess, setForgotSuccess] = useState<string | null>(null);
+  const [forgotResendTimer, setForgotResendTimer] = useState(0);
+
+  useEffect(() => {
+    if (forgotResendTimer <= 0) return;
+    const t = setInterval(() => setForgotResendTimer((c) => Math.max(0, c - 1)), 1000);
+    return () => clearInterval(t);
+  }, [forgotResendTimer]);
 
   useEffect(() => {
     loadSavedApiUrl().then((saved) => {
@@ -85,14 +92,26 @@ export default function LoginScreen({ onLoggedIn, onGoToRegister }: Props) {
 
   const handleSendForgotCode = async () => {
     setForgotError(null);
-    if (!forgotEmail || !forgotEmail.includes('@')) {
+    const cleanEmail = forgotEmail.trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
       setForgotError('Please enter a valid email address.');
+      return;
+    }
+    if (
+      cleanEmail.endsWith('@gmail.cm') ||
+      cleanEmail.endsWith('@gmai.com') ||
+      cleanEmail.endsWith('@gamil.com') ||
+      cleanEmail.endsWith('@gmial.com')
+    ) {
+      setForgotError('Did you mean @gmail.com? Please check your email spelling.');
       return;
     }
     setForgotLoading(true);
     try {
-      await forgotPassword(forgotEmail.trim());
+      await forgotPassword(cleanEmail);
+      setForgotEmail(cleanEmail);
       setForgotStep('reset');
+      setForgotResendTimer(30);
       setForgotError(null);
     } catch (err: any) {
       setForgotError(err.message || 'Failed to send recovery code.');
@@ -104,7 +123,7 @@ export default function LoginScreen({ onLoggedIn, onGoToRegister }: Props) {
   const handleResetPassword = async () => {
     setForgotError(null);
     if (!forgotOtp || forgotOtp.trim().length < 6) {
-      setForgotError('Please enter the 6-digit recovery code.');
+      setForgotError('Please enter the verification code sent to your email.');
       return;
     }
     if (!forgotNewPassword || forgotNewPassword.length < 8) {
@@ -395,25 +414,38 @@ export default function LoginScreen({ onLoggedIn, onGoToRegister }: Props) {
             ) : (
               <View>
                 <Text style={styles.modalDescription}>
-                  We sent a 6-digit code to{' '}
+                  We sent a verification code to{' '}
                   <Text style={{ fontFamily: fontFamilies.bold, color: colors.text }}>
                     {forgotEmail}
                   </Text>
-                  . Enter the code and your new password below.
+                  . Check your inbox or spam folder, then enter the code and your new password below.
                 </Text>
 
                 <View style={styles.modalField}>
-                  <Text style={styles.fieldLabel}>6-Digit Recovery Code</Text>
+                  <Text style={styles.fieldLabel}>Verification Code</Text>
                   <View style={styles.inputContainer}>
                     <TextInput
                       style={[styles.input, { letterSpacing: 3, fontFamily: fontFamilies.bold }]}
-                      placeholder="123456"
+                      placeholder="12345678"
                       placeholderTextColor={colors.subtext}
                       keyboardType="number-pad"
-                      maxLength={6}
+                      maxLength={8}
                       value={forgotOtp}
                       onChangeText={setForgotOtp}
                     />
+                  </View>
+                  <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 6 }}>
+                    {forgotResendTimer > 0 ? (
+                      <Text style={{ fontSize: 12, color: colors.subtext, fontFamily: fontFamilies.semiBold }}>
+                        Resend code in {forgotResendTimer}s
+                      </Text>
+                    ) : (
+                      <Pressable onPress={handleSendForgotCode} disabled={forgotLoading}>
+                        <Text style={{ fontSize: 12, color: colors.coral, fontFamily: fontFamilies.bold }}>
+                          Resend Code
+                        </Text>
+                      </Pressable>
+                    )}
                   </View>
                 </View>
 

@@ -160,7 +160,7 @@ router.post('/verify-otp', authAttemptLimiter, async (req: Request, res: Respons
   });
 });
 
-// POST /api/auth/resend-otp - Resends email confirmation code
+// POST /api/auth/resend-otp - Resends email confirmation or recovery code
 router.post('/resend-otp', authAttemptLimiter, async (req: Request, res: Response) => {
   const { email, type } = req.body;
 
@@ -171,10 +171,24 @@ router.post('/resend-otp', authAttemptLimiter, async (req: Request, res: Respons
   const trimmedEmail = email.trim().toLowerCase();
   const authClient = createEphemeralAuthClient();
 
-  const resendType = type === 'recovery' ? 'recovery' : 'signup';
+  if (type === 'recovery') {
+    const { error } = await authClient.auth.resetPasswordForEmail(trimmedEmail);
+    if (error) {
+      const msg = error.message || '';
+      const lower = msg.toLowerCase();
+      if (error.status === 429 || lower.includes('rate limit') || lower.includes('only request this after')) {
+        return res.status(429).json({ error: msg });
+      }
+      return res.status(400).json({ error: msg || 'Failed to resend recovery code.' });
+    }
+    return res.status(200).json({
+      message: 'A new password reset code has been sent to your email.',
+    });
+  }
+
   const { error } = await authClient.auth.resend({
     email: trimmedEmail,
-    type: resendType as any,
+    type: 'signup',
   });
 
   if (error) {
@@ -182,7 +196,7 @@ router.post('/resend-otp', authAttemptLimiter, async (req: Request, res: Respons
   }
 
   return res.status(200).json({
-    message: 'A new 6-digit verification code has been sent to your email.',
+    message: 'A new verification code has been sent to your email.',
   });
 });
 
@@ -212,7 +226,7 @@ router.post('/refresh', async (req: Request, res: Response) => {
   });
 });
 
-// POST /api/auth/forgot-password - Initiates password recovery email with 6-digit OTP
+// POST /api/auth/forgot-password - Initiates password recovery email with OTP code
 router.post('/forgot-password', authAttemptLimiter, async (req: Request, res: Response) => {
   const { email } = req.body;
 
@@ -221,13 +235,44 @@ router.post('/forgot-password', authAttemptLimiter, async (req: Request, res: Re
   }
 
   const trimmedEmail = email.trim().toLowerCase();
-  const authClient = createEphemeralAuthClient();
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(trimmedEmail)) {
+    return res.status(400).json({ error: 'Please enter a valid email address' });
+  }
 
+  if (
+    trimmedEmail.endsWith('@gmail.cm') ||
+    trimmedEmail.endsWith('@gmai.com') ||
+    trimmedEmail.endsWith('@gamil.com') ||
+    trimmedEmail.endsWith('@gmial.com')
+  ) {
+    return res.status(400).json({ error: 'Did you mean @gmail.com? Please check your email spelling.' });
+  }
+
+  const authClient = createEphemeralAuthClient();
   const { error } = await authClient.auth.resetPasswordForEmail(trimmedEmail);
 
   if (error) {
-    // Avoid user enumeration: if user not found, respond with generic success message
-    console.warn('[Forgot Password Notice]:', error.message);
+    const msg = error.message || '';
+    const lower = msg.toLowerCase();
+    console.warn('[Forgot Password Error]:', error.status, msg);
+
+    if (
+      error.status === 429 ||
+      lower.includes('rate limit') ||
+      lower.includes('too many') ||
+      lower.includes('only request this after')
+    ) {
+      return res.status(429).json({
+        error: msg || 'Too many reset requests. Please wait a minute and try again.',
+      });
+    }
+
+    if ((error.status && error.status >= 500) || lower.includes('smtp') || lower.includes('sending')) {
+      return res.status(502).json({
+        error: 'Email service could not send the reset code right now. Please try again shortly.',
+      });
+    }
   }
 
   return res.status(200).json({
