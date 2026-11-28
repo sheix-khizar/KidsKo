@@ -18,7 +18,12 @@ import {
   savePin,
   getLockoutStatus,
 } from '../services/pinService';
-import { login, getCurrentUserEmail } from '../services/api';
+import {
+  login,
+  getCurrentUserEmail,
+  forgotPassword,
+  resetPasswordWithOtp,
+} from '../services/api';
 
 type Props = {
   visible: boolean;
@@ -31,7 +36,8 @@ type GateMode =
   | 'setup_verify_password'
   | 'setup_create_pin'
   | 'setup_confirm_pin'
-  | 'forgot_verify_password';
+  | 'forgot_verify_password'
+  | 'forgot_account_password';
 
 export default function ParentalGate({ visible, onSuccess, onCancel }: Props) {
   const [mode, setMode] = useState<GateMode>('enter_pin');
@@ -41,9 +47,23 @@ export default function ParentalGate({ visible, onSuccess, onCancel }: Props) {
   const [lockoutSec, setLockoutSec] = useState<number>(0);
   const [passwordInput, setPasswordInput] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
+  const [returnPasswordMode, setReturnPasswordMode] = useState<
+    'setup_verify_password' | 'forgot_verify_password'
+  >('forgot_verify_password');
+  const [forgotStep, setForgotStep] = useState<'email' | 'otp'>('email');
+  const [resetEmail, setResetEmail] = useState<string>('');
+  const [resetOtp, setResetOtp] = useState<string>('');
+  const [resetNewPassword, setResetNewPassword] = useState<string>('');
+  const [resetResendTimer, setResetResendTimer] = useState<number>(0);
 
   const shakeAnim = useRef(new Animated.Value(0)).current;
   const lockoutIntervalRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (resetResendTimer <= 0) return;
+    const t = setTimeout(() => setResetResendTimer((s) => Math.max(0, s - 1)), 1000);
+    return () => clearTimeout(t);
+  }, [resetResendTimer]);
 
   // Initialize gate state whenever modal opens
   useEffect(() => {
@@ -53,6 +73,10 @@ export default function ParentalGate({ visible, onSuccess, onCancel }: Props) {
       setErrorMsg(null);
       setPasswordInput('');
       setLoading(false);
+      setForgotStep('email');
+      setResetOtp('');
+      setResetNewPassword('');
+      setResetResendTimer(0);
       return;
     }
 
@@ -184,6 +208,66 @@ export default function ParentalGate({ visible, onSuccess, onCancel }: Props) {
     }
   };
 
+  const handleOpenForgotPassword = async () => {
+    setErrorMsg(null);
+    setReturnPasswordMode(
+      mode === 'setup_verify_password' ? 'setup_verify_password' : 'forgot_verify_password'
+    );
+    setForgotStep('email');
+    setResetOtp('');
+    setResetNewPassword('');
+    const email = await getCurrentUserEmail();
+    setResetEmail(email || '');
+    setMode('forgot_account_password');
+  };
+
+  const handleSendResetCode = async () => {
+    const trimmedEmail = resetEmail.trim();
+    if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setErrorMsg('Please enter a valid account email');
+      return;
+    }
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      await forgotPassword(trimmedEmail);
+      setForgotStep('otp');
+      setResetResendTimer(30);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Could not send reset code. Try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirmPasswordReset = async () => {
+    const trimmedEmail = resetEmail.trim();
+    const trimmedOtp = resetOtp.trim();
+    if (trimmedOtp.length < 6) {
+      setErrorMsg('Please enter the verification code from your email');
+      return;
+    }
+    if (resetNewPassword.length < 6) {
+      setErrorMsg('New password must be at least 6 characters');
+      return;
+    }
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      await resetPasswordWithOtp(trimmedEmail, trimmedOtp, resetNewPassword);
+      await login(trimmedEmail, resetNewPassword);
+      setResetOtp('');
+      setResetNewPassword('');
+      setPasswordInput('');
+      setPin('');
+      setMode('setup_create_pin');
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Invalid code or could not reset password.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (!visible) return null;
 
   return (
@@ -253,8 +337,112 @@ export default function ParentalGate({ visible, onSuccess, onCancel }: Props) {
                 )}
               </Pressable>
 
+              <Pressable style={styles.forgotBtn} onPress={handleOpenForgotPassword}>
+                <Text style={styles.forgotText}>Forgot password?</Text>
+              </Pressable>
+
               <Pressable style={styles.cancelTextBtn} onPress={onCancel}>
                 <Text style={styles.cancelText}>Cancel</Text>
+              </Pressable>
+            </View>
+          ) : mode === 'forgot_account_password' ? (
+            <View style={styles.contentBox}>
+              <View style={styles.iconCircle}>
+                <Text style={styles.iconEmoji}>🔑</Text>
+              </View>
+              <Text style={styles.title}>Reset Password</Text>
+              <Text style={styles.subtitle}>
+                {forgotStep === 'email'
+                  ? 'We will send a verification code to your parent email.'
+                  : `Enter the code sent to ${resetEmail.trim()} and choose a new password.`}
+              </Text>
+
+              {forgotStep === 'email' ? (
+                <TextInput
+                  style={[styles.passwordInput, !!errorMsg && styles.inputError]}
+                  placeholder="Parent email"
+                  placeholderTextColor="rgba(255,255,255,0.4)"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  value={resetEmail}
+                  onChangeText={(t) => {
+                    setResetEmail(t);
+                    setErrorMsg(null);
+                  }}
+                  onSubmitEditing={handleSendResetCode}
+                />
+              ) : (
+                <>
+                  <TextInput
+                    style={[styles.passwordInput, !!errorMsg && styles.inputError]}
+                    placeholder="Verification code"
+                    placeholderTextColor="rgba(255,255,255,0.4)"
+                    keyboardType="number-pad"
+                    maxLength={8}
+                    value={resetOtp}
+                    onChangeText={(t) => {
+                      setResetOtp(t.replace(/\D/g, ''));
+                      setErrorMsg(null);
+                    }}
+                  />
+                  <TextInput
+                    style={[styles.passwordInput, !!errorMsg && styles.inputError]}
+                    placeholder="New password (min 6 chars)"
+                    placeholderTextColor="rgba(255,255,255,0.4)"
+                    secureTextEntry
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    value={resetNewPassword}
+                    onChangeText={(t) => {
+                      setResetNewPassword(t);
+                      setErrorMsg(null);
+                    }}
+                    onSubmitEditing={handleConfirmPasswordReset}
+                  />
+                </>
+              )}
+
+              {errorMsg ? <Text style={styles.errorText}>{errorMsg}</Text> : null}
+
+              <Pressable
+                style={[styles.actionBtn, loading && styles.actionBtnDisabled]}
+                onPress={
+                  forgotStep === 'email' ? handleSendResetCode : handleConfirmPasswordReset
+                }
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.actionBtnText}>
+                    {forgotStep === 'email' ? 'Send Reset Code' : 'Reset Password & Continue'}
+                  </Text>
+                )}
+              </Pressable>
+
+              {forgotStep === 'otp' ? (
+                <Pressable
+                  style={styles.forgotBtn}
+                  onPress={handleSendResetCode}
+                  disabled={loading || resetResendTimer > 0}
+                >
+                  <Text style={styles.forgotText}>
+                    {resetResendTimer > 0
+                      ? `Resend code in ${resetResendTimer}s`
+                      : 'Resend code'}
+                  </Text>
+                </Pressable>
+              ) : null}
+
+              <Pressable
+                style={styles.cancelTextBtn}
+                onPress={() => {
+                  setErrorMsg(null);
+                  setMode(returnPasswordMode);
+                }}
+              >
+                <Text style={styles.cancelText}>Back</Text>
               </Pressable>
             </View>
           ) : (
