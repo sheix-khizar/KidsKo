@@ -11,6 +11,16 @@ const REFRESH_TOKEN_KEY = 'kidsko_refresh_token';
 const USER_ID_KEY = 'kidsko_user_id';
 const EMAIL_KEY = 'kidsko_user_email';
 
+// ---- Global session-expiry callback ----
+// Set by App.tsx so any failed token refresh triggers an app-wide logout
+let _onSessionExpired: (() => void) | null = null;
+export function setSessionExpiredHandler(handler: () => void) {
+  _onSessionExpired = handler;
+}
+export function triggerSessionExpired() {
+  if (_onSessionExpired) _onSessionExpired();
+}
+
 // ---- Token storage helpers ----
 export async function saveToken(
   token: string,
@@ -149,6 +159,9 @@ export async function fetchWithTimeout(
         };
         return fetchWithTimeout(url, { ...options, headers: updatedHeaders }, timeoutMs, true);
       }
+      // Refresh failed — clear session and notify App.tsx to redirect to Login
+      await clearToken();
+      triggerSessionExpired();
     }
 
     return res;

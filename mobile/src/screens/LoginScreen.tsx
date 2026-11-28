@@ -30,9 +30,10 @@ import { colors, fontFamilies, gradients } from '../theme';
 type Props = {
   onLoggedIn: () => void;
   onGoToRegister: () => void;
+  sessionNote?: string | null;
 };
 
-export default function LoginScreen({ onLoggedIn, onGoToRegister }: Props) {
+export default function LoginScreen({ onLoggedIn, onGoToRegister, sessionNote }: Props) {
   const insets = useSafeAreaInsets();
   const [email, setEmail] = useState(__DEV__ ? 'test@kidsko.ai' : '');
   const [password, setPassword] = useState(__DEV__ ? 'password123' : '');
@@ -277,6 +278,15 @@ export default function LoginScreen({ onLoggedIn, onGoToRegister }: Props) {
               </Pressable>
             </View>
           </FadeSlideIn>
+
+          {/* Session-expired notice (from auto-logout) */}
+          {sessionNote && (
+            <FadeSlideIn delay={80}>
+              <View style={[styles.errorContainer, { backgroundColor: 'rgba(255,160,0,0.13)', borderColor: '#FFA000' }]}>
+                <Text style={[styles.errorText, { color: '#FFA000' }]}>⚠️ {sessionNote}</Text>
+              </View>
+            </FadeSlideIn>
+          )}
 
           {/* Error notification */}
           {errorMsg && (

@@ -22,7 +22,7 @@ import {
   Nunito_800ExtraBold,
   Nunito_900Black,
 } from '@expo-google-fonts/nunito';
-import { getToken, getStudents } from './src/services/api';
+import { getToken, getStudents, setSessionExpiredHandler } from './src/services/api';
 import { loadSavedApiUrl } from './src/services/config';
 
 // Keep native splash screen visible while JS bundle boots
@@ -59,10 +59,22 @@ export default function App() {
   const [paywallRequiresGate, setPaywallRequiresGate] = useState<boolean>(false);
   const [homeTransitionKey, setHomeTransitionKey] = useState<number>(0);
   const [parentsUnlockedFromPaywall, setParentsUnlockedFromPaywall] = useState<boolean>(false);
+  const [sessionExpiredMsg, setSessionExpiredMsg] = useState<string | null>(null);
 
   useEffect(() => {
     console.log('[App.tsx] screen state:', screen, 'activeStudent:', activeStudent?.id);
   }, [screen, activeStudent]);
+
+  // Register global 401-auto-logout: clears session and returns to login with a banner
+  useEffect(() => {
+    setSessionExpiredHandler(() => {
+      setActiveStudent(null);
+      setActiveThread(null);
+      setLimitBanner(null);
+      setSessionExpiredMsg('Your session expired. Please log in again.');
+      setScreen('login');
+    });
+  }, []);
   // Bumped after a successful purchase so mounted screens re-check the plan.
   const [billingVersion, setBillingVersion] = useState(0);
 
@@ -280,6 +292,7 @@ export default function App() {
         <FadeSlideIn key='login' duration={220} style={{ flex: 1 }}>
           <LoginScreen
             onLoggedIn={async () => {
+              setSessionExpiredMsg(null);
               resetShellToKidsHome();
               try {
                 const students = await getStudents();
@@ -294,6 +307,7 @@ export default function App() {
               }
             }}
             onGoToRegister={() => setScreen('register')}
+            sessionNote={sessionExpiredMsg}
           />
         </FadeSlideIn>
       );
